@@ -1,6 +1,6 @@
 # CodeAtlas .NET
 
-Version: **0.00.08**
+Version: **0.00.09**
 
 See [version history](docs/VERSION.md) for what is implemented and the versioning rules. `Version.props` is the build's version source. Run `dotnet run --project src/CodeAtlas.Cli --no-build -- --version` to check the built CLI.
 
@@ -22,6 +22,8 @@ python3 -m unittest discover -s tests/versioning -p 'test_*.py'
 ```
 
 The integration fixture verifies overload selection, cross-project references, method groups, source locations, index round trips, freshness checks, safe publication, and rebuilding after source edits.
+
+The [complete correctness baseline](docs/CORRECTNESS-BASELINE.md) adds linked-file, generic, partial, interface, and override coverage, plus a tool for comparing and retaining complete index results before optimization.
 
 On Windows, use `python` instead of `python3` if only that executable is installed. SDK `10.0.400` does not satisfy the `10.0.402` pin with `latestPatch`; install the pinned SDK (or a later compatible patch). A private SDK installation also works: prepend its directory to `PATH` and set `DOTNET_ROOT` and `DOTNET_ROOT_X64` for the current PowerShell session so fixture restores and Roslyn use the same SDK.
 

@@ -165,7 +165,8 @@ public sealed partial class SolutionAnalysis : IDisposable
             }
         }
         return references.Distinct().OrderBy(r => r.Location.File, StringComparer.Ordinal)
-            .ThenBy(r => r.Location.Line).ThenBy(r => r.Location.Column).ThenBy(r => r.DefinitionId, StringComparer.Ordinal).ToArray();
+            .ThenBy(r => r.Location.Line).ThenBy(r => r.Location.Column).ThenBy(r => r.DefinitionId, StringComparer.Ordinal)
+            .ThenBy(r => r.Project, StringComparer.Ordinal).ThenBy(r => r.Kind, StringComparer.Ordinal).ToArray();
     }
 
     private static IMethodSymbol Canonical(IMethodSymbol symbol) => symbol.OriginalDefinition.PartialDefinitionPart ?? symbol.OriginalDefinition;

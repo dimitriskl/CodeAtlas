@@ -1,6 +1,6 @@
 # CodeAtlas development roadmap
 
-Updated: 17 October 2026. This is the ordered development plan; [VERSION.md](VERSION.md) records completed changes. Roadmap numbers are milestones, not promised release versions or dates. All milestones below are planned unless acceptance evidence is recorded here.
+Updated: 17 October 2026. This is the ordered development plan; [VERSION.md](VERSION.md) records completed changes. Roadmap numbers are milestones, not promised release versions or dates. All milestones below are planned unless acceptance evidence is recorded here. [EXECUTION.md](EXECUTION.md) tracks the authorized implementation and release decisions.
 
 ## Goal and boundaries
 
@@ -20,6 +20,8 @@ The initial production scope is supported C# solutions in trusted local reposito
 ## Ordered milestones
 
 ### 1. Establish a complete correctness baseline
+
+Status: completed in 0.00.09. [Acceptance evidence](CORRECTNESS-BASELINE.md) includes semantic regressions, comparator validation, and complete eConnector equivalence; the unavailable historical 0.00.06 snapshot is explicitly distinguished from the retained comparison.
 
 Make reference ordering deterministic, including project identity and reference kind as tie breakers. Preserve a complete baseline and compare normalized reference sets rather than only whole-file hashes. Separate stable analysis contents from run metadata such as timestamps and index IDs.
 
