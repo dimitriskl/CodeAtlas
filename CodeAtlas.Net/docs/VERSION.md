@@ -1,6 +1,6 @@
 # CodeAtlas version history
 
-Version: **0.00.07**
+Version: **0.00.08**
 
 Status: unpublished development version. Version history starts at `0.00.01`; earlier work did not have assigned version numbers.
 
@@ -23,6 +23,10 @@ python3 scripts/bump-version.py --summary "Describe the completed change"
 The command updates `Version.props`, the current version in README.md and the project recap, and this document's current version and history. Then rebuild, test, and regenerate the index. Do not increment again merely because validation requires a correction to the same change.
 
 ## History
+
+### 0.00.08
+
+- Document the production-readiness roadmap with semantic descriptions, discovery, and duplicate detection
 
 ### 0.00.07
 
@@ -62,4 +66,4 @@ Initial versioned baseline, including the implementation already completed:
 - Protection of previous index artifacts when a rebuild fails; documented agent workflow.
 - Shared build version, CLI version reporting, generated-artifact version metadata, and a version increment command with rollover rules.
 
-Still planned: real-application validation, broader semantic coverage, caller/impact traversal, incremental updates, fuller build-input tracking, distributable CLI packaging, and Angular support. These are not implemented features of this version.
+Real-application validation is recorded in [WINDOWS-VALIDATION.md](WINDOWS-VALIDATION.md). Further development follows [ROADMAP.md](ROADMAP.md): correctness and performance, reliable incremental refresh, symbol documentation and discovery, production qualification, optional AI explanations, duplicate candidates, caller/impact traversal, and later language support. Roadmap entries are not implemented features.

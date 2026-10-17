@@ -1,8 +1,10 @@
 # CodeAtlas — Project Recap
 
-Version: **0.00.07**
+Version: **0.00.08**
 
 See [VERSION.md](VERSION.md) for implementation history and versioning rules.
+
+The [development roadmap](ROADMAP.md) is the source of truth for upcoming work and acceptance criteria, including symbol descriptions, purpose-oriented discovery, and duplicate candidates.
 
 Date: 15 October 2026
 
@@ -86,4 +88,4 @@ We found that Atomic already documents an MCP server, making direct reuse a plau
 
 ## Starting point for the next session
 
-Windows validation and full eConnector solution indexing are recorded in [WINDOWS-VALIDATION.md](WINDOWS-VALIDATION.md), including a corrected MSBuild warning-classification defect and verified source queries. Indexing reports stages, completed method counts, and elapsed time on stderr while keeping stdout JSON clean. Version 0.00.07 saves per-stage wall-clock timings to `.codeatlas/timings.json` and summarizes the slowest stage in the result. Use that evidence to guide reference-collection optimization; separately measure per-query JSON loading and freshness hashing before changing storage. Graph queries remain future work. The CLI calls our C# code directly; no MCP layer is planned.
+Follow [ROADMAP.md](ROADMAP.md). The next implementation step is deterministic reference ordering and a retained complete comparison baseline, followed by reference-collection optimization. Descriptions will start with existing XML documentation and structural facts; optional AI explanations must retain provenance and freshness, and similarity results remain duplicate candidates rather than proof of equivalence. Windows validation and full eConnector indexing evidence are in [WINDOWS-VALIDATION.md](WINDOWS-VALIDATION.md). Version 0.00.07 introduced per-stage timings; the roadmap documentation does not change analysis behavior. The CLI calls our C# code directly; no MCP layer is planned.

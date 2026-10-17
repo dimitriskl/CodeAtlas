@@ -1,12 +1,14 @@
 # CodeAtlas .NET
 
-Version: **0.00.07**
+Version: **0.00.08**
 
 See [version history](docs/VERSION.md) for what is implemented and the versioning rules. `Version.props` is the build's version source. Run `dotnet run --project src/CodeAtlas.Cli --no-build -- --version` to check the built CLI.
 
 CodeAtlas is a C# semantic-analysis library and CLI built with Roslyn. The CLI calls our library directly; there is no MCP layer.
 
 CodeAtlas scans all C# projects in a solution, saves a structured index and a readable overview, and answers method/reference queries from that index. Graph traversal, impact analysis, incremental updates, and Angular support are future work.
+
+See the [development roadmap](docs/ROADMAP.md) for the ordered production-readiness milestones, semantic descriptions and discovery, duplicate detection, and acceptance criteria. Planned capabilities are distinct from the implemented commands below.
 
 ## Build and test
 
