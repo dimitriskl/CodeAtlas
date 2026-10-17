@@ -268,7 +268,7 @@
       "codeatlas": {
         "type": "Project",
         "dependencies": {
-          "CodeAtlas.Core": "[0.0.6, )"
+          "CodeAtlas.Core": "[0.0.7, )"
         }
       },
       "codeatlas.core": {

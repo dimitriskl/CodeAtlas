@@ -2,6 +2,34 @@
 
 Development and validation ran in `C:\Code\CodeAtlas\CodeAtlas.Net`. The target was `C:\localcode\econnectorv2git\econnectorv2.sln`. No target application source was edited.
 
+## Stage timing follow-up — 16–17 October 2026, version 0.00.07
+
+The system SDK is now `10.0.402`, matching `global.json`. Locked restore and build passed with zero build warnings/errors; all 29 .NET tests and 6 Python versioning tests passed. CLI `--version` and version documents agree on `0.00.07`. Three new tests cover repeated progress events, non-mutating timing snapshots, and cancellation preserving the previous timing report.
+
+The instrumented target run completed on 16 October; follow-up query verification completed on 17 October. It took **618.368 seconds (10 min 18 s)**. Detailed timings are in `C:\LocalCode\eConnectorV2Git\.codeatlas\timings.json`, linked to index `667af8659b504a258a6578d0b5d1a7b4`. The CLI prints the report path and slowest stage instead of all stage details.
+
+| Stage | Seconds |
+| --- | ---: |
+| Scanning inputs, including initial command setup | 0.730 |
+| Loading projects | 6.991 |
+| Checking project compilations | 19.379 |
+| Fingerprinting inputs | 0.934 |
+| Discovering methods | 1.322 |
+| Finding references | **586.885** |
+| Collecting types | 0.021 |
+| Verifying unchanged inputs | 1.168 |
+| Saving index, overview, and warnings | 0.930 |
+
+Reference collection consumed **94.9%** of the measured interval. The timing report measures 618.361 seconds; the result additionally includes publishing that report. This run identifies the optimization target but does not establish a speedup over earlier runs: cache state and machine load were not controlled, and the reference algorithm is unchanged. Next performance work should investigate the separate Roslyn search for each method while preserving overload, related-definition, linked-file, method-group, and documentation-reference behavior.
+
+The index contains 30 projects, 3,943 types, 16,979 methods, and 232,687 reference entries, and occupies **140,001,296 bytes**. The same 56 target dependency warnings remain in `warnings.txt`. Freshness passed. Project, type, method, and fingerprint hashes exactly match the preceding 0.00.06 index. All five previously verified query samples (27 references) match their saved results and current source positions. Fresh CLI queries found all three cron overloads and verified the selected overload's references.
+
+The complete reference-array hash differs from the preceding index, so full reference equivalence is **not proven**. Inspection found 282 pairs with identical current sort keys but different referencing projects for linked source files; the comparator omits project and kind as tie breakers. This is a plausible ordering explanation, not a verified explanation of every difference, because only the previous whole-array hash was retained. A future equivalence check should retain the complete baseline and compare canonically sorted reference sets.
+
+Follow-up process wall times were 22.885 seconds for the first `index-status` command, 1.430 seconds for `find-symbol`, and 1.419 seconds for `find-references`. The first query after resuming validation was materially slower; these are individual observations, not steady-state benchmark estimates. All include process startup, JSON loading, hashing, and warning-report saving.
+
+Target Git status still shows only untracked `.codeatlas/`; application source is unchanged. Raw stage logs and checks are in CodeAtlas's ignored `.codeatlas/validation/stage-*` files. The remaining sections record the original 0.00.03 validation; their feature descriptions and timings are historical.
+
 ## Local state and prerequisites
 
 - Transferred version: `0.00.02`. The parent Git repository is `C:\Code\CodeAtlas`, on `main`; the entire `CodeAtlas.Net` directory was untracked. No assumption was made that these files were committed or pushed.
