@@ -1,0 +1,11 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/CodeAtlas.Core/CodeAtlas.Core.csproj" />
+    <Project Path="src/CodeAtlas.Cli/CodeAtlas.Cli.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/CodeAtlas.Tests/CodeAtlas.Tests.csproj" />
+    <Project Path="tests/Fixtures/Library/Library.csproj" />
+    <Project Path="tests/Fixtures/Caller/Caller.csproj" />
+  </Folder>
+</Solution>
