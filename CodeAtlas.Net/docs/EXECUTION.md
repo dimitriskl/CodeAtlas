@@ -10,6 +10,8 @@ Publication destination: GitHub Release with installable packages in the existin
 
 AI explanation integration: local request/response files for the user's coding agent; no automatic source upload. Provider-generated explanation evaluation must distinguish tests of the file contract from reviewed explanation quality.
 
+Discovery evaluation: on 19 October 2026 the user explicitly reviewed and accepted twelve source-backed eConnector cases and their criteria (four development, six held-out, and two unsupported-scope cases). The private approved input and SHA-256 review record are retained under `.codeatlas/roadmap-prep/m07/`; they are not evaluation results. Held-out labels must remain separate from ranking development.
+
 License: MIT, selected by the user. Add the license and package metadata during release packaging. External validation environments will be proposed concretely before execution if required by the supported-platform scope.
 
 ## Commit and validation sequence
@@ -19,9 +21,9 @@ The roadmap setup was committed as `7d6d0cc` (`0.00.08`). Each implementation mi
 | Milestone | State | Evidence / commit |
 | --- | --- | --- |
 | 1. Correctness baseline | Complete, 0.00.09, commit `ed04d25` | [Full comparison and test evidence](CORRECTNESS-BASELINE.md); 38 .NET / 12 Python tests pass; complete eConnector analysis equivalent. |
-| 2. Reference performance | Complete, 0.00.10 | [Measurements](REFERENCE-PERFORMANCE.md): two large runs per implementation, 22.5% lower median reference time, maximum peak CLI memory within budget, complete canonical equality; 43 .NET / 12 Python tests pass. |
-| 3. Query efficiency/contracts | Next implementation | Draft query/paging contracts and profiling harness prepared; budgets recorded before measurements. |
-| 4. Reliability/freshness | Planned | — |
+| 2. Reference performance | Complete, 0.00.10, commit `e44db92` | [Measurements](REFERENCE-PERFORMANCE.md): two large runs per implementation, 22.5% lower median reference time, maximum peak CLI memory within budget, complete canonical equality; 43 .NET / 12 Python tests pass. |
+| 3. Query efficiency/contracts | Complete, 0.00.11 | [Contract](QUERY-CONTRACT.md) and [measurements](QUERY-PERFORMANCE.md); independent findings resolved; complete-record comparisons and all latency/memory budgets pass. Final version validation: 72 .NET / 20 Python tests, matching CLI version, fresh regenerated CodeAtlas index. |
+| 4. Reliability/freshness | Next implementation | Immutable generation/input-model drafts prepared; integration and qualification remain. |
 | 5. Incremental refresh | Planned | — |
 | 6. Symbol documentation | Planned | — |
 | 7. Structural facts/discovery | Planned | — |

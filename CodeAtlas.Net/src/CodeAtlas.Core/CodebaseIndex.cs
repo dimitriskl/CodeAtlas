@@ -28,6 +28,12 @@ public sealed record CodebaseIndex
 public sealed class StaleIndexException(string[] changedFiles)
     : AnalysisException("The saved index is stale. Run codeatlas index --solution <solution-path> to rebuild it.", changedFiles);
 
+public sealed class IndexFormatException(string code, string message, IReadOnlyList<string>? diagnostics = null)
+    : AnalysisException(message, diagnostics)
+{
+    public string Code { get; } = code;
+}
+
 /// <summary>Disk-only queries: these operations never open an MSBuild workspace.</summary>
 public static class IndexStore
 {
@@ -42,20 +48,22 @@ public static class IndexStore
         {
             await using var stream = File.OpenRead(path);
             var index = await JsonSerializer.DeserializeAsync<CodebaseIndex>(stream, JsonOptions, cancellationToken);
-            if (index is null || index.SchemaVersion != SchemaVersion)
-                throw new AnalysisException("Unsupported index version. Rebuild the index with this version of CodeAtlas.");
+            if (index is null)
+                throw new IndexFormatException("invalid_index", "Invalid index contents. Rebuild the index.");
+            if (index.SchemaVersion != SchemaVersion)
+                throw new IndexFormatException("unsupported_index", "Unsupported index version. Rebuild the index with this version of CodeAtlas.");
             if (string.IsNullOrWhiteSpace(index.IndexId) || !Path.IsPathFullyQualified(index.Solution)
                 || index.Warnings is null || index.Projects is null || index.Types is null || index.Methods is null
                 || index.References is null || index.InputRoots is null || index.ExplicitInputs is null || index.Fingerprints is null
                 || index.InputRoots.Length == 0 || index.Fingerprints.Count == 0
                 || index.Methods.Any(m => m is null || !index.References.ContainsKey(m.Id))
                 || index.References.Any(r => r.Value is null))
-                throw new AnalysisException("Invalid index contents. Rebuild the index.");
+                throw new IndexFormatException("invalid_index", "Invalid index contents. Rebuild the index.");
             return index;
         }
         catch (JsonException exception)
         {
-            throw new AnalysisException("Invalid index JSON. Rebuild the index.", [exception.Message]);
+            throw new IndexFormatException("invalid_index", "Invalid index JSON. Rebuild the index.", [exception.Message]);
         }
     }
 

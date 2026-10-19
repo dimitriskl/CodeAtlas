@@ -39,6 +39,8 @@ Acceptance: the optimized implementation matches milestone 1's complete baseline
 
 ### 3. Make queries efficient and predictable for agents
 
+Status: completed in 0.00.11 with 72 .NET and 20 Python tests passing after the version increment, matching CLI version, and a fresh regenerated CodeAtlas index. [Query contract](QUERY-CONTRACT.md) and [performance evidence](QUERY-PERFORMANCE.md) cover bounded filters, snapshot-aware pagination, response versioning, complete-record benchmark comparisons, and the decision to retain JSON after profiling. Warmed eConnector query medians are 1.463–1.498 seconds; the first cold observation of 22.933 seconds remains an explicit limitation.
+
 Measure process startup, JSON loading, freshness hashing, and lookup independently. Add project/type filters, bounded results, pagination with explicit truncation information, and a versioned JSON response contract. Keep stable error codes and clear freshness/coverage metadata. Choose storage changes only after profiling; SQLite or another format is an option, not a predetermined requirement.
 
 Acceptance: representative queries meet recorded latency and memory budgets, deterministic pagination does not omit or repeat results within a snapshot, and agents receive enough identity and location information to verify each result. Contract tests cover empty results, invalid requests, stale snapshots, and compatibility handling.
@@ -120,4 +122,4 @@ An agent should follow purpose → candidate symbols → source and references �
 
 For each completed change, record the relevant acceptance evidence here or in a linked validation report, run the required checks, and increment the version once with `scripts/bump-version.py`. Regenerate CodeAtlas's own index after the versioned change. Run target-solution benchmarks when the change affects analysis/performance; routine roadmap edits do not require repeating the long eConnector run.
 
-Immediate next step: implement milestone 3's measured query and response contracts. Semantic descriptions and discovery are accepted roadmap scope; AI-generated explanations, duplicate detection, and graph traversal have their own acceptance gates and do not delay the initial core production gate.
+Immediate next step: integrate milestone 4's snapshot publication and freshness guarantees. Semantic descriptions and discovery are accepted roadmap scope; AI-generated explanations, duplicate detection, and graph traversal have their own acceptance gates and do not delay the initial core production gate.

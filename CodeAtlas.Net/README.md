@@ -1,6 +1,6 @@
 # CodeAtlas .NET
 
-Version: **0.00.10**
+Version: **0.00.11**
 
 See [version history](docs/VERSION.md) for what is implemented and the versioning rules. `Version.props` is the build's version source. Run `dotnet run --project src/CodeAtlas.Cli --no-build -- --version` to check the built CLI.
 
@@ -12,7 +12,7 @@ See the [development roadmap](docs/ROADMAP.md) for the ordered production-readin
 
 ## Build and test
 
-Install the .NET SDK selected by `global.json`, then run from the repository root:
+Install the .NET SDK selected by `global.json`, then run from `C:\Code\CodeAtlas\CodeAtlas.Net` (the `CodeAtlas.Net` directory inside the Git checkout):
 
 ```bash
 dotnet restore CodeAtlas.slnx --locked-mode
@@ -78,6 +78,10 @@ dotnet run --project src/CodeAtlas.Cli --no-build -- find-references \
 ```
 
 Queries with `--index` deserialize the saved data and verify file fingerprints; they do not load Roslyn or evaluate MSBuild. Initial indexing collects references for every supported method, so it can be more expensive than one live query, but that analysis is reused across queries. JSON parsing and file hashing still scale with index and input size.
+
+Queries return at most 100 results by default; `--limit` accepts 1 through 1000. Inspect `pagination.hasMore` and continue with `--offset <nextOffset> --snapshot <snapshotId>` from the response. Continuations require the same fresh index generation. Live queries return only a bounded first page and cannot provide a stable continuation.
+
+`find-symbol` supports exact `--project <relative-project-path>` and `--type <declaring-type>` filters. `find-references --project` filters the referencing project. Responses use JSON `contractVersion: 1` with snapshot identity, freshness, and coverage metadata; see the [query contract](docs/QUERY-CONTRACT.md) for filters, pagination, compatibility, and error codes. Optional `--profile` reports query phases; [query performance](docs/QUERY-PERFORMANCE.md) records the measurements, budgets, and cold-filesystem limitation.
 
 The original live queries remain available: replace `--index <index.json>` with `--solution <solution.slnx>` to analyze current source directly.
 

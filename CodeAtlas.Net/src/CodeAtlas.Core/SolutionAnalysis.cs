@@ -7,7 +7,10 @@ using Microsoft.CodeAnalysis.MSBuild;
 namespace CodeAtlas;
 
 public sealed record SourcePosition(string File, int Line, int Column);
-public sealed record MethodInfo(string Id, string Name, string Signature, string Project, SourcePosition Location);
+public sealed record MethodInfo(string Id, string Name, string Signature, string Project, SourcePosition Location)
+{
+    public string? ContainingType { get; init; }
+}
 public sealed record SourceReference(string DefinitionId, string Project, string Kind, SourcePosition Location);
 
 public class AnalysisException(string message, IReadOnlyList<string>? diagnostics = null) : Exception(message)
@@ -122,7 +125,10 @@ public sealed partial class SolutionAnalysis : IDisposable
                 continue;
             var id = Id(document.Project, method);
             methods[id] = new MethodInfo(id, method.Name, method.ToDisplayString(SymbolDisplayFormat.CSharpErrorMessageFormat),
-                Relative(document.Project.FilePath!), Position(location));
+                Relative(document.Project.FilePath!), Position(location))
+            {
+                ContainingType = method.ContainingType.ToDisplayString(SymbolDisplayFormat.CSharpErrorMessageFormat)
+            };
         }
         return methods.Values.OrderBy(m => m.Id, StringComparer.Ordinal).ToArray();
     }

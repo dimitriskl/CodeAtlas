@@ -373,9 +373,11 @@ public sealed class IndexTests(IndexedSolution fixture) : IClassFixture<IndexedS
             var json = JsonNode.Parse(await File.ReadAllTextAsync(fixture.IndexPath))!;
             json["schemaVersion"] = 999;
             await File.WriteAllTextAsync(path, json.ToJsonString());
-            await Assert.ThrowsAsync<AnalysisException>(() => IndexStore.LoadAsync(path));
+            var unsupported = await Assert.ThrowsAsync<IndexFormatException>(() => IndexStore.LoadAsync(path));
+            Assert.Equal("unsupported_index", unsupported.Code);
             await File.WriteAllTextAsync(path, "{");
-            await Assert.ThrowsAsync<AnalysisException>(() => IndexStore.LoadAsync(path));
+            var malformed = await Assert.ThrowsAsync<IndexFormatException>(() => IndexStore.LoadAsync(path));
+            Assert.Equal("invalid_index", malformed.Code);
         }
         finally
         {
