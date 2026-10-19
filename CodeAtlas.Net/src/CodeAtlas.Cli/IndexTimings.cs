@@ -30,41 +30,21 @@ internal sealed class IndexTimings
         var stages = finished.ToList();
         if (current is { } stage)
             stages.Add((stage, elapsed - started));
-        return new(Math.Round(elapsed.TotalSeconds, 3), stages.Select(s => new StageTiming(
-            JsonNamingPolicy.CamelCase.ConvertName(s.Stage.ToString()),
-            Math.Round(s.Duration.TotalSeconds, 3))).ToArray());
+        return new(Math.Round(elapsed.TotalSeconds, 3), stages.GroupBy(s => s.Stage).Select(group => new StageTiming(
+            JsonNamingPolicy.CamelCase.ConvertName(group.Key.ToString()),
+            Math.Round(group.Sum(s => s.Duration.TotalSeconds), 3))).ToArray());
     }
 }
 
 internal static class TimingReport
 {
-    public static async Task<string> SaveAsync(string solution, string indexId, TimingSnapshot timings,
-        CancellationToken cancellationToken)
-    {
-        var directory = Path.Combine(Path.GetDirectoryName(Path.GetFullPath(solution))!, ".codeatlas");
-        Directory.CreateDirectory(directory);
-        var path = Path.Combine(directory, "timings.json");
-        var temporary = Path.Combine(directory, $"timings-{Guid.NewGuid():N}.tmp");
-        var report = new
+    public static Task WriteAsync(Stream stream, string solution, string indexId, TimingSnapshot timings,
+        CancellationToken cancellationToken) => JsonSerializer.SerializeAsync(stream, new
         {
             solution = Path.GetFullPath(solution), indexId, toolVersion = CodeAtlasVersion.Current,
             measuredAtUtc = DateTimeOffset.UtcNow,
-            scope = "Wall-clock time through index, overview, and warning-report saving; excludes timing-report publication and final console output.",
+            scope = "Wall-clock time through immutable index, overview, and warning staging; excludes timing staging, final input verification, manifest commit, and console output.",
             timings.ElapsedSeconds, timings.Stages
-        };
-        try
-        {
-            await File.WriteAllTextAsync(temporary, JsonSerializer.Serialize(report, new JsonSerializerOptions
-            {
-                PropertyNamingPolicy = JsonNamingPolicy.CamelCase, WriteIndented = true
-            }), cancellationToken);
-            cancellationToken.ThrowIfCancellationRequested();
-            File.Move(temporary, path, overwrite: true);
-        }
-        finally
-        {
-            File.Delete(temporary);
-        }
-        return path;
-    }
+        }, new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase, WriteIndented = true }, cancellationToken);
+
 }

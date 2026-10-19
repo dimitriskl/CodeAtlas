@@ -4,6 +4,8 @@
 
 On 17 October 2026 the user authorized an orchestrator with fresh agents to implement every milestone in [ROADMAP.md](ROADMAP.md), committing each completed milestone separately, toward CodeAtlas version `1.00.00` and publication for live testing. Major-version publication is now authorized; readiness still requires acceptance evidence. Milestones stay on development versions until release qualification is complete.
 
+On 19 October the user reiterated completion of all milestones and explicitly requested documentation for the final user. Release documentation must cover the validated installed commands, installation/upgrade, the eConnector workflow, coding-agent usage, warning/report locations, refresh, recovery, privacy and supported analysis limits. Drafts and unexecuted examples are not final user documentation.
+
 All development remains in `C:\Code\CodeAtlas\CodeAtlas.Net`, on the local branch `codex/production-roadmap`. No additional worktree or development machine is authorized. Preserve existing work and eConnector application source. Dependency restore and generated `.codeatlas` artifacts for the designated eConnector solution remain authorized.
 
 Publication destination: GitHub Release with installable packages in the existing `dimitriskl/CodeAtlas` repository. NuGet.org publication is outside the selected destination.
@@ -22,8 +24,8 @@ The roadmap setup was committed as `7d6d0cc` (`0.00.08`). Each implementation mi
 | --- | --- | --- |
 | 1. Correctness baseline | Complete, 0.00.09, commit `ed04d25` | [Full comparison and test evidence](CORRECTNESS-BASELINE.md); 38 .NET / 12 Python tests pass; complete eConnector analysis equivalent. |
 | 2. Reference performance | Complete, 0.00.10, commit `e44db92` | [Measurements](REFERENCE-PERFORMANCE.md): two large runs per implementation, 22.5% lower median reference time, maximum peak CLI memory within budget, complete canonical equality; 43 .NET / 12 Python tests pass. |
-| 3. Query efficiency/contracts | Complete, 0.00.11 | [Contract](QUERY-CONTRACT.md) and [measurements](QUERY-PERFORMANCE.md); independent findings resolved; complete-record comparisons and all latency/memory budgets pass. Final version validation: 72 .NET / 20 Python tests, matching CLI version, fresh regenerated CodeAtlas index. |
-| 4. Reliability/freshness | Next implementation | Immutable generation/input-model drafts prepared; integration and qualification remain. |
+| 3. Query efficiency/contracts | Complete, 0.00.11, commit `b814a3c` | [Contract](QUERY-CONTRACT.md) and [measurements](QUERY-PERFORMANCE.md); independent findings resolved; complete-record comparisons and all latency/memory budgets pass. Final version validation: 72 .NET / 20 Python tests, matching CLI version, fresh regenerated CodeAtlas index. |
+| 4. Reliability/freshness | Implementation recorded in 0.00.12; large-query qualification remains open | [Reliability evidence](SNAPSHOT-RELIABILITY.md); independent review fixes pass, final build 118 .NET / 21 Python tests, regenerated own-index status passes. Final two-pass eConnector indexing and complete comparison pass; small query budgets pass. One large freshness check exceeds the maximum-time budget; 80 input captures and 12 exact fresh-process diagnostic queries did not reproduce it. Failure retained; final release qualification must close this gate. |
 | 5. Incremental refresh | Planned | — |
 | 6. Symbol documentation | Planned | — |
 | 7. Structural facts/discovery | Planned | — |

@@ -11,6 +11,9 @@ public sealed class IndexedSolution : IAsyncLifetime
     public string Parent => temporary.FullName;
     public string IndexPath => IndexStore.DefaultPath(Path.Combine(Root, "Sample.slnx"));
     public CodebaseIndex Index { get; private set; } = null!;
+    public string GenerationDirectory => IndexStore.LoadSnapshotAsync(IndexPath).GetAwaiter().GetResult().GenerationDirectory!;
+    public string IndexArtifactPath => Path.Combine(GenerationDirectory, "index.json");
+    public string OverviewPath => Path.Combine(GenerationDirectory, "overview.md");
 
     public async Task InitializeAsync()
     {
@@ -40,6 +43,12 @@ public sealed class IndexedSolution : IAsyncLifetime
         await process.WaitForExitAsync();
         Assert.True(process.ExitCode == 0, await output + await error);
         Index = await SolutionAnalysis.CreateIndexAsync(Path.Combine(Root, "Sample.slnx"));
+        await IndexStore.SaveAsync(Index);
+    }
+
+    public async Task RestorePublicationAsync()
+    {
+        Index = Index with { IndexId = Guid.NewGuid().ToString("N") };
         await IndexStore.SaveAsync(Index);
     }
 
@@ -85,13 +94,14 @@ public sealed class IndexTests(IndexedSolution fixture) : IClassFixture<IndexedS
 
         // Assert
         var stages = events.Select(e => e.Stage).Distinct().ToArray();
-        Assert.Equal(new[] { IndexStage.ScanningInputs, IndexStage.LoadingProjects, IndexStage.ValidatingProjects,
-            IndexStage.FingerprintingInputs, IndexStage.DiscoveringSymbols, IndexStage.FindingReferences,
+        Assert.Equal(new[] { IndexStage.ScanningInputs, IndexStage.LoadingProjects, IndexStage.FingerprintingInputs,
+            IndexStage.ValidatingProjects, IndexStage.DiscoveringSymbols, IndexStage.FindingReferences,
             IndexStage.CollectingTypes, IndexStage.VerifyingInputs }, stages);
         var references = events.Where(e => e.Stage == IndexStage.FindingReferences).ToArray();
         Assert.Equal(Enumerable.Range(0, index.Methods.Length + 1), references.Select(e => e.Completed!.Value));
         Assert.All(references, e => Assert.Equal(index.Methods.Length, e.Total));
         Assert.Equal(index.Projects.Length, events.Last(e => e.Stage == IndexStage.ValidatingProjects).Completed);
+        Assert.Equal(Enumerable.Range(0, index.Projects.Length + 1), events.Where(e => e.Stage == IndexStage.ValidatingProjects).Select(e => e.Completed!.Value));
         Assert.Equal(fixture.Index.Methods, index.Methods);
         foreach (var method in index.Methods)
             Assert.Equal(fixture.Index.References[method.Id], index.References[method.Id]);
@@ -253,7 +263,7 @@ public sealed class IndexTests(IndexedSolution fixture) : IClassFixture<IndexedS
     [Fact]
     public async Task OverviewIsReadableAndIdentifiesTheSnapshot()
     {
-        var overview = await File.ReadAllTextAsync(Path.Combine(fixture.Root, ".codeatlas", "overview.md"));
+        var overview = await File.ReadAllTextAsync(fixture.OverviewPath);
         Assert.Contains(fixture.Index.IndexId, overview);
         Assert.Contains($"CodeAtlas version: **{CodeAtlasVersion.Current}**", overview);
         Assert.Contains("Sample.Calculator", overview);
@@ -347,13 +357,13 @@ public sealed class IndexTests(IndexedSolution fixture) : IClassFixture<IndexedS
     public async Task StaleSavePreservesPreviousArtifacts()
     {
         var previous = await File.ReadAllTextAsync(fixture.IndexPath);
-        var overviewPath = Path.Combine(fixture.Root, ".codeatlas", "overview.md");
+        var overviewPath = fixture.OverviewPath;
         var overview = await File.ReadAllTextAsync(overviewPath);
         var added = Path.Combine(fixture.Root, "Added.cs");
         try
         {
             await File.WriteAllTextAsync(added, "// changed while indexing");
-            await Assert.ThrowsAsync<StaleIndexException>(() => IndexStore.SaveAsync(fixture.Index));
+            await Assert.ThrowsAsync<StaleIndexException>(() => IndexStore.SaveAsync(fixture.Index with { IndexId = Guid.NewGuid().ToString("N") }));
             Assert.Equal(previous, await File.ReadAllTextAsync(fixture.IndexPath));
             Assert.Equal(overview, await File.ReadAllTextAsync(overviewPath));
             Assert.Empty(Directory.GetFiles(Path.GetDirectoryName(fixture.IndexPath)!, "*.tmp"));
@@ -370,7 +380,7 @@ public sealed class IndexTests(IndexedSolution fixture) : IClassFixture<IndexedS
         var path = Path.Combine(fixture.Root, ".codeatlas", "invalid.json");
         try
         {
-            var json = JsonNode.Parse(await File.ReadAllTextAsync(fixture.IndexPath))!;
+            var json = JsonNode.Parse(await File.ReadAllTextAsync(fixture.IndexArtifactPath))!;
             json["schemaVersion"] = 999;
             await File.WriteAllTextAsync(path, json.ToJsonString());
             var unsupported = await Assert.ThrowsAsync<IndexFormatException>(() => IndexStore.LoadAsync(path));
@@ -383,6 +393,32 @@ public sealed class IndexTests(IndexedSolution fixture) : IClassFixture<IndexedS
         {
             File.Delete(path);
         }
+    }
+
+    [Theory]
+    [InlineData("null-reference-location")]
+    [InlineData("duplicate-method-id")]
+    [InlineData("null-project-file")]
+    public async Task CorruptNestedAnalysisIsRejectedBeforeQuery(string corruption)
+    {
+        // Arrange
+        var path = Path.Combine(fixture.Root, ".codeatlas", "corrupt-nested-index.json");
+        var node = JsonNode.Parse(await File.ReadAllTextAsync(fixture.IndexArtifactPath))!.AsObject();
+        if (corruption == "null-reference-location")
+            node["references"]!.AsObject().First(pair => pair.Value!.AsArray().Count > 0).Value![0]!["location"] = null;
+        else if (corruption == "duplicate-method-id")
+            node["methods"]![1]!["id"] = node["methods"]![0]!["id"]!.GetValue<string>();
+        else node["projects"]![0]!["files"]![0] = null;
+        await File.WriteAllTextAsync(path, node.ToJsonString());
+        try
+        {
+            // Act
+            var exception = await Record.ExceptionAsync(() => IndexStore.LoadAsync(path));
+
+            // Assert
+            Assert.Equal("invalid_index", Assert.IsType<IndexFormatException>(exception).Code);
+        }
+        finally { File.Delete(path); }
     }
 
     [Fact]
@@ -409,7 +445,7 @@ public sealed class IndexTests(IndexedSolution fixture) : IClassFixture<IndexedS
         {
             foreach (var (path, source) in original)
                 await File.WriteAllTextAsync(path, source);
-            await IndexStore.SaveAsync(fixture.Index);
+            await fixture.RestorePublicationAsync();
         }
     }
 }

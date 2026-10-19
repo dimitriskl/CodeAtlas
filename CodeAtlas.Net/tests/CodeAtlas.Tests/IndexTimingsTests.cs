@@ -45,30 +45,41 @@ public class IndexTimingsTests
     }
 
     [Fact]
-    public async Task CancelledReportPreservesPreviousFile()
+    public void RepeatedDiscoveryAndSemanticLoadingAccumulateOneStageTotal()
     {
         // Arrange
-        var directory = Path.Combine(Path.GetTempPath(), $"codeatlas-timings-{Guid.NewGuid():N}");
-        Directory.CreateDirectory(Path.Combine(directory, ".codeatlas"));
-        var path = Path.Combine(directory, ".codeatlas", "timings.json");
-        await File.WriteAllTextAsync(path, "previous report");
-        using var cancellation = new CancellationTokenSource();
-        cancellation.Cancel();
-        var snapshot = new TimingSnapshot(1, [new("saving", 1)]);
-        try
-        {
-            // Act
-            var error = await Record.ExceptionAsync(() => TimingReport.SaveAsync(
-                Path.Combine(directory, "Sample.slnx"), "new-index", snapshot, cancellation.Token));
+        var timings = new IndexTimings();
+        timings.Report(IndexStage.LoadingProjects, TimeSpan.Zero);
+        timings.Report(IndexStage.FingerprintingInputs, TimeSpan.FromSeconds(2));
+        timings.Report(IndexStage.LoadingProjects, TimeSpan.FromSeconds(3));
+        timings.Report(IndexStage.ValidatingProjects, TimeSpan.FromSeconds(7));
 
-            // Assert
-            Assert.IsAssignableFrom<OperationCanceledException>(error);
-            Assert.Equal("previous report", await File.ReadAllTextAsync(path));
-            Assert.Empty(Directory.GetFiles(Path.Combine(directory, ".codeatlas"), "*.tmp"));
-        }
-        finally
-        {
-            Directory.Delete(directory, recursive: true);
-        }
+        // Act
+        var result = timings.Snapshot(TimeSpan.FromSeconds(8));
+
+        // Assert
+        Assert.Equal(new[] { new StageTiming("loadingProjects", 6), new("fingerprintingInputs", 1),
+            new("validatingProjects", 1) }, result.Stages);
+        Assert.Equal(result.ElapsedSeconds, result.Stages.Sum(stage => stage.ElapsedSeconds));
+    }
+
+    [Fact]
+    public async Task TimingArtifactBindsSnapshotIdentityAndStatesMeasuredBoundary()
+    {
+        // Arrange
+        using var stream = new MemoryStream();
+        var solution = Path.GetFullPath("Sample.slnx");
+        var snapshot = new TimingSnapshot(1, [new("saving", 1)]);
+
+        // Act
+        await TimingReport.WriteAsync(stream, solution, "new-index", snapshot, CancellationToken.None);
+        var report = System.Text.Json.Nodes.JsonNode.Parse(stream.ToArray())!;
+
+        // Assert
+        Assert.Equal(solution, report["solution"]!.GetValue<string>());
+        Assert.Equal("new-index", report["indexId"]!.GetValue<string>());
+        Assert.Equal(CodeAtlasVersion.Current, report["toolVersion"]!.GetValue<string>());
+        Assert.Contains("excludes timing staging, final input verification, manifest commit", report["scope"]!.GetValue<string>());
+        Assert.Equal(1, report["elapsedSeconds"]!.GetValue<double>());
     }
 }

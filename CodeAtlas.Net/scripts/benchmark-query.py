@@ -127,7 +127,7 @@ def main():
     parser.add_argument("--index", type=Path, required=True)
     parser.add_argument("--label", required=True)
     parser.add_argument("--scope", choices=["small", "large"], required=True)
-    parser.add_argument("--mode", choices=["baseline", "candidate"], required=True)
+    parser.add_argument("--mode", choices=["baseline", "candidate", "qualification"], required=True)
     parser.add_argument("--profile", action="store_true")
     parser.add_argument("--baseline", type=Path, help="Required baseline-mode report.json for candidate relative budgets")
     parser.add_argument("--outdir", type=Path, default=Path(__file__).resolve().parents[1] / ".codeatlas" / "query-benchmarks")
@@ -138,12 +138,24 @@ def main():
     if not args.label or any(char not in "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_" for char in args.label):
         parser.error("Label must contain only letters, digits, hyphens and underscores")
     cli, index_path = args.cli.resolve(strict=True), args.index.resolve(strict=True)
-    index = json.loads(index_path.read_text(encoding="utf-8-sig"))
-    candidate = args.mode == "candidate"
-    if candidate != (args.baseline is not None):
+    pointer = json.loads(index_path.read_text(encoding="utf-8-sig"))
+    if "manifestVersion" in pointer:
+        generation = pointer["indexId"]
+        if len(generation) != 32 or any(char not in "0123456789abcdefABCDEF" for char in generation):
+            parser.error("Invalid generation identity")
+        artifact = index_path.parent / "generations" / generation / "index.json"
+        index = json.loads(artifact.read_text(encoding="utf-8-sig"))
+        if index["indexId"] != generation:
+            parser.error("Manifest/index identity mismatch")
+    else:
+        artifact, index = index_path, pointer
+    if args.mode == "qualification" and ("manifestVersion" not in pointer or not index.get("inputManifest")):
+        parser.error("M4 qualification requires a manifest generation with the modern input model")
+    candidate = args.mode != "baseline"
+    if (args.mode == "candidate") != (args.baseline is not None):
         parser.error("--baseline is required for candidate mode and must be omitted for baseline mode")
     baseline = json.loads(args.baseline.read_text(encoding="utf-8-sig")) if args.baseline else None
-    if candidate:
+    if args.mode == "candidate":
         try:
             validate_baseline(baseline, args.scope, index["indexId"])
         except ValueError as error:
@@ -157,7 +169,8 @@ def main():
     (output / "dotnet-info.txt").write_text(subprocess.run([dotnet, "--info"], capture_output=True, text=True, check=True).stdout, encoding="utf-8")
     report = {
         "label": args.label, "mode": args.mode, "scope": args.scope, "snapshotId": index["indexId"],
-        "indexBytes": index_path.stat().st_size, "indexPath": str(index_path), "startedAtUtc": stamp,
+        "indexBytes": artifact.stat().st_size,
+        "budgetPolicy": "M4 predeclared absolute-only budgets; new snapshot and input model; no relative-baseline claim" if args.mode == "qualification" else "M3 absolute and candidate relative budgets", "indexPath": str(index_path), "startedAtUtc": stamp,
         "platform": platform.platform(), "processor": platform.processor(), "logicalProcessors": os.cpu_count(),
         "conditions": "Five fresh processes after one untimed warmup per case; OS/filesystem caches uncontrolled; " + args.conditions,
         "memoryScope": "CLI main process OS peak working set; no MSBuild evaluation in indexed queries",
@@ -223,6 +236,8 @@ def main():
             case_dir = output / label
             case_dir.mkdir()
             result, warmup = run(command, case_dir / "warmup")
+            if args.mode == "qualification" and result.get("snapshotIntegrity") != "verified-generation":
+                raise ValueError("M4 qualification requires verified generation reads")
             check_result(result, field, expected, total, index["indexId"], candidate)
             samples = []
             for number in range(1, 6):

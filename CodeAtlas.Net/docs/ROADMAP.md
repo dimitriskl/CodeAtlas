@@ -47,6 +47,8 @@ Acceptance: representative queries meet recorded latency and memory budgets, det
 
 ### 4. Harden snapshot reliability and freshness
 
+Status: implementation and Windows failure qualification complete in the 0.00.12 candidate; final two-pass eConnector indexing and complete comparison pass, as do small query budgets. One large freshness check exceeded the maximum-time budget and is under diagnosis; milestone completion remains pending. [Reliability evidence](SNAPSHOT-RELIABILITY.md) records the publication boundary, read-only queries, two-pass input capture, actual process-kill/ACL checks and explicit input-coverage limits. The versioned build passes 118 .NET and 21 Python tests.
+
 Test concurrent readers/writers, cancellation, process interruption, corrupt or incompatible indexes, and permission/disk failures. Define recovery and consistency across index, overview, warnings, and timings. Account for Windows path behavior, multiple solutions sharing a directory, and queries against read-only artifacts.
 
 Define analysis coverage and invalidation rules for build configuration, SDK/environment changes, external inputs, multi-targeting, and generated code. Unsupported cases must be explicit. Avoid unnecessary invalidation where safely possible without weakening correctness.

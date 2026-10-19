@@ -37,6 +37,13 @@ class QueryBenchmarkTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 benchmark.validate_baseline(changed, "small", "snapshot")
 
+    def test_m4_absolute_qualification_preserves_frozen_budgets(self):
+        samples = [{"wallSeconds": 2.9, "peakWorkingSetBytes": 767 * 1024**2}] * 5
+        self.assertTrue(benchmark.assess(samples, "large")["passed"])
+        for seconds, memory, failure in [(3.1, 700, "median_wall"), (2.0, 769, "peak_working_set")]:
+            changed = [{"wallSeconds": seconds, "peakWorkingSetBytes": memory * 1024**2}] * 5
+            self.assertIn(failure, benchmark.assess(changed, "large")["budgetFailures"])
+
     def test_absolute_and_relative_budgets_both_apply(self):
         samples = [{"wallSeconds": 0.5, "peakWorkingSetBytes": 100 * 1024**2}] * 5
         baseline = {"medianWallSeconds": 0.2, "peakWorkingSetBytes": 50 * 1024**2}

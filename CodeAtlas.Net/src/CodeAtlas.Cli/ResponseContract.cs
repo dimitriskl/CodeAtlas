@@ -21,12 +21,19 @@ internal static class ResponseContract
 
     public static object Freshness(IndexFreshness freshness) => new
     {
-        state = freshness.IsStale ? "stale" : "fresh",
+        state = freshness.Status,
+        freshness.CheckedAtUtc,
+        inputCoverage = new
+        {
+            freshness.Coverage.Status, freshness.Coverage.Scope,
+            issueCount = freshness.Coverage.Issues.Length,
+            reasonCodes = freshness.Coverage.Issues.Select(issue => issue.Code).Distinct(StringComparer.Ordinal).Order(StringComparer.Ordinal).ToArray()
+        },
+        freshness.Diagnostics,
         freshness.IsStale,
         freshness.ChangedFiles,
         scope = "tracked-input-content-hashes",
-        limitations = new[] { "environment-variables", "installed-SDK-changes", "external-untracked-imports-and-binaries",
-            "custom-intermediate-output-paths", "untracked-source-generator-inputs" }
+        coverageDetails = "See warningsFile for per-project input coverage details."
     };
 
     public static object LiveFreshness => new

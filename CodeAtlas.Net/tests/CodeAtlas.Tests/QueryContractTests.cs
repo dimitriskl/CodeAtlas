@@ -59,7 +59,8 @@ public sealed class QueryContractTests(IndexedSolution fixture) : IClassFixture<
         Assert.Equal(0, second.Exit);
         Assert.Empty(first.Stderr);
         AssertEnvelope(first, "find-symbol", true);
-        Assert.Equal("fresh", first.Json["freshness"]!["state"]!.GetValue<string>());
+        Assert.Equal("unknown", first.Json["freshness"]!["state"]!.GetValue<string>());
+        Assert.Equal("partial", first.Json["freshness"]!["inputCoverage"]!["status"]!.GetValue<string>());
         Assert.Equal("tracked-input-content-hashes", first.Json["freshness"]!["scope"]!.GetValue<string>());
         Assert.False(first.Json["coverage"]!["runtimeCallGraph"]!.GetValue<bool>());
         Assert.Equal(snapshot, first.Json["pagination"]!["snapshotId"]!.GetValue<string>());
@@ -171,7 +172,7 @@ public sealed class QueryContractTests(IndexedSolution fixture) : IClassFixture<
     {
         // Arrange
         var path = Path.Combine(fixture.Root, ".codeatlas", "invalid-contract-index.json");
-        var index = JsonNode.Parse(await File.ReadAllTextAsync(fixture.IndexPath))!;
+        var index = JsonNode.Parse(await File.ReadAllTextAsync(fixture.IndexArtifactPath))!;
         index["schemaVersion"] = 999;
         await File.WriteAllTextAsync(path, validJson ? index.ToJsonString() : "{");
         try
@@ -193,7 +194,8 @@ public sealed class QueryContractTests(IndexedSolution fixture) : IClassFixture<
     {
         // Arrange
         var path = Path.Combine(fixture.Root, ".codeatlas", "legacy-contract-index.json");
-        var index = JsonNode.Parse(await File.ReadAllTextAsync(fixture.IndexPath))!;
+        var index = JsonNode.Parse(await File.ReadAllTextAsync(fixture.IndexArtifactPath))!;
+        index.AsObject().Remove("inputManifest");
         foreach (var method in index["methods"]!.AsArray())
             method!.AsObject().Remove("containingType");
         await File.WriteAllTextAsync(path, index.ToJsonString());
@@ -206,6 +208,10 @@ public sealed class QueryContractTests(IndexedSolution fixture) : IClassFixture<
             // Assert
             Assert.Equal(0, ordinary.Exit);
             Assert.Equal(2, ordinary.Json["pagination"]!["total"]!.GetValue<int>());
+            Assert.Equal("legacy-unverified", ordinary.Json["snapshotIntegrity"]!.GetValue<string>());
+            Assert.Equal("unknown", ordinary.Json["freshness"]!["state"]!.GetValue<string>());
+            Assert.Null(ordinary.Json["warningsFile"]);
+            Assert.Contains("rebuild", ordinary.Json["warningMessage"]!.GetValue<string>(), StringComparison.OrdinalIgnoreCase);
             Assert.Equal(1, filtered.Exit);
             Assert.Equal("rebuild_required", filtered.Json["error"]!["code"]!.GetValue<string>());
         }
@@ -239,7 +245,7 @@ public sealed class QueryContractTests(IndexedSolution fixture) : IClassFixture<
         Assert.Equal(0, result.Exit);
         var timing = result.Json["queryTimings"]!;
         Assert.True(timing["processStartupSeconds"]!.GetValue<double>() >= 0);
-        foreach (var phase in new[] { "jsonLoading", "freshnessHashing", "lookup", "warningSaving", "resultNodeCreation" })
+        foreach (var phase in new[] { "jsonLoading", "freshnessHashing", "lookup", "resultNodeCreation" })
             Assert.True(timing["phases"]![phase]!.GetValue<double>() >= 0);
         Assert.Empty(result.Stderr);
     }
@@ -249,7 +255,7 @@ public sealed class QueryContractTests(IndexedSolution fixture) : IClassFixture<
     {
         // Arrange
         const string warning = "Contract fixture warning with diagnostic details";
-        await IndexStore.SaveAsync(fixture.Index with { Warnings = [warning] });
+        await IndexStore.SaveAsync(fixture.Index with { Warnings = [warning], IndexId = Guid.NewGuid().ToString("N") });
         try
         {
             // Act
@@ -261,11 +267,17 @@ public sealed class QueryContractTests(IndexedSolution fixture) : IClassFixture<
             Assert.Equal(1, result.Json["warningCount"]!.GetValue<int>());
             Assert.Contains("warnings.txt", result.Json["warningMessage"]!.GetValue<string>());
             Assert.DoesNotContain(warning, result.Stdout);
+            Assert.DoesNotContain("Arbitrary task inputs", result.Stdout);
+            Assert.True(result.Json["coverageIssueCount"]!.GetValue<int>() > 0);
+            var report = await File.ReadAllTextAsync(result.Json["warningsFile"]!.GetValue<string>());
+            Assert.Contains("Input coverage", report);
+            Assert.Contains("dynamic_build_inputs_unverified", report);
+            Assert.Contains("Library/Library.csproj", report);
             Assert.Null(result.Json["warnings"]);
             Assert.Empty(result.Stderr);
-            Assert.Contains(warning, await File.ReadAllTextAsync(Path.Combine(fixture.Root, ".codeatlas", "warnings.txt")));
+            Assert.Contains(warning, await File.ReadAllTextAsync(result.Json["warningsFile"]!.GetValue<string>()));
         }
-        finally { await IndexStore.SaveAsync(fixture.Index); }
+        finally { await fixture.RestorePublicationAsync(); }
     }
 
     [Fact]

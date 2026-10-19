@@ -21,11 +21,13 @@ public class AnalysisException(string message, IReadOnlyList<string>? diagnostic
 /// <summary>A read-only semantic snapshot. Reload after changing source or build configuration.</summary>
 public sealed partial class SolutionAnalysis : IDisposable
 {
-    private static readonly object RegistrationLock = new();
     private readonly MSBuildWorkspace workspace;
     private readonly Solution solution;
     private readonly string directory;
     private readonly IReadOnlyList<string> warnings;
+    private Dictionary<string, Dictionary<string, string>> evaluatedProperties = new(SnapshotInputModel.PathComparer);
+    private string[] evaluatedImports = [];
+    private static string? selectedMSBuildPath;
 
     private SolutionAnalysis(MSBuildWorkspace workspace, Solution solution, string path, IReadOnlyList<string> warnings)
     {
@@ -39,25 +41,35 @@ public sealed partial class SolutionAnalysis : IDisposable
     public string SolutionPath { get; }
     public IReadOnlyList<string> Warnings => warnings;
 
-    public static async Task<SolutionAnalysis> LoadAsync(string path, CancellationToken cancellationToken = default,
-        IProgress<IndexProgress>? progress = null)
+    public static Task<SolutionAnalysis> LoadAsync(string path, CancellationToken cancellationToken = default,
+        IProgress<IndexProgress>? progress = null) => LoadCoreAsync(path, cancellationToken, progress, discoveryOnly: false);
+
+    private static async Task<SolutionAnalysis> LoadCoreAsync(string path, CancellationToken cancellationToken,
+        IProgress<IndexProgress>? progress, bool discoveryOnly)
     {
         path = Path.GetFullPath(path);
         if (!File.Exists(path))
             throw new AnalysisException($"Solution does not exist: {path}");
 
-        lock (RegistrationLock)
+        lock (SnapshotEnvironment.Gate)
         {
             if (!MSBuildLocator.IsRegistered)
-                MSBuildLocator.RegisterDefaults();
+            {
+                var before = SnapshotEnvironment.Raw();
+                selectedMSBuildPath = MSBuildLocator.RegisterDefaults().MSBuildPath;
+                var after = SnapshotEnvironment.Raw();
+                foreach (var key in before.Keys.Union(after.Keys, SnapshotInputModel.PathComparer))
+                    if (before.GetValueOrDefault(key) != after.GetValueOrDefault(key))
+                        Environment.SetEnvironmentVariable(key, before.GetValueOrDefault(key));
+            }
         }
 
-        return await LoadRegisteredAsync(path, cancellationToken, progress);
+        return await LoadRegisteredAsync(path, cancellationToken, progress, discoveryOnly);
     }
 
     // Keep ILogger-dependent code behind MSBuildLocator registration.
     private static async Task<SolutionAnalysis> LoadRegisteredAsync(string path, CancellationToken cancellationToken,
-        IProgress<IndexProgress>? progress)
+        IProgress<IndexProgress>? progress, bool discoveryOnly)
     {
         var workspace = MSBuildWorkspace.Create();
         try
@@ -74,7 +86,7 @@ public sealed partial class SolutionAnalysis : IDisposable
             if (solution.ProjectIds.Count == 0)
                 failures.Add("The solution contains no projects.");
             var validated = 0;
-            progress?.Report(new(IndexStage.ValidatingProjects, 0, solution.ProjectIds.Count));
+            if (!discoveryOnly) progress?.Report(new(IndexStage.ValidatingProjects, 0, solution.ProjectIds.Count));
             foreach (var project in solution.Projects)
             {
                 if (project.Language != LanguageNames.CSharp)
@@ -82,14 +94,17 @@ public sealed partial class SolutionAnalysis : IDisposable
                     failures.Add($"Unsupported project language: {project.Name} ({project.Language}).");
                     continue;
                 }
-                var compilation = await project.GetCompilationAsync(cancellationToken);
-                if (compilation is null)
-                    failures.Add($"Could not compile project: {project.Name}.");
-                else
-                    failures.AddRange(compilation.GetDiagnostics(cancellationToken)
-                        .Where(d => d.Severity == DiagnosticSeverity.Error)
-                        .Select(d => $"{project.Name}: {d}"));
-                progress?.Report(new(IndexStage.ValidatingProjects, ++validated, solution.ProjectIds.Count, project.Name));
+                if (!discoveryOnly)
+                {
+                    var compilation = await project.GetCompilationAsync(cancellationToken);
+                    if (compilation is null)
+                        failures.Add($"Could not compile project: {project.Name}.");
+                    else
+                        failures.AddRange(compilation.GetDiagnostics(cancellationToken)
+                            .Where(d => d.Severity == DiagnosticSeverity.Error)
+                            .Select(d => $"{project.Name}: {d}"));
+                }
+                if (!discoveryOnly) progress?.Report(new(IndexStage.ValidatingProjects, ++validated, solution.ProjectIds.Count, project.Name));
             }
             if (failures.Count > 0)
                 throw new AnalysisException("Solution analysis is incomplete. Restore dependencies and resolve the reported errors.", failures);

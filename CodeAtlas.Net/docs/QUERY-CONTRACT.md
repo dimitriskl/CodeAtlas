@@ -4,7 +4,7 @@ CodeAtlas JSON responses use `contractVersion: 1`. The response contract is sepa
 
 Every JSON success/error response includes `contractVersion`, `command`, `success`, `responseToolVersion`, `warningCount`, `freshness`, and `coverage`. `responseToolVersion` identifies the executable answering the request. Existing indexed `toolVersion` identifies the executable that created the snapshot and can differ. Metadata unavailable because a request failed before loading is null; warningCount is zero when unknown.
 
-Success JSON goes to stdout. Error JSON goes to stderr, with empty stdout. Indexing additionally reports progress on stderr; queries do not. Warning details remain in the warning report, with a count and `warningMessage` when applicable, and are not included inline. Existing warning-report writes still require access to the solution's `.codeatlas` directory.
+Success JSON goes to stdout. Error JSON goes to stderr, with empty stdout. Indexing additionally reports progress on stderr; queries do not. Warning details remain in the warning report, with a count and `warningMessage` when applicable, and are not included inline. Indexed queries and status never write artifacts. `warningsFile` points into the resolved immutable generation; live analysis writes a separate report.
 
 ## Exact filters and bounded results
 
@@ -21,7 +21,7 @@ For example:
 
 ```powershell
 dotnet src/CodeAtlas.Cli/bin/Debug/net10.0/codeatlas.dll find-symbol `
-  --index tests/Fixtures/.codeatlas/index.json --name Calculate `
+  --index <manifest-path-returned-by-index> --name Calculate `
   --project Library/Library.csproj --type Sample.Calculator --limit 1
 ```
 
@@ -46,7 +46,7 @@ Continue with the same selector and filters, the returned nextOffset and snapsho
 
 ```powershell
 dotnet src/CodeAtlas.Cli/bin/Debug/net10.0/codeatlas.dll find-symbol `
-  --index tests/Fixtures/.codeatlas/index.json --name Calculate `
+  --index <manifest-path-returned-by-index> --name Calculate `
   --project Library/Library.csproj --type Sample.Calculator --limit 1 `
   --offset 1 --snapshot the-returned-index-id
 ```
@@ -84,3 +84,11 @@ Schema-1 indexes created before declaring-type metadata was added remain usable 
 Errors retain `error.code`, `error.message`, and `error.diagnostics`. If an index loaded successfully, its identity and available freshness/coverage are retained in the error envelope. Index-status succeeds with exit zero when reporting a stale snapshot; result queries refuse that snapshot.
 
 Queries and index-status accept `--profile`. Only then is `queryTimings` included: approximate OS-process-creation to managed-entry startup, measured managed duration, and independent phase durations. `jsonLoading` includes deserialization and structural validation; `freshnessHashing` includes input enumeration and full content hashes; `lookup` includes filtering, ordering and paging; `warningSaving` and `resultNodeCreation` are separate. Result-node creation measures constructing the result JSON tree; adding envelope/profile fields, final text formatting, stdout publication and process exit are outside that phase. External benchmark wall time includes the complete process. Index commands already save stage timing reports and reject `--profile`.
+
+## Snapshot integrity and coverage (milestone 4)
+
+Pass the index command's `index` value (`current.json`) to saved queries. A command resolves one manifest and holds its generation paths throughout; it cannot combine reports from another publication. `snapshotIntegrity` is `verified-generation`, `legacy-unverified` or `live-analysis`. Direct legacy JSON remains compatible but does not provide a coherent report bundle.
+
+`freshness.state` is `stale`, `fresh`, or `unknown`; `checkedAtUtc` records the check. `inputCoverage` identifies the supported model, complete/partial status, issue count and distinct reason codes. Full per-project coverage details are in `warningsFile`, with `coverageIssueCount` separate from MSBuild `warningCount`. Partial generator, multi-target or dynamic build evidence yields `unknown` even when observed files match. `isStale: false` alone does not prove complete freshness. File/environment/SDK changes set `isStale: true`; saved queries reject those changes as before. Legacy input models remain unknown until rebuilt.
+
+Additional stable errors: `index_busy` means another writer holds the per-solution publication lock; `snapshot_io_failed` means an artifact could not be read/published. `invalid_index` includes missing, truncated, checksum-mismatched or identity-mismatched generations; `unsupported_index` includes incompatible manifests. Rebuild explicitly; there is no automatic fallback to older data. See [reliability and recovery](SNAPSHOT-RELIABILITY.md).

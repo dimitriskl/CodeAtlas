@@ -18,10 +18,10 @@ After incrementing, rebuild so `--version` matches Version.props, run the .NET t
 
 ## Codebase navigation
 
-For codebase navigation, use the saved index when available:
+For codebase navigation, use the solution-scoped `current.json` manifest returned as `index` by the latest index command. Locate it under `.codeatlas/solutions/<solution-file>-<absolute-path-hash>/` when available:
 
 ```bash
-dotnet run --project src/CodeAtlas.Cli --no-build -- index-status --index .codeatlas/index.json
+dotnet run --project src/CodeAtlas.Cli --no-build -- index-status --index <solution-current.json>
 ```
 
 If the index is missing or stale, build CodeAtlas and regenerate it:
@@ -30,6 +30,6 @@ If the index is missing or stale, build CodeAtlas and regenerate it:
 dotnet run --project src/CodeAtlas.Cli --no-build -- index --solution CodeAtlas.slnx
 ```
 
-Read `.codeatlas/overview.md` for orientation. Use `find-symbol --index .codeatlas/index.json --name <method>` and `find-references --index .codeatlas/index.json --symbol <id>` through the same CLI to inspect relevant relationships. Read the source before editing; static references are not a complete runtime call graph.
+Read the immutable `overview` path returned by the index command for orientation. Keep its generation together with the returned `warningsFile` and `timings` paths. Use `find-symbol --index <solution-current.json> --name <method>` and `find-references --index <solution-current.json> --symbol <id>` through the same CLI to inspect relevant relationships. Read the source before editing; static references are not a complete runtime call graph.
 
 Rebuild the index before querying after source changes. Keep `.codeatlas/` outputs out of Git. Validate changes with the documented build and test commands.

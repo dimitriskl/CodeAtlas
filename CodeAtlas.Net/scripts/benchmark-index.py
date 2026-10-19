@@ -120,7 +120,10 @@ def main():
         if result.get("timings"):
             shutil.copyfile(result["timings"], output / "timings.json")
         if args.retain_index:
-            shutil.copyfile(result["index"], output / "index.json")
+            snapshot_index = result.get("snapshotIndex", result["index"])
+            shutil.copyfile(snapshot_index, output / "index.json")
+            if snapshot_index != result["index"]:
+                shutil.copyfile(result["index"], output / "manifest.json")
     (output / "memory-samples.json").write_text(json.dumps(samples, indent=2), encoding="utf-8")
     (output / "benchmark.json").write_text(json.dumps(metadata, indent=2), encoding="utf-8")
     print(json.dumps({"report": str(output / "benchmark.json"), "exitCode": process.returncode,

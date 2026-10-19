@@ -14,9 +14,9 @@ Usage: codeatlas index --solution <path.sln|path.slnx> [--reference-workers <1-8
 Query options: --project <relative-project-path> --limit <1-1000> --offset <nonnegative> --snapshot <indexId> --profile
 Default limit is 100. Indexed continuations require --snapshot; live queries support only the first page.
 All JSON commands accept --contract-version 1. Projects and declaring types match exactly (case-sensitive).
-Warnings are saved to .codeatlas/warnings.txt beside the solution. Results include a notice with the file path.
+Warnings are saved in the solution-scoped generation. Results include a notice with the file path.
 Indexing progress and elapsed time go to stderr; stdout contains the final JSON result.
-Indexing stage timings are saved to .codeatlas/timings.json beside the solution.
+Indexing artifacts commit together under .codeatlas/solutions/<solution-identity>/current.json.
 Reference indexing uses 2 concurrent searches by default; use 1 for serial comparison.
 """;
 if (args.Length == 1 && args[0] == "--version")
@@ -35,6 +35,8 @@ Console.CancelKeyPress += (_, e) => { e.Cancel = true; cancellation.Cancel(); };
 using var indexingProgress = args.Length > 0 && args[0] == "index" ? new IndexProgressReporter() : null;
 var command = args.FirstOrDefault();
 CodebaseIndex? loadedIndex = null;
+LoadedSnapshot? loadedSnapshot = null;
+TimingSnapshot? committedTimings = null;
 object? freshness = null;
 var coverageAvailable = false;
 QueryProfile? profile = null;
@@ -82,14 +84,19 @@ try
             throw new ArgumentException("--reference-workers must be an integer between 1 and 8.");
         var index = await SolutionAnalysis.CreateIndexAsync(path, cancellation.Token, indexingProgress, referenceWorkers);
         indexingProgress!.Report(new(IndexStage.Saving));
-        await IndexStore.SaveAsync(index, cancellation.Token);
+        freshness = ResponseContract.Freshness(await IndexStore.CheckFreshnessAsync(index, cancellation.Token));
+        loadedSnapshot = await IndexStore.PublishAsync(index, async (stream, token) =>
+        {
+            committedTimings = indexingProgress.SnapshotTimings();
+            await TimingReport.WriteAsync(stream, index.Solution, index.IndexId, committedTimings, token);
+        }, cancellation.Token);
         loadedIndex = index;
         coverageAvailable = true;
-        freshness = ResponseContract.Freshness(new IndexFreshness(false, []));
         result = new
         {
             index = IndexStore.DefaultPath(index.Solution),
-            overview = Path.Combine(Path.GetDirectoryName(IndexStore.DefaultPath(index.Solution))!, "overview.md"),
+            overview = loadedSnapshot.OverviewPath,
+            snapshotIndex = loadedSnapshot.IndexPath,
             index.IndexId, index.CreatedAtUtc, index.ToolVersion,
             projects = index.Projects.Length, types = index.Types.Length, methods = index.Methods.Length,
             warningCount = index.Warnings.Length, index.Warnings
@@ -99,7 +106,8 @@ try
     {
         if (options.Count != 1 || !options.TryGetValue("--index", out var path))
             throw new ArgumentException(usage);
-        var index = loadedIndex = await TimedAsync("jsonLoading", () => IndexStore.LoadAsync(path, cancellation.Token));
+        loadedSnapshot = await TimedAsync("jsonLoading", () => IndexStore.LoadSnapshotAsync(path, cancellation.Token));
+        var index = loadedIndex = loadedSnapshot.Index;
         coverageAvailable = true;
         freshness = ResponseContract.Freshness(await TimedAsync("freshnessHashing", () => IndexStore.CheckFreshnessAsync(index, cancellation.Token)));
         result = new { index.Solution, index.IndexId, index.CreatedAtUtc, index.ToolVersion,
@@ -121,7 +129,8 @@ try
         request.ValidateOptions(supportsType: command == "find-symbol", indexed: options.ContainsKey("--index"));
         if (options.TryGetValue("--index", out var indexPath))
         {
-            var index = loadedIndex = await TimedAsync("jsonLoading", () => IndexStore.LoadAsync(indexPath, cancellation.Token));
+            loadedSnapshot = await TimedAsync("jsonLoading", () => IndexStore.LoadSnapshotAsync(indexPath, cancellation.Token));
+            var index = loadedIndex = loadedSnapshot.Index;
             coverageAvailable = true;
             var status = await TimedAsync("freshnessHashing", () => IndexStore.CheckFreshnessAsync(index, cancellation.Token));
             freshness = ResponseContract.Freshness(status);
@@ -166,15 +175,24 @@ try
     var warnings = output["warnings"]!.AsArray().Select(w => w!.GetValue<string>()).ToArray();
     var solutionPath = options.TryGetValue("--solution", out var selectedSolution)
         ? selectedSolution : output["solution"]!.GetValue<string>();
-    var warningsPath = await TimedAsync("warningSaving", () => WarningReport.SaveAsync(solutionPath, output["indexId"]?.GetValue<string>(), warnings, cancellation.Token));
+    var warningsPath = loadedSnapshot is null
+        ? await TimedAsync("warningSaving", () => WarningReport.SaveAsync(solutionPath, null, warnings, cancellation.Token))
+        : loadedSnapshot.WarningsPath;
+    output["snapshotIntegrity"] = loadedSnapshot is null ? "live-analysis" : loadedSnapshot.VerifiedGeneration ? "verified-generation" : "legacy-unverified";
+    output["warningsFile"] = warningsPath;
+    output["coverageIssueCount"] = loadedIndex?.InputManifest?.Coverage.Issues.Length;
+    if (loadedIndex?.InputManifest?.Coverage is { Status: "partial" } coverage)
+        output["coverageMessage"] = warningsPath is null ? "Input coverage is partial; rebuild for the coverage report."
+            : $"Input coverage is partial; {coverage.Issues.Length} issues recorded in {warningsPath}";
     output.Remove("warnings");
-    if (warnings.Length > 0)
-        output["warningMessage"] = $"{warnings.Length} warnings saved to {warningsPath}";
+    output["warningMessage"] = warningsPath is null
+        ? $"{warnings.Length} warnings recorded in legacy index; rebuild to create a generation warning report."
+        : $"{warnings.Length} warnings recorded in {warningsPath}";
     ResponseContract.AddEnvelope(output, command, true, jsonOptions, freshness, coverageAvailable);
     if (indexingProgress is not null)
     {
-        var timings = indexingProgress.SnapshotTimings();
-        output["timings"] = await TimingReport.SaveAsync(solutionPath, output["indexId"]!.GetValue<string>(), timings, cancellation.Token);
+        var timings = committedTimings!;
+        output["timings"] = loadedSnapshot!.TimingsPath;
         output["slowestStage"] = JsonSerializer.SerializeToNode(timings.Stages.MaxBy(s => s.ElapsedSeconds), jsonOptions);
         indexingProgress.Complete();
         output["elapsedSeconds"] = indexingProgress.ElapsedSeconds;
@@ -192,7 +210,9 @@ catch (Exception exception)
     {
         error = new { code, message = exception.Message, diagnostics = (exception as AnalysisException)?.Diagnostics ?? [] },
         warningCount = loadedIndex?.Warnings.Length ?? 0,
-        indexId = loadedIndex?.IndexId
+        indexId = loadedIndex?.IndexId,
+        warningsFile = loadedSnapshot?.WarningsPath,
+        warningMessage = loadedSnapshot?.WarningsPath is { } report ? $"{loadedIndex!.Warnings.Length} warnings recorded in {report}" : null
     }, jsonOptions)!.AsObject();
     ResponseContract.AddEnvelope(output, command, false, jsonOptions, freshness, coverageAvailable);
     if (profile is not null)

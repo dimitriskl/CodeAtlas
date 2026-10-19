@@ -6,11 +6,8 @@ internal static class WarningReport
 {
     public static async Task<string> SaveAsync(string solution, string? indexId, string[] warnings, CancellationToken cancellationToken)
     {
-        var directory = Path.Combine(Path.GetDirectoryName(Path.GetFullPath(solution))!, ".codeatlas");
+        var directory = Path.Combine(Path.GetDirectoryName(CodeAtlas.IndexStore.DefaultPath(solution))!, "live");
         var path = Path.Combine(directory, "warnings.txt");
-        // Refresh a previous report even when the latest successful command has no warnings.
-        if (warnings.Length == 0 && !File.Exists(path))
-            return path;
 
         var text = new StringBuilder()
             .AppendLine("CodeAtlas warning report")

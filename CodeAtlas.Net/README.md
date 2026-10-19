@@ -1,6 +1,6 @@
 # CodeAtlas .NET
 
-Version: **0.00.11**
+Version: **0.00.12**
 
 See [version history](docs/VERSION.md) for what is implemented and the versioning rules. `Version.props` is the build's version source. Run `dotnet run --project src/CodeAtlas.Cli --no-build -- --version` to check the built CLI.
 
@@ -52,28 +52,29 @@ In an interactive terminal, a single status line refreshes about once a second, 
 dotnet run --project src/CodeAtlas.Cli --no-build -- index --solution CodeAtlas.slnx > result.json 2> progress.log
 ```
 
-Outputs are placed in `.codeatlas/` alongside the selected solution:
+Outputs commit as one immutable generation under `.codeatlas/solutions/<solution-file>-<absolute-path-hash>/`. The index command returns `index`, the stable `current.json` manifest to pass to queries, and immutable `snapshotIndex`, `overview`, `warningsFile`, and `timings` paths. Each solution has its own pointer even when solutions share a directory.
 
-- `index.json`: versioned project dependencies, source-file inventory, types, method IDs and signatures, method references, warnings, and input fingerprints.
-- `overview.md`: a compact map for an agent to read, with projects, dependencies, up to 10 source files and 20 source types per project. It includes the generation time, index ID, and query instructions.
-- `timings.json`: wall-clock seconds for each indexing stage, linked to the solution, index ID, and tool version. The result includes its absolute path as `timings` and a compact `slowestStage` summary. Repeated progress updates do not reset stage timing. Measurements include index, overview, and warning-report saving; publishing the timing report and printing the final result are excluded. The result's `elapsedSeconds` also includes timing-report publication. Stage values are rounded independently to milliseconds, so their sum may differ slightly from the total. Timings measure this run, not an ETA or a controlled benchmark.
+- `index.json`: versioned projects, files, types, methods, references, warnings, fingerprints and input-coverage evidence.
+- `overview.md`: a compact project/type map with generation identity and query instructions.
+- `warnings.txt`: the complete warning report, including an explicit zero-warning report.
+- `timings.json`: measured indexing stages, bound to the same generation. Measurements include index, overview and warning staging; timing staging, final input validation, manifest commit and console output are excluded. `elapsedSeconds` includes publication.
 
-The timing report is atomically replaced on successful report saving; queries leave it unchanged. A failed run may leave an earlier report, so check its index ID before comparing results. Index, overview, warnings, and timings are separate files rather than one atomic transaction.
+A per-solution writer lock excludes concurrent publication. After all artifacts are written and flushed and inputs verified, one atomic manifest replacement commits the generation. Readers resolve that manifest once and verify report hashes plus the index SHA-256 during its single deserialization. A failed or cancelled publication preserves the previous active generation; corrupt snapshots fail explicitly and require rebuilding. Old and incomplete generations are retained for diagnosis; storage currently grows with rebuilds. See [snapshot reliability and recovery](docs/SNAPSHOT-RELIABILITY.md).
 
-These are generated, Git-ignored artifacts. Each solution directory has one active index; indexing a different solution in that directory replaces it. Index paths are machine-local: rebuild after moving the checkout.
+These generated artifacts are Git-ignored and machine-local. Use the `index` path returned by the command in the examples below.
 
 Find all methods with the exact name `Calculate`:
 
 ```bash
 dotnet run --project src/CodeAtlas.Cli --no-build -- find-symbol \
-  --index tests/Fixtures/.codeatlas/index.json --name Calculate
+  --index <manifest-path-returned-by-index> --name Calculate
 ```
 
 Select the integer overload by copying its returned ID:
 
 ```bash
 dotnet run --project src/CodeAtlas.Cli --no-build -- find-references \
-  --index tests/Fixtures/.codeatlas/index.json \
+  --index <manifest-path-returned-by-index> \
   --symbol 'Library/Library.csproj::M:Sample.Calculator.Calculate(System.Int32)'
 ```
 
@@ -91,14 +92,15 @@ Check the snapshot before relying on the overview:
 
 ```bash
 dotnet run --project src/CodeAtlas.Cli --no-build -- index-status \
-  --index tests/Fixtures/.codeatlas/index.json
+  --index <manifest-path-returned-by-index>
 ```
 
 The JSON result includes `freshness.isStale` and `freshness.changedFiles`. Indexed queries refuse stale results with error code `stale_index` and exit status 3. Re-run `index --solution ...` after changes; rebuilding currently analyzes the whole solution. The overview is a static file and cannot update its own freshness notice.
 
-Freshness checks hash source and common build/configuration inputs under solution/project directories, detect added/deleted/renamed inputs, and track loaded linked documents, ancestor build configuration, and default `obj/project.assets.json` files. Hashes detect changes even when timestamps and sizes match. Generated index files and ordinary `bin`/`obj` contents are excluded, except explicitly loaded inputs. Unrelated supported files under a watched directory may conservatively invalidate the index.
+Freshness checks hash source and discovered configuration inputs, loaded linked/additional/analyzer-config documents, evaluated imports, actual restore assets paths, resolved binary/analyzer references, selected SDK/toolchain files and SDK directory inventory. The environment is represented by a digest; raw values are never stored. Content hashes detect equal-size, equal-timestamp changes. Build/output directories are excluded from discovery but explicitly loaded inputs remain tracked.
 
-This is not a complete MSBuild dependency tracker: changes only to environment variables, installed SDKs, external imported targets, external binary references, custom intermediate-output locations, or untracked source-generator inputs may require an explicit rebuild. Directory symlinks are not recursively scanned; explicitly loaded linked files are tracked. Source generators and multi-targeted projects are not fully covered. Index publication checks inputs again and preserves the previous files when a change is detected. Each output is replaced atomically; after a process interruption, compare the overview's index ID with index.json and rebuild if they differ.
+Freshness is `stale` when tracked inputs change, `fresh` only when the named input model has complete evidence, and `unknown` when input coverage is partial or verification fails. Queries may return useful results with explicit `unknown`/partial coverage. Generator input/output coverage, target contexts beyond the loaded context, arbitrary build tasks and dynamic external import discovery remain partial. Legacy JSON indexes retain ordinary query compatibility with unverified integrity and unknown input coverage; rebuilding creates the stronger generation contract. Symlink aliases and case-sensitive Windows directories are outside the qualified path model.
+
 
 Suggested agent workflow:
 
@@ -110,12 +112,10 @@ Suggested agent workflow:
 
 Results go to stdout as JSON; indexing progress goes to stderr as text, and errors go to stderr as JSON. Exit codes are 0 for success (including empty results and a successfully reported stale status), 1 for analysis/index failure, 2 for invalid arguments, 3 for a stale query, and 130 for cancellation. `--help` prints usage text.
 
-Successful commands show their results and `warningCount`. When warnings exist, they save the full details to `.codeatlas/warnings.txt` beside the solution and include a short `warningMessage` with the absolute file path. This applies to indexing, status, and both indexed and live queries. Warning details are no longer printed inline; the former `--show-warnings` flag has been replaced by the report file. Error diagnostics are always printed.
-
-The UTF-8 report identifies the solution and index ID (or live analysis) and is atomically replaced by the latest successful command. A later command with zero warnings replaces an existing report with "No warnings." A warning-free solution without a previous report creates no report. Saving the report requires write access to the solution's `.codeatlas` directory; a write failure is reported as an error. Full warnings also remain in `index.json` and `overview.md`. Existing indexes work without rebuilding for this output change.
+Successful commands include `warningCount`, `warningsFile` and a short `warningMessage`; warning details stay in the report. New snapshots always contain a warning report, including zero warnings. Indexed status and queries only read generation artifacts and work with directory write access denied. Live analysis writes a separate solution-scoped `live/warnings.txt`. Legacy direct indexes have no coherent report path and return a rebuild notice. Error diagnostics are printed in the error response.
 
 ```powershell
-dotnet run --project src/CodeAtlas.Cli --no-build -- find-symbol --index tests/Fixtures/.codeatlas/index.json --name Calculate
+dotnet run --project src/CodeAtlas.Cli --no-build -- find-symbol --index <manifest-path-returned-by-index> --name Calculate
 # If warnings were reported, open the file at the path in warningMessage.
 ```
 

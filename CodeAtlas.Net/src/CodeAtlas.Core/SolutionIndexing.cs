@@ -10,25 +10,48 @@ public sealed partial class SolutionAnalysis
     {
         if (referenceWorkers is < 1 or > 8)
             throw new ArgumentOutOfRangeException(nameof(referenceWorkers), "Reference workers must be between 1 and 8.");
+        var environmentAtEntry = SnapshotEnvironment.Capture();
         path = Path.GetFullPath(path);
         var directory = Path.GetDirectoryName(path)!;
         var initialInputs = InputTracker.ConfigurationPaths(directory).Append(path).ToArray();
         progress?.Report(new(IndexStage.ScanningInputs));
         var beforeLoading = await InputTracker.CaptureAsync([directory], initialInputs, cancellationToken);
-        using var analysis = await LoadAsync(path, cancellationToken, progress);
-        progress?.Report(new(IndexStage.FingerprintingInputs));
-        var projects = analysis.solution.Projects.ToArray();
-        var roots = projects.Select(p => Path.GetDirectoryName(p.FilePath!)!).Append(directory)
-            .Distinct(StringComparer.Ordinal).Order(StringComparer.Ordinal).ToArray();
-        var inputs = projects.SelectMany(p => p.Documents.Cast<TextDocument>().Concat(p.AdditionalDocuments).Concat(p.AnalyzerConfigDocuments))
-            .Select(d => d.FilePath).OfType<string>()
-            .Concat(projects.Select(p => p.FilePath!))
-            .Concat(roots.SelectMany(InputTracker.ConfigurationPaths))
-            .Concat(projects.Select(p => Path.Combine(Path.GetDirectoryName(p.FilePath!)!, "obj", "project.assets.json")))
-            .Append(path).Distinct(StringComparer.Ordinal).Order(StringComparer.Ordinal).ToArray();
-        var beforeIndexing = await InputTracker.CaptureAsync(roots, inputs, cancellationToken);
+        SnapshotInputManifest beforeIndexing;
+        string[] roots;
+        string[] inputs;
+        // Discover external imports, references and custom assets before loading the
+        // semantic workspace whose symbols will be persisted. Discovery results are discarded.
+        using (var discovery = await LoadCoreAsync(path, cancellationToken, progress, discoveryOnly: true))
+        {
+            var discovered = CollectWorkspaceInputs(discovery, path, detectGenerators: false);
+            roots = discovered.Roots;
+            inputs = discovered.Files;
+            beforeIndexing = await SnapshotInputModel.CaptureAsync(inputs, discovered.Scopes,
+                discovered.Inventories, environmentAtEntry, discovered.Evidence, cancellationToken);
+        }
         if (InputTracker.Changes(beforeLoading, await InputTracker.CaptureAsync([directory], initialInputs, cancellationToken)).Length != 0)
-            throw new AnalysisException("Inputs changed while loading the solution. Run index again.");
+            throw new AnalysisException("Inputs changed while discovering solution inputs. Run index again.");
+
+        progress?.Report(new(IndexStage.FingerprintingInputs));
+        using var analysis = await LoadAsync(path, cancellationToken, progress);
+        var projects = analysis.solution.Projects.ToArray();
+        var loaded = CollectWorkspaceInputs(analysis, path);
+        // Newly discovered external paths cannot be authenticated against the earlier
+        // capture. Rebuild rather than bind their current bytes to already loaded semantics.
+        if (!roots.SequenceEqual(loaded.Roots, SnapshotInputModel.PathComparer)
+            || !inputs.SequenceEqual(loaded.Files, SnapshotInputModel.PathComparer)
+            || !beforeIndexing.DirectoryInventories.Select(inventory => inventory.Directory)
+                .SequenceEqual(loaded.Inventories, SnapshotInputModel.PathComparer))
+            throw new AnalysisException("The solution input set changed while loading. Run index again.");
+        var afterLoading = await SnapshotInputModel.CheckAsync(beforeIndexing, SnapshotEnvironment.Capture(), cancellationToken);
+        if (afterLoading.TrackedInputsChanged || afterLoading.Diagnostics.Length != 0)
+            throw new AnalysisException("Inputs changed while loading the semantic solution. Run index again.");
+
+        beforeIndexing = beforeIndexing with
+        {
+            Evidence = loaded.Evidence,
+            Coverage = SnapshotInputModel.Classify(loaded.Evidence, beforeIndexing.Coverage.Issues)
+        };
 
         progress?.Report(new(IndexStage.DiscoveringSymbols));
         var symbols = (await SymbolFinder.FindSourceDeclarationsAsync(analysis.solution, _ => true, SymbolFilter.TypeAndMember, cancellationToken)).ToArray();
@@ -73,8 +96,8 @@ public sealed partial class SolutionAnalysis
             if ((await document.GetTextAsync(cancellationToken)).ToString() != await File.ReadAllTextAsync(file, cancellationToken))
                 throw new AnalysisException($"Source changed during indexing: {file}. Run index again.");
         }
-        var afterIndexing = await InputTracker.CaptureAsync(roots, inputs, cancellationToken);
-        if (InputTracker.Changes(beforeIndexing, afterIndexing).Length != 0)
+        var verified = await SnapshotInputModel.CheckAsync(beforeIndexing, SnapshotEnvironment.Capture(), cancellationToken);
+        if (verified.TrackedInputsChanged || verified.Diagnostics.Length != 0)
             throw new AnalysisException("Inputs changed while indexing. Run index again.");
 
         return new CodebaseIndex
@@ -94,7 +117,25 @@ public sealed partial class SolutionAnalysis
             References = references,
             InputRoots = roots,
             ExplicitInputs = inputs,
-            Fingerprints = afterIndexing
+            Fingerprints = beforeIndexing.Files.Where(pair => pair.Value.Exists).ToDictionary(pair => pair.Key, pair => pair.Value.Sha256!, SnapshotInputModel.PathComparer),
+            InputManifest = beforeIndexing
         };
     }
+    private static (string[] Roots, string[] Files, InputDiscoveryScope[] Scopes, string[] Inventories, BuildInputEvidence Evidence)
+        CollectWorkspaceInputs(SolutionAnalysis analysis, string path, bool detectGenerators = true)
+    {
+        var projects = analysis.solution.Projects.ToArray();
+        var roots = projects.Select(project => Path.GetDirectoryName(project.FilePath!)!)
+            .Append(Path.GetDirectoryName(path)!).Distinct(SnapshotInputModel.PathComparer).Order(SnapshotInputModel.PathComparer).ToArray();
+        var inputs = projects.SelectMany(project => project.Documents.Cast<TextDocument>()
+                .Concat(project.AdditionalDocuments).Concat(project.AnalyzerConfigDocuments))
+            .Select(document => document.FilePath).OfType<string>()
+            .Concat(projects.Select(project => project.FilePath!))
+            .Concat(roots.SelectMany(InputTracker.ConfigurationPaths))
+            .Concat(projects.Select(project => Path.Combine(Path.GetDirectoryName(project.FilePath!)!, "obj", "project.assets.json")))
+            .Append(path).Distinct(SnapshotInputModel.PathComparer).Order(SnapshotInputModel.PathComparer).ToArray();
+        var build = analysis.CollectBuildInputs(roots, inputs, detectGenerators);
+        return (roots, build.Files, build.Scopes, build.Inventories, build.Evidence);
+    }
+
 }
