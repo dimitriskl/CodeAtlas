@@ -18,9 +18,9 @@ The roadmap setup was committed as `7d6d0cc` (`0.00.08`). Each implementation mi
 
 | Milestone | State | Evidence / commit |
 | --- | --- | --- |
-| 1. Correctness baseline | Complete, 0.00.09 | [Full comparison and test evidence](CORRECTNESS-BASELINE.md); 38 .NET / 12 Python tests pass; complete eConnector analysis equivalent. |
-| 2. Reference performance | Next implementation | Baseline: 605.246 s reference stage, 638.405 s wall, 2,491,031,552 bytes main-process peak working set. Initial experiment: bounded degree 2, full equivalence required. |
-| 3. Query efficiency/contracts | Planned | — |
+| 1. Correctness baseline | Complete, 0.00.09, commit `ed04d25` | [Full comparison and test evidence](CORRECTNESS-BASELINE.md); 38 .NET / 12 Python tests pass; complete eConnector analysis equivalent. |
+| 2. Reference performance | Complete, 0.00.10 | [Measurements](REFERENCE-PERFORMANCE.md): two large runs per implementation, 22.5% lower median reference time, maximum peak CLI memory within budget, complete canonical equality; 43 .NET / 12 Python tests pass. |
+| 3. Query efficiency/contracts | Next implementation | Draft query/paging contracts and profiling harness prepared; budgets recorded before measurements. |
 | 4. Reliability/freshness | Planned | — |
 | 5. Incremental refresh | Planned | — |
 | 6. Symbol documentation | Planned | — |

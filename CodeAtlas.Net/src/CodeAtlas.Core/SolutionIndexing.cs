@@ -6,8 +6,10 @@ namespace CodeAtlas;
 public sealed partial class SolutionAnalysis
 {
     public static async Task<CodebaseIndex> CreateIndexAsync(string path, CancellationToken cancellationToken = default,
-        IProgress<IndexProgress>? progress = null)
+        IProgress<IndexProgress>? progress = null, int referenceWorkers = 2)
     {
+        if (referenceWorkers is < 1 or > 8)
+            throw new ArgumentOutOfRangeException(nameof(referenceWorkers), "Reference workers must be between 1 and 8.");
         path = Path.GetFullPath(path);
         var directory = Path.GetDirectoryName(path)!;
         var initialInputs = InputTracker.ConfigurationPaths(directory).Append(path).ToArray();
@@ -31,14 +33,24 @@ public sealed partial class SolutionAnalysis
         progress?.Report(new(IndexStage.DiscoveringSymbols));
         var symbols = (await SymbolFinder.FindSourceDeclarationsAsync(analysis.solution, _ => true, SymbolFilter.TypeAndMember, cancellationToken)).ToArray();
         var methods = analysis.DescribeMethods(symbols).ToArray();
-        var references = new Dictionary<string, SourceReference[]>(StringComparer.Ordinal);
+        var referenceResults = new SourceReference[methods.Length][];
+        var completed = 0;
+        var progressGate = new object();
         progress?.Report(new(IndexStage.FindingReferences, 0, methods.Length));
-        foreach (var method in methods)
+        // Each worker keeps Roslyn's complete per-symbol search semantics. In particular,
+        // related definitions are neither inferred nor reused between selected methods.
+        await Parallel.ForEachAsync(Enumerable.Range(0, methods.Length),
+            new ParallelOptions { MaxDegreeOfParallelism = referenceWorkers, CancellationToken = cancellationToken },
+            async (position, token) =>
         {
-            cancellationToken.ThrowIfCancellationRequested();
-            references[method.Id] = (await analysis.FindReferencesAsync(method.Id, cancellationToken)).ToArray();
-            progress?.Report(new(IndexStage.FindingReferences, references.Count, methods.Length));
-        }
+            referenceResults[position] = (await analysis.FindReferencesAsync(methods[position].Id, token)).ToArray();
+            // Serialize completion and callback together: observers must never see 2, 1, 3.
+            lock (progressGate)
+                progress?.Report(new(IndexStage.FindingReferences, ++completed, methods.Length));
+        });
+        // Completion order must not change persisted dictionary order.
+        var references = methods.Select((method, position) => (method.Id, References: referenceResults[position]))
+            .ToDictionary(item => item.Id, item => item.References, StringComparer.Ordinal);
         progress?.Report(new(IndexStage.CollectingTypes));
         var types = new Dictionary<string, IndexedType>(StringComparer.Ordinal);
         foreach (var type in symbols.OfType<INamedTypeSymbol>())

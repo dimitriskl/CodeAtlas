@@ -1,6 +1,6 @@
 # CodeAtlas version history
 
-Version: **0.00.09**
+Version: **0.00.10**
 
 Status: unpublished development version. Version history starts at `0.00.01`; earlier work did not have assigned version numbers.
 
@@ -23,6 +23,10 @@ python3 scripts/bump-version.py --summary "Describe the completed change"
 The command updates `Version.props`, the current version in README.md and the project recap, and this document's current version and history. Then rebuild, test, and regenerate the index. Do not increment again merely because validation requires a correction to the same change.
 
 ## History
+
+### 0.00.10
+
+- Bound concurrent reference searches and add reproducible performance measurements
 
 ### 0.00.09
 

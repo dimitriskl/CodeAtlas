@@ -4,7 +4,7 @@ using CodeAtlas.Cli;
 
 var jsonOptions = new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase, WriteIndented = true };
 const string usage = """
-Usage: codeatlas index --solution <path.sln|path.slnx>
+Usage: codeatlas index --solution <path.sln|path.slnx> [--reference-workers <1-8>]
        codeatlas --version
        codeatlas index-status --index <path-to-index.json>
        codeatlas find-symbol (--index <path-to-index.json> | --solution <path>) --name <method-name>
@@ -13,6 +13,7 @@ Usage: codeatlas index --solution <path.sln|path.slnx>
 Warnings are saved to .codeatlas/warnings.txt beside the solution. Results include a notice with the file path.
 Indexing progress and elapsed time go to stderr; stdout contains the final JSON result.
 Indexing stage timings are saved to .codeatlas/timings.json beside the solution.
+Reference indexing uses 2 concurrent searches by default; use 1 for serial comparison.
 """;
 if (args.Length == 1 && args[0] == "--version")
 {
@@ -43,9 +44,14 @@ try
     object result;
     if (args[0] == "index")
     {
-        if (options.Count != 1 || !options.TryGetValue("--solution", out var path))
+        if (!options.TryGetValue("--solution", out var path)
+            || options.Keys.Any(key => key is not ("--solution" or "--reference-workers")))
             throw new ArgumentException(usage);
-        var index = await SolutionAnalysis.CreateIndexAsync(path, cancellation.Token, indexingProgress);
+        var referenceWorkers = 2;
+        if (options.TryGetValue("--reference-workers", out var workers)
+            && (!int.TryParse(workers, out referenceWorkers) || referenceWorkers is < 1 or > 8))
+            throw new ArgumentException("--reference-workers must be an integer between 1 and 8.");
+        var index = await SolutionAnalysis.CreateIndexAsync(path, cancellation.Token, indexingProgress, referenceWorkers);
         indexingProgress!.Report(new(IndexStage.Saving));
         await IndexStore.SaveAsync(index, cancellation.Token);
         result = new

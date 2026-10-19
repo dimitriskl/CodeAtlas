@@ -1,6 +1,6 @@
 # CodeAtlas .NET
 
-Version: **0.00.09**
+Version: **0.00.10**
 
 See [version history](docs/VERSION.md) for what is implemented and the versioning rules. `Version.props` is the build's version source. Run `dotnet run --project src/CodeAtlas.Cli --no-build -- --version` to check the built CLI.
 
@@ -43,6 +43,8 @@ dotnet run --project src/CodeAtlas.Cli --no-build -- index \
 ```
 
 Indexing reports its current stage and elapsed time on stderr: input scanning, project loading and compilation checks, fingerprinting, method discovery, reference collection, type collection, input verification, and saving. Reference progress counts completed methods, for example `Indexing method references 4,200 / 16,979`; it is not an overall percentage or an ETA.
+
+Reference collection runs two searches concurrently by default. Use `index --solution <path> --reference-workers 1` for serial collection, or choose a bounded value from 1 through 8. Each search preserves the same reference semantics; increasing concurrency may increase memory use and does not guarantee faster indexing. See [reference performance](docs/REFERENCE-PERFORMANCE.md) for measurements and the reproducible benchmark command.
 
 In an interactive terminal, a single status line refreshes about once a second, including while a single operation is still running. Redirected stderr receives lines at stage transitions, completed stage counts, and approximately every 10 seconds during longer stages. Stdout remains one JSON result, with `elapsedSeconds` for successful indexing (including warning-report saving). Queries remain quiet apart from their JSON results. Failure/cancellation stops progress before the error JSON; it never prints an indexing-completed message. When parsing stderr as JSON, separate the progress lines or redirect stderr to a log.
 

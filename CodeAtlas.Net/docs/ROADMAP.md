@@ -31,6 +31,8 @@ Acceptance: repeated analysis of unchanged inputs yields identical normalized re
 
 ### 2. Reduce reference-indexing time
 
+Status: completed in 0.00.10. [Performance evidence](REFERENCE-PERFORMANCE.md) records complete baseline equality, repeated large/small runs, 22.5% lower median eConnector reference time, and memory within the predeclared budget.
+
 Measure repeated Roslyn searches, symbol resolution, and reusable work. Evaluate batching or bounded concurrency only where supported and beneficial. Preserve related-definition identity and invocation classification. Record wall time, memory, machine conditions, and multiple runs on eConnector and a smaller solution.
 
 Acceptance: the optimized implementation matches milestone 1's complete baseline and demonstrates repeatable improvement without unacceptable memory growth. Agree measurable performance budgets from the baseline before accepting an implementation; no speedup is promised by this plan.
@@ -118,4 +120,4 @@ An agent should follow purpose → candidate symbols → source and references �
 
 For each completed change, record the relevant acceptance evidence here or in a linked validation report, run the required checks, and increment the version once with `scripts/bump-version.py`. Regenerate CodeAtlas's own index after the versioned change. Run target-solution benchmarks when the change affects analysis/performance; routine roadmap edits do not require repeating the long eConnector run.
 
-Immediate next implementation: milestone 1, deterministic reference ordering and a retained complete comparison baseline. Then optimize reference collection against that baseline. Semantic descriptions and discovery are accepted roadmap scope; AI-generated explanations, duplicate detection, and graph traversal have their own acceptance gates and do not delay the initial core production gate.
+Immediate next step: implement milestone 3's measured query and response contracts. Semantic descriptions and discovery are accepted roadmap scope; AI-generated explanations, duplicate detection, and graph traversal have their own acceptance gates and do not delay the initial core production gate.

@@ -57,6 +57,22 @@ public sealed class IndexTests(IndexedSolution fixture) : IClassFixture<IndexedS
         public void Report(IndexProgress value) => report(value);
     }
 
+    [Theory]
+    [InlineData(0)]
+    [InlineData(9)]
+    public async Task InvalidWorkerCountIsRejectedBeforeLoadingSolution(int workers)
+    {
+        // Arrange
+        const string missingSolution = "does-not-exist.slnx";
+
+        // Act
+        var exception = await Record.ExceptionAsync(() => SolutionAnalysis.CreateIndexAsync(
+            missingSolution, referenceWorkers: workers));
+
+        // Assert
+        Assert.IsType<ArgumentOutOfRangeException>(exception);
+    }
+
     [Fact]
     public async Task IndexProgressReportsStagesAndActualCompletedMethodCounts()
     {
@@ -103,6 +119,37 @@ public sealed class IndexTests(IndexedSolution fixture) : IClassFixture<IndexedS
         Assert.IsAssignableFrom<OperationCanceledException>(exception);
         Assert.Equal(0, Assert.Single(events, e => e.Stage == IndexStage.FindingReferences).Completed);
         Assert.DoesNotContain(events, e => e.Stage == IndexStage.VerifyingInputs || e.Stage == IndexStage.Completed);
+    }
+
+    [Fact]
+    public async Task CancellationAfterFirstReferenceCompletionPreservesPublishedIndex()
+    {
+        // Arrange
+        using var cancellation = new CancellationTokenSource();
+        var previousIndex = await File.ReadAllBytesAsync(fixture.IndexPath);
+        var events = new System.Collections.Concurrent.ConcurrentQueue<IndexProgress>();
+        var progress = new CapturedProgress(e =>
+        {
+            events.Enqueue(e);
+            if (e.Stage == IndexStage.FindingReferences && e.Completed == 1)
+                cancellation.Cancel();
+        });
+        async Task RebuildIndexAsync()
+        {
+            var index = await SolutionAnalysis.CreateIndexAsync(
+                fixture.Index.Solution, cancellation.Token, progress, referenceWorkers: 2);
+            await IndexStore.SaveAsync(index, cancellation.Token);
+        }
+
+        // Act
+        var exception = await Record.ExceptionAsync(RebuildIndexAsync);
+
+        // Assert
+        Assert.IsAssignableFrom<OperationCanceledException>(exception);
+        Assert.Contains(events, e => e.Stage == IndexStage.FindingReferences && e.Completed == 1);
+        Assert.DoesNotContain(events, e => e.Stage == IndexStage.FindingReferences && e.Completed == e.Total);
+        Assert.DoesNotContain(events, e => e.Stage is IndexStage.CollectingTypes or IndexStage.VerifyingInputs or IndexStage.Completed);
+        Assert.Equal(previousIndex, await File.ReadAllBytesAsync(fixture.IndexPath));
     }
 
     [Fact]

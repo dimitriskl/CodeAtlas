@@ -33,6 +33,24 @@ public sealed class SemanticTests(SemanticSolution fixture) : IClassFixture<Sema
 {
     private const string Prefix = "Library/Library.csproj::M:Semantic.";
 
+    [Theory]
+    [InlineData(1)]
+    [InlineData(4)]
+    public async Task WorkerCountsPreserveEveryOrderedReferenceAndMethodKey(int workers)
+    {
+        // Arrange
+        var expected = fixture.Index;
+
+        // Act
+        var actual = await SolutionAnalysis.CreateIndexAsync(expected.Solution, referenceWorkers: workers);
+
+        // Assert
+        Assert.Equal(expected.Methods, actual.Methods);
+        Assert.Equal(expected.References.Keys, actual.References.Keys);
+        foreach (var (id, references) in expected.References)
+            Assert.Equal(references, actual.References[id]);
+    }
+
     [Fact]
     public async Task IndependentAnalysisHasExactlyTheSameOrderedReferencesForEveryMethod()
     {
