@@ -19,7 +19,7 @@ public static class DuplicateFinder
     {
         var entries = bodies
             .Select(body => (body.Id, Tokens: Tokens(body.Body)))
-            .Where(entry => entry.Tokens.Length >= 4)
+            .Where(entry => entry.Tokens.Length >= 12)
             .Select(entry => (entry.Id, entry.Tokens, Hash: Hash(entry.Tokens)))
             .ToArray();
         var groups = new List<DuplicateGroup>();

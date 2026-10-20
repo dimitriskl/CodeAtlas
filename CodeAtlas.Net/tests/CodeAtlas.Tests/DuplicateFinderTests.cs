@@ -10,9 +10,9 @@ public sealed class DuplicateFinderTests
         // Arrange
         var bodies = new[]
         {
-            ("a", "return value + 1;"),
-            ("b", "return other + 1;"),
-            ("c", "return value + 2;")
+            ("a", "if (ready) { total = value + 1; return total; }"),
+            ("b", "if (ready) { total = other + 1; return total; }"),
+            ("c", "if (ready) { total = value + 2; return total; }")
         };
 
         // Act
@@ -30,8 +30,8 @@ public sealed class DuplicateFinderTests
         // Arrange
         var bodies = new[]
         {
-            ("left", "if (ready) { return value + total; }"),
-            ("right", "if (ready) { return value + total + 1; }")
+            ("left", "if (ready) { total = value + offset; return total; }"),
+            ("right", "if (ready) { total = value + offset + 1; return total; }")
         };
 
         // Act

@@ -9,13 +9,13 @@ public sealed class PurposeSearchTests
     public void IdentifierTokenizationHandlesAcronymsNumbersAndWordBoundaries()
     {
         // Arrange
-        var input = "XMLHttpClient AISupport Status403Forbidden soft-deleted";
+        var input = "XMLHttpClient AISupport Status403Forbidden soft-deleted permissions";
 
         // Act
         var tokens = PurposeSearch.Tokenize(input);
 
         // Assert
-        Assert.Equal(new[] { "403", "ai", "client", "deleted", "forbidden", "http", "soft", "status", "support", "xml" }, tokens);
+        Assert.Equal(new[] { "403", "ai", "client", "deleted", "forbidden", "http", "permission", "soft", "status", "support", "xml" }, tokens);
     }
 
     [Fact]
@@ -34,8 +34,8 @@ public sealed class PurposeSearchTests
         var assisted = PurposeSearch.Search(symbols, catalog, "encrypted archives", "assisted", "method", new(Limit: 5), "snapshot");
 
         // Assert
-        Assert.Empty(baseline.Page.Items);
-        var result = Assert.Single(assisted.Page.Items);
+        Assert.Equal(decoy.Id, Assert.Single(baseline.Page.Items).Symbol.Id);
+        var result = Assert.Single(assisted.Page.Items, item => item.Symbol.Id == candidate.Id);
         Assert.Equal(candidate.Id, result.Symbol.Id);
         Assert.Equal("missing", result.Symbol.Documentation.Status);
         Assert.All(result.Reasons, r => Assert.Equal(parent.Id, r.SourceSymbolId));
@@ -87,6 +87,24 @@ public sealed class PurposeSearchTests
         Assert.Equal("unsupported_language", Assert.IsType<QueryException>(angular).Code);
         Assert.Equal("C#", none.Language);
         Assert.Contains("Angular", none.Coverage.Exclusions);
+    }
+
+    [Fact]
+    public void ProductionSymbolsSortAheadOfTestProjectsAndOutsideLanguagesAbstain()
+    {
+        // Arrange
+        var production = Symbol("production", "ApplyRetention", "method", "Soft-deletes expired traces in batches.");
+        var test = Symbol("test", "ApplyRetention_SoftDeletesExpiredTracesInBatches", "method", null) with { Project = "tests/App.Tests/App.Tests.csproj" };
+        var symbols = Fill(production, test);
+
+        // Act
+        var ranked = PurposeSearch.Search(symbols, Catalog(), "soft deletes expired traces batches", "assisted", "method", new(Limit: 5), "snapshot");
+        var angular = PurposeSearch.Search(symbols, Catalog(), "where is the angular router guard", "assisted", "method", new(), "snapshot");
+
+        // Assert
+        Assert.Equal(production.Id, ranked.Page.Items[0].Symbol.Id);
+        Assert.Equal("abstained-outside-supported-language", angular.Decision);
+        Assert.Empty(angular.Page.Items);
     }
 
     [Fact]

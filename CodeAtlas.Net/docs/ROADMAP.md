@@ -75,7 +75,7 @@ Acceptance: documentation is returned with the correct symbol and overload, miss
 
 ### 7. Add structural facts and discovery by purpose
 
-Status: implemented in 0.00.15 and scored on 20 October 2026. [Search evidence](STRUCTURAL-SEARCH.md). Assisted search improved D1–D3 and H1, H2 and H4. D4, H3, H5, H6, N1 and N2 failed the accepted checks, so the retrieval gate is not closed.
+Status: second measurement recorded in 0.00.22. [Search evidence](STRUCTURAL-SEARCH.md). Assisted search now hits D1–D4, H1, H2 and H4. N1 and N2 abstain. H3 and H5 still fail, so the retrieval gate is not closed.
 
 Expose supported Roslyn-derived facts such as implemented interfaces and resolved dependencies, with locations and coverage boundaries. Add text search across names, signatures, and documentation, followed by ranked purpose-oriented retrieval where evaluation justifies it. Return why a result matched and evidence that lets an agent inspect the source.
 

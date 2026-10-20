@@ -5,8 +5,8 @@ namespace CodeAtlas;
 // Deterministic lexical retrieval. No embeddings, model calls, labels, or synonym lists.
 public static class PurposeSearch
 {
-    public const string RankingVersion = "lexical-distinct-tfidf-v1";
-    public const string EvidencePolicy = "distinct-query-terms-v1: >=2 terms including one in <=max(1,floor(N/5)) documents; single-term queries require a rare name/signature term";
+    public const string RankingVersion = "lexical-distinct-tfidf-v2";
+    public const string EvidencePolicy = "distinct-query-terms-v2: a rare name or containing-type token is sufficient; otherwise >=2 terms including one in <=max(1,floor(N/5)) documents. Test projects sort after production unless the query says test.";
     public const int MaximumQueryCharacters = 4096;
     private static readonly Regex AcronymBoundary = new(@"(\p{Lu})(\p{Lu}\p{Ll})", RegexOptions.CultureInvariant);
     private static readonly Regex WordBoundary = new(@"(\p{Ll}|\p{Nd})(\p{Lu})", RegexOptions.CultureInvariant);
@@ -23,7 +23,7 @@ public static class PurposeSearch
         text = AcronymBoundary.Replace(text, "$1 $2");
         text = WordBoundary.Replace(text, "$1 $2");
         text = NumberBoundary.Replace(text, " ");
-        return Words.Matches(text).Select(m => m.Value.ToLowerInvariant())
+        return Words.Matches(text).Select(m => FoldPlural(m.Value.ToLowerInvariant()))
             .Where(t => !StopWords.Contains(t)).Distinct(StringComparer.Ordinal)
             .Order(StringComparer.Ordinal).ToArray();
     }
@@ -50,6 +50,9 @@ public static class PurposeSearch
         var byId = symbols.ToDictionary(s => s.Id, StringComparer.Ordinal);
         var byOwner = catalog.Facts.ToLookup(f => f.OwnerId, StringComparer.Ordinal);
         var queryTokens = Tokenize(query);
+        if (queryTokens.Any(token => token is "angular" or "typescript"))
+            return Abstain(request, snapshotId, catalog, queryTokens, "abstained-outside-supported-language", 0,
+                "Only C# source is indexed. Angular and TypeScript are not these symbols.");
         // Calculate IDF over the whole selected-kind corpus, independently of page/filter.
         // Exact project/type filters cannot change a symbol's relevance score in this generation.
         var documents = symbols.Where(s => kind == "all" || s.Kind == kind)
@@ -82,9 +85,10 @@ public static class PurposeSearch
             if (reasons.Count == 0) continue;
             // Fixed before any held-out evaluation. Shared identically by both retrieval modes.
             var rare = reasons.Any(r => documentFrequency[r.MatchedTokens[0]] <= rareDocumentLimit);
+            var rareName = reasons.Any(r => r.Field == "name-signature" && documentFrequency[r.MatchedTokens[0]] <= rareDocumentLimit);
             var sufficient = queryTokens.Length == 1
                 ? rare && reasons.Any(r => r.Field == "name-signature")
-                : rare && reasons.Count >= 2;
+                : rareName || (rare && reasons.Count >= 2);
             if (!sufficient) { weakMatches++; continue; }
             var grouped = reasons.GroupBy(r => (r.Field, r.SourceSymbolId, r.Location,
                 r.FactKind, r.DocumentationEvidence, r.RelationshipEvidence)).Select(group =>
@@ -93,7 +97,9 @@ public static class PurposeSearch
             matches.Add(new(document.Symbol, reasons.Sum(r => r.Contribution), reasons.Count,
                 queryTokens.Except(reasons.SelectMany(r => r.MatchedTokens), StringComparer.Ordinal).ToArray(), grouped));
         }
-        var ordered = matches.OrderByDescending(m => m.Score)
+        var asksForTests = queryTokens.Contains("test") || queryTokens.Contains("tests");
+        var ordered = matches.OrderByDescending(m => asksForTests || !IsTestProject(m.Symbol.Project))
+            .ThenByDescending(m => m.Score)
             .ThenByDescending(m => m.MatchedQueryTokens).ThenBy(m => m.Symbol.Id, StringComparer.Ordinal).ToArray();
         var items = ordered.Skip(request.Offset).Take(request.Limit).ToArray();
         var end = (long)request.Offset + items.Length;
@@ -114,7 +120,7 @@ public static class PurposeSearch
         Dictionary<string, DocumentedSymbol> byId, ILookup<string, StructuralFact> byOwner, string mode)
     {
         var point = new DocumentationRange(symbol.Location, symbol.Location);
-        yield return Field("name-signature", 4, symbol.Name + " " + symbol.Signature,
+        yield return Field("name-signature", 4, symbol.Name + " " + symbol.ContainingType + " " + symbol.Signature,
             symbol.Id, point);
         if (mode == "names") yield break;
         foreach (var section in symbol.Documentation.Sections)
@@ -132,6 +138,22 @@ public static class PurposeSearch
                 yield return DocField("related-developer-documentation", weight, section, fact);
         }
     }
+
+    private static string FoldPlural(string token) =>
+        token.Length > 4 && token.EndsWith('s')
+            && !token.EndsWith("ss") && !token.EndsWith("es") && !token.EndsWith("us") && !token.EndsWith("is")
+            ? token[..^1] : token;
+
+    private static bool IsTestProject(string project) =>
+        project.Contains(".Tests", StringComparison.OrdinalIgnoreCase)
+        || project.Contains("/Tests/", StringComparison.OrdinalIgnoreCase)
+        || project.StartsWith("tests/", StringComparison.OrdinalIgnoreCase);
+
+    private static SearchResult Abstain(QueryRequest request, string? snapshotId, StructuralCatalog catalog,
+        string[] queryTokens, string decision, int withheld, string limitation) =>
+        new(new([], new(request.Offset, request.Limit, 0, 0, false, null, snapshotId, snapshotId is not null)),
+            RankingVersion, "assisted", "C#", catalog.Coverage, queryTokens, queryTokens, EvidencePolicy,
+            decision, withheld, [limitation, "Empty matches do not establish absence outside the supported loaded C# snapshot."]);
 
     private static SearchField DocField(string name, double weight, DocumentationSection section, StructuralFact? fact) =>
         Field(name, weight, section.Text, section.Evidence.SourceSymbolId,
