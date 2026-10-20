@@ -103,6 +103,8 @@ Acceptance: cached explanations have verified freshness and traceable evidence; 
 
 ### 10. Detect duplicate and overlapping implementations
 
+Status: exact and near body candidates implemented in 0.00.18. [Duplicate evidence](DUPLICATES.md). No labeled false-positive study yet.
+
 Start with exact and near-duplicate code structure, accounting for renamed identifiers while retaining important semantic differences. Then evaluate similar-purpose candidates using documentation and, optionally, generated descriptions. Report both locations, the reason for similarity, and differences requiring review.
 
 Acceptance: a labeled set measures useful findings and false positives, including methods with similar names/descriptions but different business rules. Similar purpose is not behavioral equivalence. Findings are candidates for investigation; CodeAtlas does not automatically merge or delete application code. Structural duplicate detection can ship without milestone 9.
@@ -134,4 +136,4 @@ An agent should follow purpose → candidate symbols → source and references �
 
 For each completed change, record the relevant acceptance evidence here or in a linked validation report, run the required checks, and increment the version once with `scripts/bump-version.py`. Regenerate CodeAtlas's own index after the versioned change. Run target-solution benchmarks when the change affects analysis/performance; routine roadmap edits do not require repeating the long eConnector run.
 
-Immediate next step: duplicate candidates. The milestone 4 freshness maximum, the milestone 7 retrieval comparison, and clean-machine installation remain open release gates. Semantic descriptions and discovery are accepted roadmap scope; AI-generated explanations, duplicate detection, and graph traversal have their own acceptance gates and do not delay the initial core production gate.
+Immediate next step: caller navigation. The milestone 4 freshness maximum, the milestone 7 retrieval comparison, and clean-machine installation remain open release gates. Semantic descriptions and discovery are accepted roadmap scope; AI-generated explanations, duplicate detection, and graph traversal have their own acceptance gates and do not delay the initial core production gate.

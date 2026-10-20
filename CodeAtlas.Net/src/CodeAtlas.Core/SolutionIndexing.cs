@@ -130,6 +130,7 @@ public sealed partial class SolutionAnalysis
         progress?.Report(new(IndexStage.CollectingFacts));
         var structuralCatalog = await StructuralCatalogBuilder.CreateAsync(
             analysis.solution, analysis.SolutionPath, documentedSymbols, cancellationToken);
+        var duplicates = await DuplicateFinder.CreateAsync(analysis.solution, analysis.SolutionPath, cancellationToken);
 
         return new CodebaseIndex
         {
@@ -147,6 +148,7 @@ public sealed partial class SolutionAnalysis
             Symbols = documentedSymbols,
             DocumentationCoverage = DocumentationCoverage.Current,
             StructuralCatalog = structuralCatalog,
+            Duplicates = duplicates,
             Methods = methods,
             References = references,
             InputRoots = roots,

@@ -19,6 +19,7 @@ Usage: codeatlas index --solution <path.sln|path.slnx> [--reference-workers <1-8
        codeatlas explain-request --index <path-to-index.json> --symbol <id> --output <request.json>
        codeatlas explain-import --index <path-to-index.json> --response <response.json>
        codeatlas get-explanation --index <path-to-index.json> --symbol <id>
+       codeatlas find-duplicates --index <path-to-index.json>
 
 Query options: --project <relative-project-path> --limit <1-1000> --offset <nonnegative> --snapshot <indexId> --profile
 Default limit is 100. Indexed continuations require --snapshot; live queries support only the first page.
@@ -56,7 +57,7 @@ var coverageAvailable = false;
 QueryProfile? profile = null;
 try
 {
-    if (args.Length < 3 || command is not ("index" or "refresh" or "index-status" or "find-symbol" or "find-references" or "get-documentation" or "search-symbols" or "get-facts" or "explain-request" or "explain-import" or "get-explanation"))
+    if (args.Length < 3 || command is not ("index" or "refresh" or "index-status" or "find-symbol" or "find-references" or "get-documentation" or "search-symbols" or "get-facts" or "explain-request" or "explain-import" or "get-explanation" or "find-duplicates"))
         throw new ArgumentException(usage);
     var options = new Dictionary<string, string>(StringComparer.Ordinal);
     for (var i = 1; i < args.Length; i++)
@@ -129,6 +130,16 @@ try
         result = new { index.Solution, index.IndexId, index.CreatedAtUtc, index.ToolVersion,
             refresh = index.Refresh,
             warningCount = index.Warnings.Length, index.Warnings };
+    }
+    else if (command == "find-duplicates")
+    {
+        if (options.Count != 1 || !options.TryGetValue("--index", out var duplicateIndex))
+            throw new ArgumentException("find-duplicates requires only --index.");
+        loadedSnapshot = await TimedAsync("jsonLoading", () => IndexStore.LoadSnapshotAsync(duplicateIndex, cancellation.Token));
+        var index = loadedIndex = loadedSnapshot.Index;
+        coverageAvailable = true;
+        var duplicates = index.Duplicates ?? throw new QueryException("rebuild_required", "Rebuild to extract duplicate candidates.");
+        result = new { source = "index", index.Solution, index.IndexId, duplicates, warningCount = index.Warnings.Length, warnings = index.Warnings };
     }
     else if (command is "explain-request" or "explain-import" or "get-explanation")
     {

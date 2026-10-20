@@ -20,6 +20,7 @@ public sealed record CodebaseIndex
     public DocumentedSymbol[]? Symbols { get; init; }
     public DocumentationCoverage? DocumentationCoverage { get; init; }
     public StructuralCatalog? StructuralCatalog { get; init; }
+    public DuplicateCatalog? Duplicates { get; init; }
     public IncrementalSnapshotState? IncrementalState { get; init; }
     public RefreshSummary? Refresh { get; init; }
     public string? VirtualSnapshot { get; init; }
