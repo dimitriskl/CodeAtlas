@@ -85,6 +85,8 @@ Acceptance: measured retrieval improves on the baseline for agreed cases without
 
 ### 8. Package and qualify the initial production scope
 
+Status: local Windows package implemented in 0.00.16. [Packaging evidence](PACKAGING.md) records a local tool install. Clean-machine and Linux qualification are not done, and this is not a publication.
+
 Provide an installable CLI with prerequisite checks, useful diagnostics, and setup/upgrade/rebuild instructions. Test installation from a local package feed on a clean environment before any publication. Automate locked restore, builds, tests, package-install smoke tests, and version/contract checks for supported Windows/Linux environments. Establish repeatable large-solution performance checks and a supported configuration matrix.
 
 Acceptance: milestones 1–7 have recorded evidence; a clean supported machine can install and run the tool without the source checkout; supported configurations, exclusions, recovery procedures, and performance budgets are documented and tested. Successful ordinary tests alone do not establish production readiness. Public release requires the user's separate authorization and the existing version rules still apply.
@@ -130,4 +132,4 @@ An agent should follow purpose → candidate symbols → source and references �
 
 For each completed change, record the relevant acceptance evidence here or in a linked validation report, run the required checks, and increment the version once with `scripts/bump-version.py`. Regenerate CodeAtlas's own index after the versioned change. Run target-solution benchmarks when the change affects analysis/performance; routine roadmap edits do not require repeating the long eConnector run.
 
-Immediate next step: package an installable CLI. The milestone 4 large freshness maximum and the milestone 7 eConnector retrieval comparison remain open release gates. Semantic descriptions and discovery are accepted roadmap scope; AI-generated explanations, duplicate detection, and graph traversal have their own acceptance gates and do not delay the initial core production gate.
+Immediate next step: optional local AI explanations. The milestone 4 freshness maximum, the milestone 7 retrieval comparison, and clean-machine installation remain open release gates. Semantic descriptions and discovery are accepted roadmap scope; AI-generated explanations, duplicate detection, and graph traversal have their own acceptance gates and do not delay the initial core production gate.

@@ -1,4 +1,5 @@
 <Project Sdk="Microsoft.NET.Sdk">
+  <Import Project="../../build/Packaging.props" />
   <PropertyGroup>
     <OutputType>Exe</OutputType>
     <AssemblyName>codeatlas</AssemblyName>

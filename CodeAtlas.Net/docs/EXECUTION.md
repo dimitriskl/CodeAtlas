@@ -29,7 +29,7 @@ The roadmap setup was committed as `7d6d0cc` (`0.00.08`). Each implementation mi
 | 5. Incremental refresh | Complete, 0.00.13, commit `5e3325d` | [Measurements](INCREMENTAL-REFRESH.md): 169 .NET / 21 Python tests; three eConnector body-edit pairs match full analysis, median refresh 71.610 seconds and median reference collection 14.765 seconds, peak within budget. Milestone 4's large freshness maximum stays open. |
 | 6. Symbol documentation | Complete, 0.00.14, commit `5a78085` | [Catalog evidence](SYMBOL-DOCUMENTATION.md). 228 .NET / 23 Python tests pass serially. eConnector documentation collection took 1.419 seconds and left projects, types, methods, and references unchanged. |
 | 7. Structural facts/discovery | Implemented, 0.00.15; eConnector retrieval comparison outstanding | [Search evidence](STRUCTURAL-SEARCH.md). 236 .NET / 23 Python tests pass serially. |
-| 8. Packaging/qualification | Planned | Release prerequisites audited; no qualification claimed. |
+| 8. Packaging/qualification | Local package implemented, 0.00.16; not published | [Packaging](PACKAGING.md). `CodeAtlas.Tool` 0.0.16 installed from a local folder and printed `0.00.16`. Clean machine and Linux are not qualified. |
 | 9. AI explanations | Planned | Local request/response integration selected. |
 | 10. Duplicate candidates | Planned | — |
 | 11. Callers/impact | Planned | — |

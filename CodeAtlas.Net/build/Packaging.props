@@ -1,0 +1,22 @@
+<Project>
+  <PropertyGroup>
+    <PackAsTool>true</PackAsTool>
+    <ToolCommandName>codeatlas</ToolCommandName>
+    <PackageId>CodeAtlas.Tool</PackageId>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <Authors>CodeAtlas contributors</Authors>
+    <Description>C# semantic indexing and evidence-based source navigation.</Description>
+    <RepositoryUrl>https://github.com/dimitriskl/CodeAtlas</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+    <PackageProjectUrl>https://github.com/dimitriskl/CodeAtlas</PackageProjectUrl>
+    <PublishTrimmed>false</PublishTrimmed>
+    <PublishSingleFile>false</PublishSingleFile>
+    <PublishAot>false</PublishAot>
+    <SelfContained>false</SelfContained>
+  </PropertyGroup>
+  <ItemGroup>
+    <None Include="$(MSBuildThisFileDirectory)../README.md" Pack="true" PackagePath="/" />
+    <None Include="$(MSBuildThisFileDirectory)../LICENSE" Pack="true" PackagePath="/" />
+  </ItemGroup>
+</Project>

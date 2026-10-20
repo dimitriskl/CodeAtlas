@@ -265,18 +265,18 @@
           "xunit.extensibility.core": "[2.9.3]"
         }
       },
-      "codeatlas": {
-        "type": "Project",
-        "dependencies": {
-          "CodeAtlas.Core": "[0.0.7, )"
-        }
-      },
       "codeatlas.core": {
         "type": "Project",
         "dependencies": {
           "Microsoft.Build.Locator": "[1.11.2, )",
           "Microsoft.CodeAnalysis.CSharp.Workspaces": "[5.9.0, )",
           "Microsoft.CodeAnalysis.Workspaces.MSBuild": "[5.9.0, )"
+        }
+      },
+      "CodeAtlas.Tool": {
+        "type": "Project",
+        "dependencies": {
+          "CodeAtlas.Core": "[0.0.16, )"
         }
       }
     }
