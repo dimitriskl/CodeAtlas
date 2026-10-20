@@ -124,6 +124,10 @@ public sealed partial class SolutionAnalysis
             types[id] = new IndexedType(id, type.ToDisplayString(), type.TypeKind.ToString().ToLowerInvariant(), project, analysis.Position(location));
         }
 
+        progress?.Report(new(IndexStage.CollectingDocumentation));
+        var documentedSymbols = await analysis.GetDocumentedSymbolsAsync(cancellationToken);
+        DocumentationValidation.RequireInventoryAgreement(documentedSymbols, methods, types.Values);
+
         return new CodebaseIndex
         {
             SchemaVersion = IndexStore.SchemaVersion,
@@ -137,6 +141,8 @@ public sealed partial class SolutionAnalysis
                 p.Documents.Select(d => d.FilePath).OfType<string>().Select(analysis.Relative).Distinct().Order(StringComparer.Ordinal).ToArray()))
                 .OrderBy(p => p.Path, StringComparer.Ordinal).ToArray(),
             Types = types.Values.OrderBy(t => t.Name, StringComparer.Ordinal).ThenBy(t => t.Id, StringComparer.Ordinal).ToArray(),
+            Symbols = documentedSymbols,
+            DocumentationCoverage = DocumentationCoverage.Current,
             Methods = methods,
             References = references,
             InputRoots = roots,

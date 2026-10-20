@@ -20,6 +20,33 @@ class ComparisonTests(unittest.TestCase):
             {"project": "b", "kind": "invocation", "definitionId": "d", "location": location},
             {"project": "a", "kind": "reference", "definitionId": "d", "location": location}]}}
 
+    def schema_two(self):
+        value = self.fixture()
+        value["schemaVersion"] = 2
+        value["documentationCoverage"] = {"version": 1, "symbolKinds": ["method"], "exclusions": []}
+        value["symbols"] = [{
+            "id": "method", "name": "Method", "kind": "method", "signature": "void Method()",
+            "project": "a", "location": {"file": "Source.cs", "line": 1, "column": 1},
+            "documentation": {"status": "missing", "comments": [], "sections": [], "inheritance": [], "issues": []},
+        }]
+        return value
+
+    def test_schema_two_catalog_participates_in_equality(self):
+        first, second = self.schema_two(), self.schema_two()
+        self.assertEqual(comparison.canonical(first), comparison.canonical(second))
+        second["symbols"][0]["documentation"]["status"] = "present"
+        self.assertIn("symbols", comparison.differences(comparison.canonical(first), comparison.canonical(second)))
+        third = self.schema_two()
+        third["documentationCoverage"]["version"] = 1
+        third["documentationCoverage"]["symbolKinds"] = ["type"]
+        self.assertIn("documentationCoverage", comparison.differences(comparison.canonical(first), comparison.canonical(third)))
+
+    def test_schema_two_without_a_catalog_is_rejected(self):
+        value = self.fixture()
+        value["schemaVersion"] = 2
+        with self.assertRaises(ValueError):
+            comparison.canonical(value)
+
     def test_order_and_run_metadata_do_not_change_analysis(self):
         first, second = self.fixture(), self.fixture()
         second["references"]["method"].reverse()
@@ -47,7 +74,7 @@ class ComparisonTests(unittest.TestCase):
 
     def test_malformed_schema_and_nested_collections_are_rejected(self):
         mutations = [
-            lambda value: value.update(schemaVersion=2),
+            lambda value: value.update(schemaVersion=3),
             lambda value: value.update(schemaVersion=True),
             lambda value: value.update(projects={}),
             lambda value: value.update(types=None),

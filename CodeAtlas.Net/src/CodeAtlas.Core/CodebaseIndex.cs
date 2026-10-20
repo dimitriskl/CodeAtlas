@@ -16,6 +16,9 @@ public sealed record IndexFreshness(bool IsStale, string[] ChangedFiles)
 
 public sealed record CodebaseIndex
 {
+    // Nullable only for deliberate schema-1 read compatibility. Schema 2 requires both.
+    public DocumentedSymbol[]? Symbols { get; init; }
+    public DocumentationCoverage? DocumentationCoverage { get; init; }
     public IncrementalSnapshotState? IncrementalState { get; init; }
     public RefreshSummary? Refresh { get; init; }
     public string? VirtualSnapshot { get; init; }

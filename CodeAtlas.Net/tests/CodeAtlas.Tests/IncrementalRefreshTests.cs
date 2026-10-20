@@ -53,6 +53,8 @@ internal sealed class PhysicalRefreshFixture
         }
         Assert.Equal(expected.Types, actual.Types);
         Assert.Equal(expected.Methods, actual.Methods);
+        Assert.Equal(System.Text.Json.JsonSerializer.Serialize(expected.Symbols), System.Text.Json.JsonSerializer.Serialize(actual.Symbols));
+        Assert.Equal(System.Text.Json.JsonSerializer.Serialize(expected.DocumentationCoverage), System.Text.Json.JsonSerializer.Serialize(actual.DocumentationCoverage));
         Assert.Equal(expected.References.Keys, actual.References.Keys);
         foreach (var (id, references) in expected.References) Assert.Equal(references, actual.References[id]);
         Assert.Equal(expected.Warnings, actual.Warnings);

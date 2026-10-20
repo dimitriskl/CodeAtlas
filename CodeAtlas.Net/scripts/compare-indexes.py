@@ -30,7 +30,10 @@ def canonical(index):
     for name in ("projects", "types", "methods", "references"):
         if name not in index:
             raise ValueError(f"Missing analysis field: {name}")
-    return normalize({key: index[key] for key in ("projects", "types", "methods", "references")})
+    fields = ["projects", "types", "methods", "references"]
+    if index["schemaVersion"] == 2:
+        fields.extend(("symbols", "documentationCoverage"))
+    return normalize({key: index[key] for key in fields})
 
 
 def validate(index):
@@ -56,7 +59,8 @@ def validate(index):
                     f"{label}.location.{field} must be a positive integer")
 
     require(isinstance(index, dict), "Index must be an object")
-    require(type(index.get("schemaVersion")) is int and index["schemaVersion"] == 1, "Unsupported or missing schemaVersion (expected 1)")
+    require(type(index.get("schemaVersion")) is int and index["schemaVersion"] in (1, 2),
+            "Unsupported or missing schemaVersion (expected 1 or 2)")
     for section in ("projects", "types", "methods"):
         require(isinstance(index.get(section), list), f"{section} must be an array")
     require(isinstance(index.get("references"), dict), "references must be an object")
@@ -75,6 +79,16 @@ def validate(index):
         for reference in references:
             located(reference, ("definitionId", "project", "kind"), "reference")
             require(reference["kind"] in ("invocation", "reference"), "Unknown reference kind")
+    if index["schemaVersion"] == 2:
+        require(isinstance(index.get("symbols"), list), "symbols must be an array")
+        require(isinstance(index.get("documentationCoverage"), dict), "documentationCoverage must be an object")
+        require(index["documentationCoverage"].get("version") == 1, "Unsupported documentation coverage")
+        symbol_ids = []
+        for symbol in index["symbols"]:
+            located(symbol, ("id", "name", "kind", "signature", "project"), "symbol")
+            symbol_ids.append(symbol["id"])
+            require(isinstance(symbol.get("documentation"), dict), "symbol.documentation must be an object")
+        require(len(symbol_ids) == len(set(symbol_ids)), "Duplicate symbol IDs")
     if "fingerprints" in index:
         require(isinstance(index["fingerprints"], dict) and
                 all(isinstance(path, str) and isinstance(digest, str) for path, digest in index["fingerprints"].items()),
@@ -83,7 +97,13 @@ def validate(index):
 
 def differences(before, after):
     result = {}
-    for section in ("projects", "types", "methods", "references"):
+    for section in ("projects", "types", "methods", "references", "symbols", "documentationCoverage"):
+        if section not in before and section not in after:
+            continue
+        if section == "documentationCoverage":
+            if encoded(before.get(section)) != encoded(after.get(section)):
+                result[section] = {"before": before.get(section), "after": after.get(section)}
+            continue
         if section == "references":
             old = [{"methodId": key, "reference": ref} for key, refs in before[section].items() for ref in refs]
             new = [{"methodId": key, "reference": ref} for key, refs in after[section].items() for ref in refs]

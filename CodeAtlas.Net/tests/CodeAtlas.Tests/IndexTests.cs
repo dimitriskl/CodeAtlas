@@ -96,7 +96,7 @@ public sealed class IndexTests(IndexedSolution fixture) : IClassFixture<IndexedS
         var stages = events.Select(e => e.Stage).Distinct().ToArray();
         Assert.Equal(new[] { IndexStage.ScanningInputs, IndexStage.LoadingProjects, IndexStage.FingerprintingInputs,
             IndexStage.ValidatingProjects, IndexStage.DiscoveringSymbols, IndexStage.FindingReferences,
-            IndexStage.CollectingTypes, IndexStage.VerifyingInputs }, stages);
+            IndexStage.CollectingTypes, IndexStage.CollectingDocumentation, IndexStage.VerifyingInputs }, stages);
         var references = events.Where(e => e.Stage == IndexStage.FindingReferences).ToArray();
         Assert.Equal(Enumerable.Range(0, index.Methods.Length + 1), references.Select(e => e.Completed!.Value));
         Assert.All(references, e => Assert.Equal(index.Methods.Length, e.Total));

@@ -10,7 +10,9 @@ Usage: codeatlas index --solution <path.sln|path.slnx> [--reference-workers <1-8
        codeatlas --version
        codeatlas index-status --index <path-to-index.json> [--profile]
        codeatlas find-symbol (--index <path-to-index.json> | --solution <path>) --name <method-name> [--type <declaring-type>]
+                  [--kind method|type|property|field|all]
        codeatlas find-references (--index <path-to-index.json> | --solution <path>) --symbol <id>
+       codeatlas get-documentation (--index <path-to-index.json> | --solution <path>) --symbol <id> [--snapshot <indexId>] [--profile]
 
 Query options: --project <relative-project-path> --limit <1-1000> --offset <nonnegative> --snapshot <indexId> --profile
 Default limit is 100. Indexed continuations require --snapshot; live queries support only the first page.
@@ -19,6 +21,8 @@ Warnings are saved in the solution-scoped generation. Results include a notice w
 Indexing progress and elapsed time go to stderr; stdout contains the final JSON result.
 Indexing artifacts commit together under .codeatlas/solutions/<solution-identity>/current.json.
 Reference indexing uses 2 concurrent searches by default; use 1 for serial comparison.
+Default/explicit method discovery returns MethodInfo. Other kinds/all return compact SymbolSummary records.
+get-documentation returns full developer XML, resolved sections and provenance; missing documentation remains missing.
 """;
 if (args.Length == 1 && args[0] == "--version")
 {
@@ -43,7 +47,7 @@ var coverageAvailable = false;
 QueryProfile? profile = null;
 try
 {
-    if (args.Length < 3 || command is not ("index" or "refresh" or "index-status" or "find-symbol" or "find-references"))
+    if (args.Length < 3 || command is not ("index" or "refresh" or "index-status" or "find-symbol" or "find-references" or "get-documentation"))
         throw new ArgumentException(usage);
     var options = new Dictionary<string, string>(StringComparer.Ordinal);
     for (var i = 1; i < args.Length; i++)
@@ -122,15 +126,22 @@ try
         var selector = command == "find-symbol" ? "--name" : "--symbol";
         if (!options.TryGetValue(selector, out var value)
             || options.ContainsKey("--solution") == options.ContainsKey("--index")
-            || options.Keys.Any(key => key != selector && key is not ("--solution" or "--index" or "--project" or "--type" or "--limit" or "--offset" or "--snapshot")))
+            || options.Keys.Any(key => key != selector && key is not ("--solution" or "--index" or "--project" or "--type" or "--limit" or "--offset" or "--snapshot" or "--kind")))
             throw new ArgumentException(usage);
+        var singleton = command == "get-documentation";
+        if (singleton && options.Keys.Any(key => key is not ("--solution" or "--index" or "--symbol" or "--snapshot")))
+            throw new ArgumentException("get-documentation accepts only --symbol, --index/--solution, --snapshot, --profile and --contract-version.");
+        if (command != "find-symbol" && options.ContainsKey("--kind"))
+            throw new ArgumentException("--kind is supported only by find-symbol.");
+        var kind = options.GetValueOrDefault("--kind") ?? "method";
+        DocumentationQueries.ValidateKind(kind);
         static int Integer(Dictionary<string, string> values, string key, int fallback) =>
             !values.TryGetValue(key, out var raw) ? fallback : int.TryParse(raw, out var number)
                 ? number : throw new ArgumentException($"{key} must be an integer.");
         var request = new QueryRequest(options.GetValueOrDefault("--project"), options.GetValueOrDefault("--type"),
             Integer(options, "--limit", 100), Integer(options, "--offset", 0), options.GetValueOrDefault("--snapshot"));
         // Validate request bounds before any expensive IO. Identity is checked after loading and freshness verification.
-        request.ValidateOptions(supportsType: command == "find-symbol", indexed: options.ContainsKey("--index"));
+        request.ValidateOptions(supportsType: command == "find-symbol" || singleton, indexed: options.ContainsKey("--index"));
         if (options.TryGetValue("--index", out var indexPath))
         {
             loadedSnapshot = await TimedAsync("jsonLoading", () => IndexStore.LoadSnapshotAsync(indexPath, cancellation.Token));
@@ -140,8 +151,23 @@ try
             freshness = ResponseContract.Freshness(status);
             if (status.IsStale)
                 throw new StaleIndexException(status.ChangedFiles);
-            request.Validate(index.IndexId, command == "find-symbol");
-            if (command == "find-symbol")
+            request.Validate(index.IndexId, command == "find-symbol" || singleton);
+            if (singleton)
+            {
+                var symbol = Timed("lookup", () => DocumentationQueries.GetDocumentation(
+                    DocumentationSnapshotQueries.RequireCoverage(index), value));
+                result = new { source = "index", index.Solution, index.IndexId, index.CreatedAtUtc, index.ToolVersion,
+                    symbol, warningCount = index.Warnings.Length, index.Warnings };
+            }
+            else if (command == "find-symbol" && kind != "method")
+            {
+                var page = Timed("lookup", () => DocumentationQueries.FindSymbols(
+                    DocumentationSnapshotQueries.RequireCoverage(index), value, kind, request, index.IndexId));
+                var summaries = Timed("lookup", () => page.Items.Select(SymbolSummary.From).ToArray());
+                result = new { source = "index", index.Solution, index.IndexId, index.CreatedAtUtc, index.ToolVersion,
+                    symbols = summaries, page.Pagination, warningCount = index.Warnings.Length, index.Warnings };
+            }
+            else if (command == "find-symbol")
             {
                 var page = Timed("lookup", () => QueryPaging.Methods(IndexStore.FindMethods(index, value), request, index.IndexId));
                 result = new { source = "index", index.Solution, index.IndexId, index.CreatedAtUtc, index.ToolVersion,
@@ -159,7 +185,24 @@ try
             using var analysis = await TimedAsync("liveLoading", () => SolutionAnalysis.LoadAsync(options["--solution"], cancellation.Token));
             coverageAvailable = true;
             freshness = ResponseContract.LiveFreshness;
-            if (command == "find-symbol")
+            if (singleton || command == "find-symbol" && kind != "method")
+            {
+                var catalog = await TimedAsync("liveLookup", () => analysis.GetDocumentedSymbolsAsync(cancellation.Token));
+                if (singleton)
+                {
+                    var symbol = Timed("lookup", () => DocumentationQueries.GetDocumentation(catalog, value));
+                    result = new { source = "live", solution = analysis.SolutionPath, symbol,
+                        warningCount = analysis.Warnings.Count, warnings = analysis.Warnings };
+                }
+                else
+                {
+                    var page = Timed("lookup", () => DocumentationQueries.FindSymbols(catalog, value, kind, request, snapshotId: null));
+                    var summaries = Timed("lookup", () => page.Items.Select(SymbolSummary.From).ToArray());
+                    result = new { source = "live", solution = analysis.SolutionPath, symbols = summaries,
+                        page.Pagination, warningCount = analysis.Warnings.Count, warnings = analysis.Warnings };
+                }
+            }
+            else if (command == "find-symbol")
             {
                 var methods = await TimedAsync("liveLookup", () => analysis.FindMethodsAsync(value, cancellation.Token));
                 var page = Timed("lookup", () => QueryPaging.Methods(methods, request, snapshotId: null));
@@ -192,7 +235,8 @@ try
     output["warningMessage"] = warningsPath is null
         ? $"{warnings.Length} warnings recorded in legacy index; rebuild to create a generation warning report."
         : $"{warnings.Length} warnings recorded in {warningsPath}";
-    ResponseContract.AddEnvelope(output, command, true, jsonOptions, freshness, coverageAvailable);
+    ResponseContract.AddEnvelope(output, command, true, jsonOptions, freshness, coverageAvailable,
+        loadedIndex is null || loadedIndex.SchemaVersion >= 2);
     if (indexingProgress is not null)
     {
         var timings = committedTimings!;
@@ -218,7 +262,8 @@ catch (Exception exception)
         warningsFile = loadedSnapshot?.WarningsPath,
         warningMessage = loadedSnapshot?.WarningsPath is { } report ? $"{loadedIndex!.Warnings.Length} warnings recorded in {report}" : null
     }, jsonOptions)!.AsObject();
-    ResponseContract.AddEnvelope(output, command, false, jsonOptions, freshness, coverageAvailable);
+    ResponseContract.AddEnvelope(output, command, false, jsonOptions, freshness, coverageAvailable,
+        loadedIndex is null || loadedIndex.SchemaVersion >= 2);
     if (profile is not null)
         output["queryTimings"] = JsonSerializer.SerializeToNode(profile.Snapshot(), jsonOptions);
     Console.Error.WriteLine(output.ToJsonString(jsonOptions));

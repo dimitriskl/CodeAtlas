@@ -159,7 +159,9 @@ public sealed partial class SolutionAnalysis
         // realized into regular syntax trees, assembly identity and reference bindings.
         // XML include text is not expanded by current method-reference queries.
         // TreeOptionsProvider governs diagnostics; current compilation is revalidated.
-        // Never call this sufficient for scripts, XML-description extraction, or new APIs.
+        // M6 recomputes declaration-owned XML trivia on every current semantic solution;
+        // it never expands includes or invokes XmlReferenceResolver. This capture does
+        // not authenticate external XML expansion, scripts, or other provider APIs.
         string[] realizedProviders = ["MetadataReferenceResolver", "XmlReferenceResolver", "SourceReferenceResolver",
             "StrongNameProvider", "SyntaxTreeOptionsProvider", "AssemblyIdentityComparer", "CurrentLocalTime"];
         var result = new SortedDictionary<string, string>(StringComparer.Ordinal);

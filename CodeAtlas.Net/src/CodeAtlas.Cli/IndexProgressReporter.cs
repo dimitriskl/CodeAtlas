@@ -60,6 +60,7 @@ internal sealed class IndexProgressReporter : IProgress<IndexProgress>, IDisposa
             IndexStage.DiscoveringSymbols => "Discovering methods",
             IndexStage.FindingReferences => "Indexing method references",
             IndexStage.CollectingTypes => "Collecting types",
+            IndexStage.CollectingDocumentation => "Collecting symbol documentation",
             IndexStage.VerifyingInputs => "Verifying unchanged inputs",
             IndexStage.Saving => "Saving index and reports",
             IndexStage.Completed => "Indexing completed",

@@ -195,6 +195,9 @@ public sealed class QueryContractTests(IndexedSolution fixture) : IClassFixture<
         // Arrange
         var path = Path.Combine(fixture.Root, ".codeatlas", "legacy-contract-index.json");
         var index = JsonNode.Parse(await File.ReadAllTextAsync(fixture.IndexArtifactPath))!;
+        index["schemaVersion"] = 1;
+        index.AsObject().Remove("symbols");
+        index.AsObject().Remove("documentationCoverage");
         index.AsObject().Remove("inputManifest");
         foreach (var method in index["methods"]!.AsArray())
             method!.AsObject().Remove("containingType");

@@ -18,7 +18,10 @@ public sealed partial class SolutionAnalysis
         if (project is null)
             throw new AnalysisException($"Symbol project not found: {projectPath}");
         var compilation = await project.GetCompilationAsync(cancellationToken);
-        var method = DocumentationCommentId.GetFirstSymbolForDeclarationId(id[(separator + 2)..], compilation!) as IMethodSymbol;
+        var selected = DocumentationCommentId.GetFirstSymbolForDeclarationId(id[(separator + 2)..], compilation!);
+        if (selected is INamedTypeSymbol or IPropertySymbol or IFieldSymbol && selected.Locations.Any(location => location.IsInSource))
+            throw new QueryException("unsupported_symbol_kind", "References support ordinary and explicit-interface source methods only.");
+        var method = selected as IMethodSymbol;
         if (method is null || !method.Locations.Any(location => location.IsInSource))
             throw new AnalysisException("Source method not found. Run find-symbol again against the current solution.");
 

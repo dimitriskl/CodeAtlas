@@ -9,6 +9,7 @@ public enum IndexStage
     DiscoveringSymbols,
     FindingReferences,
     CollectingTypes,
+    CollectingDocumentation,
     VerifyingInputs,
     Saving,
     Completed

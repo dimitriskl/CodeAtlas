@@ -152,6 +152,10 @@ public sealed partial class SolutionAnalysis : IDisposable
     public Task<IReadOnlyList<SourceReference>> FindReferencesAsync(string id, CancellationToken cancellationToken = default) =>
         FindReferencesCoreAsync(id, null, cancellationToken);
 
+    /// <summary>Extracts authored documentation from this same loaded semantic solution.</summary>
+    public Task<DocumentedSymbol[]> GetDocumentedSymbolsAsync(CancellationToken cancellationToken = default) =>
+        DocumentationCatalog.CreateAsync(solution, SolutionPath, cancellationToken);
+
     private static IMethodSymbol Canonical(IMethodSymbol symbol) => symbol.OriginalDefinition.PartialDefinitionPart ?? symbol.OriginalDefinition;
     private string Id(Project project, IMethodSymbol symbol) => $"{Relative(project.FilePath!)}::{symbol.GetDocumentationCommentId()}";
     private string Relative(string path) => Path.GetRelativePath(directory, path).Replace('\\', '/');

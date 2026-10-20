@@ -1,6 +1,6 @@
 # CodeAtlas .NET
 
-Version: **0.00.13**
+Version: **0.00.14**
 
 See [version history](docs/VERSION.md) for what is implemented and the versioning rules. `Version.props` is the build's version source. Run `dotnet run --project src/CodeAtlas.Cli --no-build -- --version` to check the built CLI.
 
@@ -19,7 +19,7 @@ Install the .NET SDK selected by `global.json`, then run from `C:\Code\CodeAtlas
 ```bash
 dotnet restore CodeAtlas.slnx --locked-mode
 dotnet build CodeAtlas.slnx --no-restore
-dotnet test CodeAtlas.slnx --no-build --no-restore -- xUnit.MaxParallelThreads=2
+dotnet test CodeAtlas.slnx --no-build --no-restore -- xUnit.MaxParallelThreads=1
 python3 -m unittest discover -s tests/versioning -p 'test_*.py'
 ```
 
@@ -84,7 +84,7 @@ Queries with `--index` deserialize the saved data and verify file fingerprints; 
 
 Queries return at most 100 results by default; `--limit` accepts 1 through 1000. Inspect `pagination.hasMore` and continue with `--offset <nextOffset> --snapshot <snapshotId>` from the response. Continuations require the same fresh index generation. Live queries return only a bounded first page and cannot provide a stable continuation.
 
-`find-symbol` supports exact `--project <relative-project-path>` and `--type <declaring-type>` filters. `find-references --project` filters the referencing project. Responses use JSON `contractVersion: 1` with snapshot identity, freshness, and coverage metadata; see the [query contract](docs/QUERY-CONTRACT.md) for filters, pagination, compatibility, and error codes. Optional `--profile` reports query phases; [query performance](docs/QUERY-PERFORMANCE.md) records the measurements, budgets, and cold-filesystem limitation.
+`find-symbol` supports exact `--project <relative-project-path>` and `--type <declaring-type>` filters. Add `--kind type`, `--kind property`, `--kind field`, or `--kind all` to search those source symbols; the default remains methods and keeps the method record shape. `get-documentation --symbol <id>` returns the authored XML, resolved sections, and provenance. Missing documentation stays missing. `find-references --project` filters the referencing project. References still apply only to ordinary and explicit-interface source methods. Responses use JSON `contractVersion: 1` with snapshot identity, freshness, and coverage metadata; see the [query contract](docs/QUERY-CONTRACT.md) for filters, pagination, compatibility, and error codes. Optional `--profile` reports query phases; [query performance](docs/QUERY-PERFORMANCE.md) records the measurements, budgets, and cold-filesystem limitation.
 
 The original live queries remain available: replace `--index <index.json>` with `--solution <solution.slnx>` to analyze current source directly.
 

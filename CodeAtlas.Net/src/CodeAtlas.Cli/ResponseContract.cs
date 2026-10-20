@@ -8,11 +8,15 @@ internal static class ResponseContract
 {
     public const int Version = 1;
 
-    public static object Coverage => new
+    public static object Coverage(bool catalogAvailable) => new
     {
         language = "C#",
-        symbols = new[] { "ordinary-source-methods", "explicit-interface-source-methods" },
+        symbols = catalogAvailable
+            ? new[] { "source-types", "ordinary-source-methods", "explicit-interface-source-methods", "source-properties", "source-fields" }
+            : new[] { "ordinary-source-methods", "explicit-interface-source-methods" },
         references = "static-source-references-with-related-definition-identity",
+        referenceSymbolKinds = new[] { "ordinary-source-methods", "explicit-interface-source-methods" },
+        symbolDocumentation = catalogAvailable ? DocumentationCoverage.Current : null,
         runtimeCallGraph = false,
         exclusions = new[] { "constructors", "property-accessors", "local-functions", "metadata-only-methods",
             "reflection", "dependency-injection-resolution", "complete-virtual-dispatch" },
@@ -46,7 +50,7 @@ internal static class ResponseContract
     };
 
     public static void AddEnvelope(JsonObject output, string? command, bool success, JsonSerializerOptions options,
-        object? freshness = null, bool coverageAvailable = false)
+        object? freshness = null, bool coverageAvailable = false, bool catalogAvailable = true)
     {
         output["contractVersion"] = Version;
         output["command"] = command;
@@ -54,7 +58,7 @@ internal static class ResponseContract
         output["responseToolVersion"] = CodeAtlasVersion.Current;
         output["warningCount"] ??= 0;
         output["freshness"] = freshness is null ? null : JsonSerializer.SerializeToNode(freshness, options);
-        output["coverage"] = coverageAvailable ? JsonSerializer.SerializeToNode(Coverage, options) : null;
+        output["coverage"] = coverageAvailable ? JsonSerializer.SerializeToNode(Coverage(catalogAvailable), options) : null;
     }
 
     public static (string Code, int Exit) Classify(Exception exception) => exception switch

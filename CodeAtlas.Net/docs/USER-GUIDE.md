@@ -32,6 +32,10 @@ Get-Content -LiteralPath $indexed.warningsFile
 
 Stdout contains the JSON outcome. Stderr contains progress and, on failure, error JSON. Redirect stderr as above to keep the outcome readable. Progress counts are completed work, not an ETA. The returned `timings` file records measured stages.
 
+## Read authored documentation
+
+`find-symbol --kind type|property|field|all` returns a compact summary with a bounded documentation preview. `get-documentation --symbol <id>` returns the full authored XML and where each section came from, including inherited documentation. CodeAtlas does not invent wording and does not call a language model. A symbol with no documentation is a successful missing result.
+
 ## Find a method and inspect its references
 
 Check the index before using its overview or query results:

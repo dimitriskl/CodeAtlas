@@ -65,6 +65,8 @@ Acceptance: after each supported edit scenario, incremental results equal a clea
 
 ### 6. Add symbol descriptions from existing documentation
 
+Status: completed in 0.00.14. [Documentation evidence](SYMBOL-DOCUMENTATION.md) records catalog tests, a 1.419-second eConnector extraction, and unchanged method/reference analysis.
+
 Extend stable identity and query coverage to classes/types, properties, and fields alongside methods. Extract existing XML documentation, including summaries, parameters, returns, and remarks where available. Define how inherited documentation is resolved and mark unresolved documentation explicitly. Associate developer comments only when their ownership can be established; preserve origin and source locations.
 
 Start with these symbols. Local-variable descriptions are deferred to on-demand inspection of a method; constructors, accessors, and local functions need explicit support decisions rather than silently appearing complete.
@@ -126,4 +128,4 @@ An agent should follow purpose → candidate symbols → source and references �
 
 For each completed change, record the relevant acceptance evidence here or in a linked validation report, run the required checks, and increment the version once with `scripts/bump-version.py`. Regenerate CodeAtlas's own index after the versioned change. Run target-solution benchmarks when the change affects analysis/performance; routine roadmap edits do not require repeating the long eConnector run.
 
-Immediate next step: add symbol descriptions from existing documentation. The milestone 4 large freshness maximum remains an open release gate. Semantic descriptions and discovery are accepted roadmap scope; AI-generated explanations, duplicate detection, and graph traversal have their own acceptance gates and do not delay the initial core production gate.
+Immediate next step: add structural facts and purpose search. The milestone 4 large freshness maximum remains an open release gate. Semantic descriptions and discovery are accepted roadmap scope; AI-generated explanations, duplicate detection, and graph traversal have their own acceptance gates and do not delay the initial core production gate.
