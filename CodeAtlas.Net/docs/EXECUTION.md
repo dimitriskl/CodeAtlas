@@ -32,7 +32,7 @@ The roadmap setup was committed as `7d6d0cc` (`0.00.08`). Each implementation mi
 | 8. Packaging/qualification | Local package implemented, 0.00.16; not published | [Packaging](PACKAGING.md). `CodeAtlas.Tool` 0.0.16 installed from a local folder and printed `0.00.16`. Clean machine and Linux are not qualified. |
 | 9. AI explanations | Local files implemented, 0.00.17 | [Explanations](EXPLANATIONS.md). Import rejects a changed symbol. No provider call and no accuracy study. |
 | 10. Duplicate candidates | Implemented, 0.00.18 | [Duplicates](DUPLICATES.md). Renamed identifiers group together. A different expression stays out. No labeled eConnector study. |
-| 11. Callers/impact | Planned | — |
+| 11. Callers/impact | Implemented, 0.00.19 | [Callers](CALLERS.md). Depth, cycle, and limit behavior are tested. Impact means potentially affected code. |
 | 12. Coverage expansion | Planned | Roadmap scope: C# expansion and separate Angular/TypeScript engine design; SQL remains a later design decision. |
 
 ## Evidence rules

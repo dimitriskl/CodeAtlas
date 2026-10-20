@@ -111,6 +111,8 @@ Acceptance: a labeled set measures useful findings and false positives, includin
 
 ### 11. Add caller navigation and bounded impact traversal
 
+Status: implemented in 0.00.19. [Caller evidence](CALLERS.md).
+
 Associate supported call sites with enclosing callers, then traverse relationships with depth/result limits, cycle handling, and per-edge evidence. Distinguish invocations from method groups and documentation references; represent interface/virtual relationships and unresolved runtime behavior explicitly.
 
 Acceptance: fixtures verify caller identity, traversal paths, cycles, limits, and unsupported contexts. Impact results describe potentially affected code, not guaranteed breakage. This milestone depends on the core correctness/query foundations and can be prioritized independently of AI explanations and duplicate detection.
@@ -136,4 +138,4 @@ An agent should follow purpose → candidate symbols → source and references �
 
 For each completed change, record the relevant acceptance evidence here or in a linked validation report, run the required checks, and increment the version once with `scripts/bump-version.py`. Regenerate CodeAtlas's own index after the versioned change. Run target-solution benchmarks when the change affects analysis/performance; routine roadmap edits do not require repeating the long eConnector run.
 
-Immediate next step: caller navigation. The milestone 4 freshness maximum, the milestone 7 retrieval comparison, and clean-machine installation remain open release gates. Semantic descriptions and discovery are accepted roadmap scope; AI-generated explanations, duplicate detection, and graph traversal have their own acceptance gates and do not delay the initial core production gate.
+Immediate next step: coverage expansion. The milestone 4 freshness maximum, the milestone 7 retrieval comparison, and clean-machine installation remain open release gates. Semantic descriptions and discovery are accepted roadmap scope; AI-generated explanations, duplicate detection, and graph traversal have their own acceptance gates and do not delay the initial core production gate.

@@ -20,6 +20,7 @@ Usage: codeatlas index --solution <path.sln|path.slnx> [--reference-workers <1-8
        codeatlas explain-import --index <path-to-index.json> --response <response.json>
        codeatlas get-explanation --index <path-to-index.json> --symbol <id>
        codeatlas find-duplicates --index <path-to-index.json>
+       codeatlas find-callers --index <path-to-index.json> --symbol <id> [--depth <1-5>]
 
 Query options: --project <relative-project-path> --limit <1-1000> --offset <nonnegative> --snapshot <indexId> --profile
 Default limit is 100. Indexed continuations require --snapshot; live queries support only the first page.
@@ -57,7 +58,7 @@ var coverageAvailable = false;
 QueryProfile? profile = null;
 try
 {
-    if (args.Length < 3 || command is not ("index" or "refresh" or "index-status" or "find-symbol" or "find-references" or "get-documentation" or "search-symbols" or "get-facts" or "explain-request" or "explain-import" or "get-explanation" or "find-duplicates"))
+    if (args.Length < 3 || command is not ("index" or "refresh" or "index-status" or "find-symbol" or "find-references" or "get-documentation" or "search-symbols" or "get-facts" or "explain-request" or "explain-import" or "get-explanation" or "find-duplicates" or "find-callers"))
         throw new ArgumentException(usage);
     var options = new Dictionary<string, string>(StringComparer.Ordinal);
     for (var i = 1; i < args.Length; i++)
@@ -130,6 +131,20 @@ try
         result = new { index.Solution, index.IndexId, index.CreatedAtUtc, index.ToolVersion,
             refresh = index.Refresh,
             warningCount = index.Warnings.Length, index.Warnings };
+    }
+    else if (command == "find-callers")
+    {
+        if (!options.TryGetValue("--index", out var callerIndex) || !options.TryGetValue("--symbol", out var callerSymbol))
+            throw new ArgumentException("find-callers requires --index and --symbol.");
+        var depth = 1;
+        if (options.TryGetValue("--depth", out var rawDepth) && !int.TryParse(rawDepth, out depth))
+            throw new ArgumentException("--depth must be an integer.");
+        loadedSnapshot = await TimedAsync("jsonLoading", () => IndexStore.LoadSnapshotAsync(callerIndex, cancellation.Token));
+        var index = loadedIndex = loadedSnapshot.Index;
+        coverageAvailable = true;
+        var facts = index.StructuralCatalog ?? throw new QueryException("rebuild_required", "Rebuild to extract structural facts.");
+        var traversal = Callers.Traverse(facts, callerSymbol, depth, 100);
+        result = new { source = "index", index.Solution, index.IndexId, traversal, warningCount = index.Warnings.Length, warnings = index.Warnings };
     }
     else if (command == "find-duplicates")
     {
