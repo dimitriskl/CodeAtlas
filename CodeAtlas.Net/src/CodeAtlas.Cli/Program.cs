@@ -21,6 +21,7 @@ Usage: codeatlas index --solution <path.sln|path.slnx> [--reference-workers <1-8
        codeatlas get-explanation --index <path-to-index.json> --symbol <id>
        codeatlas find-duplicates --index <path-to-index.json>
        codeatlas find-callers --index <path-to-index.json> --symbol <id> [--depth <1-5>]
+       codeatlas coverage --index <path-to-index.json>
 
 Query options: --project <relative-project-path> --limit <1-1000> --offset <nonnegative> --snapshot <indexId> --profile
 Default limit is 100. Indexed continuations require --snapshot; live queries support only the first page.
@@ -58,7 +59,7 @@ var coverageAvailable = false;
 QueryProfile? profile = null;
 try
 {
-    if (args.Length < 3 || command is not ("index" or "refresh" or "index-status" or "find-symbol" or "find-references" or "get-documentation" or "search-symbols" or "get-facts" or "explain-request" or "explain-import" or "get-explanation" or "find-duplicates" or "find-callers"))
+    if (args.Length < 3 || command is not ("index" or "refresh" or "index-status" or "find-symbol" or "find-references" or "get-documentation" or "search-symbols" or "get-facts" or "explain-request" or "explain-import" or "get-explanation" or "find-duplicates" or "find-callers" or "coverage"))
         throw new ArgumentException(usage);
     var options = new Dictionary<string, string>(StringComparer.Ordinal);
     for (var i = 1; i < args.Length; i++)
@@ -131,6 +132,17 @@ try
         result = new { index.Solution, index.IndexId, index.CreatedAtUtc, index.ToolVersion,
             refresh = index.Refresh,
             warningCount = index.Warnings.Length, index.Warnings };
+    }
+    else if (command == "coverage")
+    {
+        if (options.Count != 1 || !options.TryGetValue("--index", out var coverageIndex))
+            throw new ArgumentException("coverage requires only --index.");
+        loadedSnapshot = await TimedAsync("jsonLoading", () => IndexStore.LoadSnapshotAsync(coverageIndex, cancellation.Token));
+        var index = loadedIndex = loadedSnapshot.Index;
+        coverageAvailable = true;
+        result = new { source = "index", index.Solution, index.IndexId, supportedLanguages = LanguageBoundary.Supported,
+            documentation = index.DocumentationCoverage, structural = index.StructuralCatalog?.Coverage,
+            warningCount = index.Warnings.Length, warnings = index.Warnings };
     }
     else if (command == "find-callers")
     {

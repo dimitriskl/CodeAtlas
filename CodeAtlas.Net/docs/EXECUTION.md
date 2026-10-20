@@ -33,7 +33,7 @@ The roadmap setup was committed as `7d6d0cc` (`0.00.08`). Each implementation mi
 | 9. AI explanations | Local files implemented, 0.00.17 | [Explanations](EXPLANATIONS.md). Import rejects a changed symbol. No provider call and no accuracy study. |
 | 10. Duplicate candidates | Implemented, 0.00.18 | [Duplicates](DUPLICATES.md). Renamed identifiers group together. A different expression stays out. No labeled eConnector study. |
 | 11. Callers/impact | Implemented, 0.00.19 | [Callers](CALLERS.md). Depth, cycle, and limit behavior are tested. Impact means potentially affected code. |
-| 12. Coverage expansion | Planned | Roadmap scope: C# expansion and separate Angular/TypeScript engine design; SQL remains a later design decision. |
+| 12. Coverage expansion | Boundary implemented, 0.00.20 | [Angular design](ANGULAR-ENGINE.md). Only C# is advertised. SQL remains a later decision. `CodeAtlas.Angular` is not an engine. |
 
 ## Evidence rules
 

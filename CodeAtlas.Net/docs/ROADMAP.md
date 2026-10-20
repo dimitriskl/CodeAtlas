@@ -119,6 +119,8 @@ Acceptance: fixtures verify caller identity, traversal paths, cycles, limits, an
 
 ### 12. Expand language and analysis coverage
 
+Status: boundary implemented in 0.00.20. [Angular engine design](ANGULAR-ENGINE.md). No additional C# kind and no Angular indexer are advertised.
+
 Broaden C# coverage according to measured user needs. Design a separate Angular/TypeScript analysis engine and explicit cross-language relationships when that work is prioritized; Roslyn remains the C# engine. SQL analysis is a later design decision.
 
 Acceptance: each expansion defines its supported inputs, symbol identities, relationship semantics, tests, and evaluation evidence before being advertised as supported. Additional languages are outside the initial C# production gate.
@@ -138,4 +140,4 @@ An agent should follow purpose → candidate symbols → source and references �
 
 For each completed change, record the relevant acceptance evidence here or in a linked validation report, run the required checks, and increment the version once with `scripts/bump-version.py`. Regenerate CodeAtlas's own index after the versioned change. Run target-solution benchmarks when the change affects analysis/performance; routine roadmap edits do not require repeating the long eConnector run.
 
-Immediate next step: coverage expansion. The milestone 4 freshness maximum, the milestone 7 retrieval comparison, and clean-machine installation remain open release gates. Semantic descriptions and discovery are accepted roadmap scope; AI-generated explanations, duplicate detection, and graph traversal have their own acceptance gates and do not delay the initial core production gate.
+Immediate next step: close the open release gates before version 1. Those gates are the milestone 4 large freshness maximum, the milestone 7 eConnector retrieval comparison, and a clean-machine install. Milestones 9 and 10 also still need their accuracy and false-positive studies. Semantic descriptions and discovery are accepted roadmap scope; AI-generated explanations, duplicate detection, and graph traversal have their own acceptance gates and do not delay the initial core production gate.
