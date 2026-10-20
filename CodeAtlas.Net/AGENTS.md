@@ -32,4 +32,4 @@ dotnet run --project src/CodeAtlas.Cli --no-build -- index --solution CodeAtlas.
 
 Read the immutable `overview` path returned by the index command for orientation. Keep its generation together with the returned `warningsFile` and `timings` paths. Use `find-symbol --index <solution-current.json> --name <method>` and `find-references --index <solution-current.json> --symbol <id>` through the same CLI to inspect relevant relationships. Read the source before editing; static references are not a complete runtime call graph.
 
-Rebuild the index before querying after source changes. Keep `.codeatlas/` outputs out of Git. Validate changes with the documented build and test commands.
+After source changes, run `dotnet run --project src/CodeAtlas.Cli --no-build -- refresh --solution CodeAtlas.slnx` before querying again. Refresh safely falls back to full analysis when reuse cannot be established; `index` always requests full analysis. Use the new snapshot ID for continuation requests. Keep `.codeatlas/` outputs out of Git. Validate changes with the documented build and test commands.

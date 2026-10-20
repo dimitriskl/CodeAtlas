@@ -25,6 +25,7 @@ public sealed partial class SolutionAnalysis : IDisposable
     private readonly Solution solution;
     private readonly string directory;
     private readonly IReadOnlyList<string> warnings;
+    private bool ownsWorkspace = true;
     private Dictionary<string, Dictionary<string, string>> evaluatedProperties = new(SnapshotInputModel.PathComparer);
     private string[] evaluatedImports = [];
     private static string? selectedMSBuildPath;
@@ -148,47 +149,8 @@ public sealed partial class SolutionAnalysis : IDisposable
         return methods.Values.OrderBy(m => m.Id, StringComparer.Ordinal).ToArray();
     }
 
-    public async Task<IReadOnlyList<SourceReference>> FindReferencesAsync(string id, CancellationToken cancellationToken = default)
-    {
-        var separator = id.IndexOf("::", StringComparison.Ordinal);
-        if (separator < 1)
-            throw new AnalysisException("Invalid symbol ID. Use an ID returned by find-symbol.");
-        var projectPath = id[..separator];
-        var project = solution.Projects.SingleOrDefault(p => p.FilePath is not null && Relative(p.FilePath) == projectPath);
-        if (project is null)
-            throw new AnalysisException($"Symbol project not found: {projectPath}");
-        var compilation = await project.GetCompilationAsync(cancellationToken);
-        var method = DocumentationCommentId.GetFirstSymbolForDeclarationId(id[(separator + 2)..], compilation!) as IMethodSymbol;
-        if (method is null || !method.Locations.Any(l => l.IsInSource))
-            throw new AnalysisException("Source method not found. Run find-symbol again against the current solution.");
-
-        var groups = await SymbolFinder.FindReferencesAsync(method, solution, cancellationToken);
-        var references = new List<SourceReference>();
-        foreach (var group in groups)
-        {
-            // Roslyn can also return related definitions (for example interface implementations).
-            // Preserve each definition's identity instead of claiming all references target the selected method.
-            var definition = group.Definition as IMethodSymbol;
-            var definitionTree = definition?.Locations.FirstOrDefault(l => l.IsInSource)?.SourceTree;
-            var definitionProject = definitionTree is null ? null : solution.GetDocument(definitionTree)?.Project;
-            var definitionId = definition is not null && definitionProject is not null
-                ? Id(definitionProject, Canonical(definition)) : id;
-            foreach (var reference in group.Locations)
-            {
-                var root = await reference.Document.GetSyntaxRootAsync(cancellationToken);
-                var span = reference.Location.SourceSpan;
-                var node = root!.FindNode(span, getInnermostNodeForTie: true);
-                var invocation = node.AncestorsAndSelf().OfType<InvocationExpressionSyntax>()
-                    .FirstOrDefault(i => i.Expression.Span.Contains(span));
-                var kind = invocation is not null && !reference.IsImplicit ? "invocation" : "reference";
-                references.Add(new SourceReference(definitionId, Relative(reference.Document.Project.FilePath!),
-                    kind, Position(reference.Location)));
-            }
-        }
-        return references.Distinct().OrderBy(r => r.Location.File, StringComparer.Ordinal)
-            .ThenBy(r => r.Location.Line).ThenBy(r => r.Location.Column).ThenBy(r => r.DefinitionId, StringComparer.Ordinal)
-            .ThenBy(r => r.Project, StringComparer.Ordinal).ThenBy(r => r.Kind, StringComparer.Ordinal).ToArray();
-    }
+    public Task<IReadOnlyList<SourceReference>> FindReferencesAsync(string id, CancellationToken cancellationToken = default) =>
+        FindReferencesCoreAsync(id, null, cancellationToken);
 
     private static IMethodSymbol Canonical(IMethodSymbol symbol) => symbol.OriginalDefinition.PartialDefinitionPart ?? symbol.OriginalDefinition;
     private string Id(Project project, IMethodSymbol symbol) => $"{Relative(project.FilePath!)}::{symbol.GetDocumentationCommentId()}";
@@ -198,5 +160,5 @@ public sealed partial class SolutionAnalysis : IDisposable
         var span = location.GetLineSpan();
         return new SourcePosition(Relative(span.Path), span.StartLinePosition.Line + 1, span.StartLinePosition.Character + 1);
     }
-    public void Dispose() => workspace.Dispose();
+    public void Dispose() { if (ownsWorkspace) workspace.Dispose(); }
 }

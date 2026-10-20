@@ -5,8 +5,31 @@ namespace CodeAtlas;
 
 public sealed partial class SolutionAnalysis
 {
-    public static async Task<CodebaseIndex> CreateIndexAsync(string path, CancellationToken cancellationToken = default,
+    public static Task<CodebaseIndex> CreateIndexAsync(string path, CancellationToken cancellationToken = default,
+        IProgress<IndexProgress>? progress = null, int referenceWorkers = 2) =>
+        CreateIndexCoreAsync(path, cancellationToken, progress, referenceWorkers, null, incremental: false);
+
+    public static async Task<CodebaseIndex> RefreshIndexAsync(string path, CancellationToken cancellationToken = default,
         IProgress<IndexProgress>? progress = null, int referenceWorkers = 2)
+    {
+        path = Path.GetFullPath(path);
+        var manifest = IndexStore.DefaultPath(path);
+        // Missing first generation is a full seed; a corrupt existing generation is an
+        // explicit M4 error, never hidden by silently rebuilding/selecting old data.
+        bool exists;
+        try { _ = File.GetAttributes(manifest); exists = true; }
+        catch (Exception exception) when (exception is FileNotFoundException or DirectoryNotFoundException) { exists = false; }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        {
+            throw new IndexFormatException("snapshot_io_failed", "Cannot inspect the active snapshot pointer. Check its path and permissions.", [exception.Message]);
+        }
+        var previous = exists ? (await IndexStore.LoadSnapshotAsync(manifest, cancellationToken)).Index : null;
+        return await CreateIndexCoreAsync(path, cancellationToken, progress, referenceWorkers, previous, incremental: true);
+    }
+
+    private static async Task<CodebaseIndex> CreateIndexCoreAsync(string path, CancellationToken cancellationToken,
+        IProgress<IndexProgress>? progress, int referenceWorkers, CodebaseIndex? previousIndex, bool incremental,
+        BenchmarkOverlay? overlay = null)
     {
         if (referenceWorkers is < 1 or > 8)
             throw new ArgumentOutOfRangeException(nameof(referenceWorkers), "Reference workers must be between 1 and 8.");
@@ -53,27 +76,41 @@ public sealed partial class SolutionAnalysis
             Coverage = SnapshotInputModel.Classify(loaded.Evidence, beforeIndexing.Coverage.Issues)
         };
 
+        // The virtual caller shares this complete capture/load pipeline. Production
+        // has no flag that disables disk validation and never supplies an overlay.
+        using var virtualAnalysis = overlay is null ? null : await analysis.ApplyBenchmarkOverlayAsync(overlay, cancellationToken);
+        var result = await (virtualAnalysis ?? analysis).AnalyzeLoadedSolutionAsync(beforeIndexing,
+            roots, inputs, previousIndex, incremental, referenceWorkers, progress, cancellationToken);
+
+        progress?.Report(new(IndexStage.VerifyingInputs));
+        // Validate the original disk-backed workspace, including linked files.
+        foreach (var document in projects.SelectMany(p => p.Documents))
+        {
+            if (document.FilePath is not { } file || !File.Exists(file))
+                continue;
+            if ((await document.GetTextAsync(cancellationToken)).ToString() != await File.ReadAllTextAsync(file, cancellationToken))
+                throw new AnalysisException($"Source changed during indexing: {file}. Run index again.");
+        }
+        var verified = await SnapshotInputModel.CheckAsync(beforeIndexing, SnapshotEnvironment.Capture(), cancellationToken);
+        if (verified.TrackedInputsChanged || verified.Diagnostics.Length != 0)
+            throw new AnalysisException("Inputs changed while indexing. Run index again.");
+        return overlay is null ? result : result with { VirtualSnapshot = IncrementalDigest.Json(overlay) };
+    }
+
+    internal async Task<CodebaseIndex> AnalyzeLoadedSolutionAsync(SnapshotInputManifest beforeIndexing,
+        string[] roots, string[] inputs, CodebaseIndex? previousIndex, bool incremental, int referenceWorkers,
+        IProgress<IndexProgress>? progress, CancellationToken cancellationToken)
+    {
+        var analysis = this;
+        var projects = solution.Projects.ToArray();
         progress?.Report(new(IndexStage.DiscoveringSymbols));
         var symbols = (await SymbolFinder.FindSourceDeclarationsAsync(analysis.solution, _ => true, SymbolFilter.TypeAndMember, cancellationToken)).ToArray();
         var methods = analysis.DescribeMethods(symbols).ToArray();
-        var referenceResults = new SourceReference[methods.Length][];
-        var completed = 0;
-        var progressGate = new object();
-        progress?.Report(new(IndexStage.FindingReferences, 0, methods.Length));
-        // Each worker keeps Roslyn's complete per-symbol search semantics. In particular,
-        // related definitions are neither inferred nor reused between selected methods.
-        await Parallel.ForEachAsync(Enumerable.Range(0, methods.Length),
-            new ParallelOptions { MaxDegreeOfParallelism = referenceWorkers, CancellationToken = cancellationToken },
-            async (position, token) =>
-        {
-            referenceResults[position] = (await analysis.FindReferencesAsync(methods[position].Id, token)).ToArray();
-            // Serialize completion and callback together: observers must never see 2, 1, 3.
-            lock (progressGate)
-                progress?.Report(new(IndexStage.FindingReferences, ++completed, methods.Length));
-        });
-        // Completion order must not change persisted dictionary order.
-        var references = methods.Select((method, position) => (method.Id, References: referenceResults[position]))
-            .ToDictionary(item => item.Id, item => item.References, StringComparer.Ordinal);
+        var indexId = Guid.NewGuid().ToString("N");
+        var incrementalCapture = await analysis.CaptureIncrementalStateAsync(indexId, beforeIndexing, cancellationToken);
+        var refreshed = await analysis.CollectRefreshReferencesAsync(previousIndex, incrementalCapture,
+            beforeIndexing, methods, incremental, referenceWorkers, progress, cancellationToken);
+        var references = refreshed.References;
         progress?.Report(new(IndexStage.CollectingTypes));
         var types = new Dictionary<string, IndexedType>(StringComparer.Ordinal);
         foreach (var type in symbols.OfType<INamedTypeSymbol>())
@@ -87,25 +124,12 @@ public sealed partial class SolutionAnalysis
             types[id] = new IndexedType(id, type.ToDisplayString(), type.TypeKind.ToString().ToLowerInvariant(), project, analysis.Position(location));
         }
 
-        progress?.Report(new(IndexStage.VerifyingInputs));
-        // Check that the workspace text agrees with the disk snapshot, including linked source files.
-        foreach (var document in projects.SelectMany(p => p.Documents))
-        {
-            if (document.FilePath is not { } file || !File.Exists(file))
-                continue;
-            if ((await document.GetTextAsync(cancellationToken)).ToString() != await File.ReadAllTextAsync(file, cancellationToken))
-                throw new AnalysisException($"Source changed during indexing: {file}. Run index again.");
-        }
-        var verified = await SnapshotInputModel.CheckAsync(beforeIndexing, SnapshotEnvironment.Capture(), cancellationToken);
-        if (verified.TrackedInputsChanged || verified.Diagnostics.Length != 0)
-            throw new AnalysisException("Inputs changed while indexing. Run index again.");
-
         return new CodebaseIndex
         {
             SchemaVersion = IndexStore.SchemaVersion,
             ToolVersion = CodeAtlasVersion.Current,
-            IndexId = Guid.NewGuid().ToString("N"),
-            Solution = path,
+            IndexId = indexId,
+            Solution = SolutionPath,
             CreatedAtUtc = DateTimeOffset.UtcNow,
             Warnings = analysis.Warnings.ToArray(),
             Projects = projects.Select(p => new IndexedProject(analysis.Relative(p.FilePath!), p.Name,
@@ -118,6 +142,8 @@ public sealed partial class SolutionAnalysis
             InputRoots = roots,
             ExplicitInputs = inputs,
             Fingerprints = beforeIndexing.Files.Where(pair => pair.Value.Exists).ToDictionary(pair => pair.Key, pair => pair.Value.Sha256!, SnapshotInputModel.PathComparer),
+            IncrementalState = incrementalCapture.State,
+            Refresh = refreshed.Summary,
             InputManifest = beforeIndexing
         };
     }

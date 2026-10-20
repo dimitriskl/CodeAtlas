@@ -6,6 +6,7 @@ var managedEntryUtc = DateTimeOffset.UtcNow;
 var jsonOptions = new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase, WriteIndented = true };
 const string usage = """
 Usage: codeatlas index --solution <path.sln|path.slnx> [--reference-workers <1-8>]
+       codeatlas refresh --solution <path.sln|path.slnx> [--reference-workers <1-8>]
        codeatlas --version
        codeatlas index-status --index <path-to-index.json> [--profile]
        codeatlas find-symbol (--index <path-to-index.json> | --solution <path>) --name <method-name> [--type <declaring-type>]
@@ -32,7 +33,7 @@ if (args.Length == 1 && args[0] is "--help" or "-h")
 
 using var cancellation = new CancellationTokenSource();
 Console.CancelKeyPress += (_, e) => { e.Cancel = true; cancellation.Cancel(); };
-using var indexingProgress = args.Length > 0 && args[0] == "index" ? new IndexProgressReporter() : null;
+using var indexingProgress = args.Length > 0 && (args[0] is "index" or "refresh") ? new IndexProgressReporter() : null;
 var command = args.FirstOrDefault();
 CodebaseIndex? loadedIndex = null;
 LoadedSnapshot? loadedSnapshot = null;
@@ -42,7 +43,7 @@ var coverageAvailable = false;
 QueryProfile? profile = null;
 try
 {
-    if (args.Length < 3 || command is not ("index" or "index-status" or "find-symbol" or "find-references"))
+    if (args.Length < 3 || command is not ("index" or "refresh" or "index-status" or "find-symbol" or "find-references"))
         throw new ArgumentException(usage);
     var options = new Dictionary<string, string>(StringComparer.Ordinal);
     for (var i = 1; i < args.Length; i++)
@@ -63,7 +64,7 @@ try
         throw new QueryException("unsupported_contract", "Supported JSON contract version: 1.");
     if (options.Remove("--profile"))
     {
-        if (command == "index")
+        if (command is "index" or "refresh")
             throw new ArgumentException("--profile is for queries and index-status; indexing already saves stage timings.");
         profile = new QueryProfile(managedEntryUtc);
     }
@@ -73,7 +74,7 @@ try
     T Timed<T>(string phase, Func<T> action) => profile is null ? action() : profile.Measure(phase, action);
 
     object result;
-    if (command == "index")
+    if (command is "index" or "refresh")
     {
         if (!options.TryGetValue("--solution", out var path)
             || options.Keys.Any(key => key is not ("--solution" or "--reference-workers")))
@@ -82,7 +83,9 @@ try
         if (options.TryGetValue("--reference-workers", out var workers)
             && (!int.TryParse(workers, out referenceWorkers) || referenceWorkers is < 1 or > 8))
             throw new ArgumentException("--reference-workers must be an integer between 1 and 8.");
-        var index = await SolutionAnalysis.CreateIndexAsync(path, cancellation.Token, indexingProgress, referenceWorkers);
+        var index = command == "refresh"
+            ? await SolutionAnalysis.RefreshIndexAsync(path, cancellation.Token, indexingProgress, referenceWorkers)
+            : await SolutionAnalysis.CreateIndexAsync(path, cancellation.Token, indexingProgress, referenceWorkers);
         indexingProgress!.Report(new(IndexStage.Saving));
         freshness = ResponseContract.Freshness(await IndexStore.CheckFreshnessAsync(index, cancellation.Token));
         loadedSnapshot = await IndexStore.PublishAsync(index, async (stream, token) =>
@@ -97,7 +100,7 @@ try
             index = IndexStore.DefaultPath(index.Solution),
             overview = loadedSnapshot.OverviewPath,
             snapshotIndex = loadedSnapshot.IndexPath,
-            index.IndexId, index.CreatedAtUtc, index.ToolVersion,
+            index.IndexId, index.CreatedAtUtc, index.ToolVersion, refresh = index.Refresh,
             projects = index.Projects.Length, types = index.Types.Length, methods = index.Methods.Length,
             warningCount = index.Warnings.Length, index.Warnings
         };
@@ -111,6 +114,7 @@ try
         coverageAvailable = true;
         freshness = ResponseContract.Freshness(await TimedAsync("freshnessHashing", () => IndexStore.CheckFreshnessAsync(index, cancellation.Token)));
         result = new { index.Solution, index.IndexId, index.CreatedAtUtc, index.ToolVersion,
+            refresh = index.Refresh,
             warningCount = index.Warnings.Length, index.Warnings };
     }
     else

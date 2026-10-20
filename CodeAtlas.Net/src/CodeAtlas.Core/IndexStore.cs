@@ -58,6 +58,8 @@ public static class IndexStore
         static bool Position(SourcePosition? value) => value is not null && Text(value.File) && value.Line > 0 && value.Column > 0;
         if (index is null)
             throw new IndexFormatException("invalid_index", "Invalid index contents. Rebuild the index.");
+        if (index.VirtualSnapshot is not null)
+            throw new IndexFormatException("invalid_index", "A virtual benchmark snapshot cannot be loaded or published as a disk index.");
         if (index.SchemaVersion != SchemaVersion)
             throw new IndexFormatException("unsupported_index", "Unsupported index version. Rebuild the index with this version of CodeAtlas.");
         if (string.IsNullOrWhiteSpace(index.IndexId) || !Path.IsPathFullyQualified(index.Solution)
@@ -131,7 +133,7 @@ public static class IndexStore
     private static GenerationArtifact TextArtifact(string name, string value) => new(name,
         (stream, token) => stream.WriteAsync(Encoding.UTF8.GetBytes(value), token).AsTask());
 
-    private static string WarningText(CodebaseIndex index)
+    internal static string WarningText(CodebaseIndex index)
     {
         var text = new StringBuilder().AppendLine("CodeAtlas warning report")
             .AppendLine($"Solution: {index.Solution}").AppendLine($"Source: index {index.IndexId}")
@@ -150,7 +152,7 @@ public static class IndexStore
         return text.ToString();
     }
 
-    private static string Overview(CodebaseIndex index)
+    internal static string Overview(CodebaseIndex index)
     {
         static string Escape(string value) => value.Replace("`", "'").Replace("\r", " ").Replace("\n", " ");
         var result = new StringBuilder();

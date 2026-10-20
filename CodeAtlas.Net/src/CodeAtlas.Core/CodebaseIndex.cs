@@ -16,6 +16,9 @@ public sealed record IndexFreshness(bool IsStale, string[] ChangedFiles)
 
 public sealed record CodebaseIndex
 {
+    public IncrementalSnapshotState? IncrementalState { get; init; }
+    public RefreshSummary? Refresh { get; init; }
+    public string? VirtualSnapshot { get; init; }
     public SnapshotInputManifest? InputManifest { get; init; }
     public required int SchemaVersion { get; init; }
     public string? ToolVersion { get; init; }

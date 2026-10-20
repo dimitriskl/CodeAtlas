@@ -57,6 +57,8 @@ Acceptance: failures leave a usable previous snapshot or a clear recovery path; 
 
 ### 5. Introduce safe incremental refresh
 
+Status: completed in 0.00.13. [Refresh evidence](INCREMENTAL-REFRESH.md) records fixture equality, three eConnector body-edit pairs inside the predeclared time and memory budgets, and the still-open milestone 4 freshness maximum.
+
 Track dependencies so changes invalidate all affected analysis, including references in unchanged files. Cover body/signature changes, additions, deletions, renames, project references, and configuration changes. Fall back to a full rebuild when the affected scope cannot be established safely.
 
 Acceptance: after each supported edit scenario, incremental results equal a clean full rebuild. Repeated edit/query cycles on eConnector meet an agreed refresh budget, and interrupted refresh preserves snapshot guarantees. A file-only update that misses dependent references is not sufficient.
@@ -124,4 +126,4 @@ An agent should follow purpose → candidate symbols → source and references �
 
 For each completed change, record the relevant acceptance evidence here or in a linked validation report, run the required checks, and increment the version once with `scripts/bump-version.py`. Regenerate CodeAtlas's own index after the versioned change. Run target-solution benchmarks when the change affects analysis/performance; routine roadmap edits do not require repeating the long eConnector run.
 
-Immediate next step: integrate milestone 4's snapshot publication and freshness guarantees. Semantic descriptions and discovery are accepted roadmap scope; AI-generated explanations, duplicate detection, and graph traversal have their own acceptance gates and do not delay the initial core production gate.
+Immediate next step: add symbol descriptions from existing documentation. The milestone 4 large freshness maximum remains an open release gate. Semantic descriptions and discovery are accepted roadmap scope; AI-generated explanations, duplicate detection, and graph traversal have their own acceptance gates and do not delay the initial core production gate.

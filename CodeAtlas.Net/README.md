@@ -1,12 +1,14 @@
 # CodeAtlas .NET
 
-Version: **0.00.12**
+Version: **0.00.13**
 
 See [version history](docs/VERSION.md) for what is implemented and the versioning rules. `Version.props` is the build's version source. Run `dotnet run --project src/CodeAtlas.Cli --no-build -- --version` to check the built CLI.
 
 CodeAtlas is a C# semantic-analysis library and CLI built with Roslyn. The CLI calls our library directly; there is no MCP layer.
 
-CodeAtlas scans all C# projects in a solution, saves a structured index and a readable overview, and answers method/reference queries from that index. Graph traversal, impact analysis, incremental updates, and Angular support are future work.
+CodeAtlas scans all C# projects in a solution, saves a structured index and a readable overview, and answers method/reference queries from that index. Refresh can reuse references after verified method-body edits and safely rebuilds when reuse cannot be established. Graph traversal, impact analysis, and Angular support are future work.
+
+Start with the [user guide](docs/USER-GUIDE.md) for the solution-to-query workflow, warning reports, refresh, coding-agent usage and recovery.
 
 See the [development roadmap](docs/ROADMAP.md) for the ordered production-readiness milestones, semantic descriptions and discovery, duplicate detection, and acceptance criteria. Planned capabilities are distinct from the implemented commands below.
 
@@ -17,7 +19,7 @@ Install the .NET SDK selected by `global.json`, then run from `C:\Code\CodeAtlas
 ```bash
 dotnet restore CodeAtlas.slnx --locked-mode
 dotnet build CodeAtlas.slnx --no-restore
-dotnet test CodeAtlas.slnx --no-build --no-restore
+dotnet test CodeAtlas.slnx --no-build --no-restore -- xUnit.MaxParallelThreads=2
 python3 -m unittest discover -s tests/versioning -p 'test_*.py'
 ```
 
@@ -95,7 +97,17 @@ dotnet run --project src/CodeAtlas.Cli --no-build -- index-status \
   --index <manifest-path-returned-by-index>
 ```
 
-The JSON result includes `freshness.isStale` and `freshness.changedFiles`. Indexed queries refuse stale results with error code `stale_index` and exit status 3. Re-run `index --solution ...` after changes; rebuilding currently analyzes the whole solution. The overview is a static file and cannot update its own freshness notice.
+The JSON result includes `freshness.isStale` and `freshness.changedFiles`. Indexed queries refuse stale results with error code `stale_index` and exit status 3. Run `refresh --solution ...` after changes, or `index --solution ...` to force full analysis. The overview is a static file and cannot update its own freshness notice.
+
+Refresh uses the same solution path and stable manifest:
+
+```powershell
+dotnet run --project src/CodeAtlas.Cli --no-build -- refresh --solution 'C:\LocalCode\eConnectorV2Git\eConnectorV2.sln'
+```
+
+Refresh still loads and compiles the current solution. It reuses unchanged reference origins only when all observed compilation contexts match and the changed documents preserve their declaration surfaces. It searches every supported method in every changed document context, including linked files. Signature, project/configuration, document inventory and unsupported-context changes take a full reference rebuild; a missing or older baseline also needs a full seed. A corrupt existing snapshot is an explicit error.
+
+The result's `refresh.mode` is `incremental-body`, `incremental-noop` or `full`. Inspect `fallbackReason`, `changedDocumentContexts`, `referenceSearches` and `reusedReferences` to understand the work performed. Even a no-op refresh currently loads, verifies and publishes a new generation; use its new `indexId` for subsequent pagination. Refresh preserves the same atomic publication and partial-coverage rules as full indexing. See [incremental refresh](docs/INCREMENTAL-REFRESH.md) for scope and qualification evidence.
 
 Freshness checks hash source and discovered configuration inputs, loaded linked/additional/analyzer-config documents, evaluated imports, actual restore assets paths, resolved binary/analyzer references, selected SDK/toolchain files and SDK directory inventory. The environment is represented by a digest; raw values are never stored. Content hashes detect equal-size, equal-timestamp changes. Build/output directories are excluded from discovery but explicitly loaded inputs remain tracked.
 
@@ -108,7 +120,7 @@ Suggested agent workflow:
 2. Read `overview.md` for orientation.
 3. Query the relevant method and its references; read the actual source at returned locations.
 4. Make changes and run the build/tests.
-5. Rebuild the index before using it for further navigation.
+5. Refresh the index before using it for further navigation, then use the new snapshot ID.
 
 Results go to stdout as JSON; indexing progress goes to stderr as text, and errors go to stderr as JSON. Exit codes are 0 for success (including empty results and a successfully reported stale status), 1 for analysis/index failure, 2 for invalid arguments, 3 for a stale query, and 130 for cancellation. `--help` prints usage text.
 

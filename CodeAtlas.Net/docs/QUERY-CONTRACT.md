@@ -59,7 +59,7 @@ Live `--solution` queries support filters and a bounded first page. They have no
 
 ## Freshness, coverage and legacy indexes
 
-Indexed freshness is `fresh` or `stale`, with `isStale`, `changedFiles`, and scope `tracked-input-content-hashes`. This is a claim about the documented tracked input model, not all possible MSBuild dependencies. Environment variables, installed SDK changes, untracked imports/binaries, custom intermediate-output paths and untracked generator inputs remain explicit limitations.
+Indexed freshness is `fresh`, `stale` or `unknown`, with `isStale`, `changedFiles`, and scope `tracked-input-content-hashes`. This is a claim about the documented tracked input model, not all possible MSBuild dependencies. Tracked environment, SDK, import, resolved binary and assets changes invalidate snapshots. Arbitrary build inputs, unobserved target contexts and generator inputs retain explicit partial coverage; see the integrity section below.
 
 Live freshness uses state `live-analysis`, isStale null and scope `loaded-semantic-workspace`. It does not claim that disk inputs remained unchanged after workspace loading.
 
@@ -92,3 +92,11 @@ Pass the index command's `index` value (`current.json`) to saved queries. A comm
 `freshness.state` is `stale`, `fresh`, or `unknown`; `checkedAtUtc` records the check. `inputCoverage` identifies the supported model, complete/partial status, issue count and distinct reason codes. Full per-project coverage details are in `warningsFile`, with `coverageIssueCount` separate from MSBuild `warningCount`. Partial generator, multi-target or dynamic build evidence yields `unknown` even when observed files match. `isStale: false` alone does not prove complete freshness. File/environment/SDK changes set `isStale: true`; saved queries reject those changes as before. Legacy input models remain unknown until rebuilt.
 
 Additional stable errors: `index_busy` means another writer holds the per-solution publication lock; `snapshot_io_failed` means an artifact could not be read/published. `invalid_index` includes missing, truncated, checksum-mismatched or identity-mismatched generations; `unsupported_index` includes incompatible manifests. Rebuild explicitly; there is no automatic fallback to older data. See [reliability and recovery](SNAPSHOT-RELIABILITY.md).
+
+## Refresh metadata
+
+`refresh --solution <path>` accepts the same `--reference-workers` bounds and JSON contract option as `index`. Both commands return the stable `index` manifest, immutable report paths, new `indexId` and a `refresh` summary. Status returns the summary stored in that generation; older snapshots may have no summary. Queries retain their existing fields, filters, ordering and paging rules.
+
+The summary fields are `mode`, nullable `fallbackReason`, nullable `baselineIndexId`, `changedDocumentContexts`, `totalDocumentContexts`, `referenceSearches` and `reusedReferences`. Modes are `incremental-body`, `incremental-noop` and `full`. A full explicit `index` reports `explicit_full_index`; refresh reports its actual fallback reason when it must rebuild. Counts describe reference work, not complete runtime coverage. Even no-op refresh publishes a new generation and invalidates older continuation identities.
+
+Refresh never requires its old snapshot to match current source before it begins: source edits are its purpose. It authenticates the baseline generation, proves whether its semantic state can be reused, analyzes the current solution and applies the same input guards and atomic publication as indexing. Corruption/IO errors remain explicit, and absent or incompatible incremental metadata triggers full analysis. The current analysis retains its truthful freshness/coverage envelope. See [refresh scope and evidence](INCREMENTAL-REFRESH.md).
