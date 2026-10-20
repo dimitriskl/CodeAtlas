@@ -29,6 +29,7 @@ internal sealed class GenerationStore(
     Action<string, string>? commitManifest = null)
 {
     private static readonly string[] Names = ["index.json", "overview.md", "warnings.txt", "timings.json"];
+    private static readonly string[] CatalogNames = ["catalog.json"];
     private static readonly JsonSerializerOptions JsonOptions = new() { PropertyNamingPolicy = JsonNamingPolicy.CamelCase };
     private static StringComparer PathComparer => OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal;
 
@@ -47,9 +48,11 @@ internal sealed class GenerationStore(
     {
         if (!Guid.TryParseExact(indexId, "N", out _))
             throw new ArgumentException("Index ID must be a GUID in N format.", nameof(indexId));
-        if (artifacts.Count != Names.Length || !artifacts.Select(a => a.Name).Order(StringComparer.Ordinal)
-                .SequenceEqual(Names.Order(StringComparer.Ordinal)))
-            throw new ArgumentException("A generation requires exactly index.json, overview.md, warnings.txt and timings.json.");
+        var expected = artifacts.Any(artifact => artifact.Name == "catalog.json")
+            ? Names.Concat(CatalogNames).Order(StringComparer.Ordinal).ToArray()
+            : Names.Order(StringComparer.Ordinal).ToArray();
+        if (!artifacts.Select(artifact => artifact.Name).Order(StringComparer.Ordinal).SequenceEqual(expected))
+            throw new ArgumentException("A generation requires index.json, overview.md, warnings.txt and timings.json, plus catalog.json when symbol catalogs are stored separately.");
 
         solution = Path.GetFullPath(solution);
         var manifestPath = DefaultPath(solution);
@@ -116,7 +119,7 @@ internal sealed class GenerationStore(
     }
 
     public static async Task<ResolvedGeneration> ResolveAsync(string manifestPath,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default, bool verifyCatalog = true)
     {
         manifestPath = Path.GetFullPath(manifestPath);
         GenerationManifest? manifest;
@@ -136,21 +139,22 @@ internal sealed class GenerationStore(
             throw Invalid("Empty snapshot manifest.");
         if (manifest.ManifestVersion != 1)
             throw new SnapshotStoreException("unsupported_index", "Unsupported manifest version. Rebuild the index.");
+        var names = ArtifactNames(manifest);
         if (!Guid.TryParseExact(manifest.IndexId, "N", out _) || string.IsNullOrWhiteSpace(manifest.Solution)
             || !Path.IsPathFullyQualified(manifest.Solution) || manifest.Artifacts is null
-            || manifest.Artifacts.Count != Names.Length
-            || !Names.All(name => manifest.Artifacts.TryGetValue(name, out var item) && item is not null
+            || manifest.Artifacts.Count != names.Length
+            || !names.All(name => manifest.Artifacts.TryGetValue(name, out var item) && item is not null
                 && item.Length >= 0 && item.Sha256 is { Length: 64 } && item.Sha256.All(Uri.IsHexDigit)))
             throw Invalid("Invalid snapshot manifest contents.");
         var directory = Path.Combine(Path.GetDirectoryName(manifestPath)!, "generations", manifest.IndexId);
-        foreach (var name in Names)
+        foreach (var name in names)
         {
             var info = new FileInfo(Path.Combine(directory, name));
             if (!info.Exists || info.Length != manifest.Artifacts[name].Length)
                 throw Invalid("Snapshot artifact is missing or truncated: " + name);
         }
         var resolved = new ResolvedGeneration(manifestPath, directory, manifest);
-        foreach (var name in Names.Where(name => name != "index.json"))
+        foreach (var name in names.Where(name => name != "index.json" && (verifyCatalog || name != "catalog.json")))
             await ReadVerifiedAsync(resolved, name, async (stream, token) => { await stream.CopyToAsync(Stream.Null, token); return true; }, cancellationToken);
         return resolved;
     }
@@ -158,7 +162,8 @@ internal sealed class GenerationStore(
     public static async Task<T> ReadVerifiedAsync<T>(ResolvedGeneration snapshot, string name,
         Func<Stream, CancellationToken, Task<T>> read, CancellationToken cancellationToken = default)
     {
-        if (!Names.Contains(name, StringComparer.Ordinal) || !snapshot.Manifest.Artifacts.TryGetValue(name, out var expected))
+        if ((!Names.Contains(name, StringComparer.Ordinal) && !CatalogNames.Contains(name, StringComparer.Ordinal))
+            || !snapshot.Manifest.Artifacts.TryGetValue(name, out var expected))
             throw Invalid("Unknown snapshot artifact.");
         using var hash = SHA256.Create();
         await using var file = new FileStream(snapshot.ArtifactPath(name), FileMode.Open, FileAccess.Read,
@@ -201,6 +206,9 @@ internal sealed class GenerationStore(
             throw new SnapshotStoreException("index_busy", "Another writer is publishing this solution. Retry later.", exception);
         }
     }
+
+    private static string[] ArtifactNames(GenerationManifest manifest) =>
+        manifest.Artifacts?.ContainsKey("catalog.json") == true ? Names.Concat(CatalogNames).ToArray() : Names;
 
     private static SnapshotStoreException Invalid(string message) => new("invalid_index", message + " Rebuild the index.");
 }

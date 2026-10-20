@@ -290,7 +290,8 @@ try
         request.ValidateOptions(supportsType: command == "find-symbol" || singleton, indexed: options.ContainsKey("--index"));
         if (options.TryGetValue("--index", out var indexPath))
         {
-            loadedSnapshot = await TimedAsync("jsonLoading", () => IndexStore.LoadSnapshotAsync(indexPath, cancellation.Token));
+            loadedSnapshot = await TimedAsync("jsonLoading", () => IndexStore.LoadSnapshotAsync(
+                indexPath, includeCatalog: singleton || kind != "method", cancellation.Token));
             var index = loadedIndex = loadedSnapshot.Index;
             coverageAvailable = true;
             var status = await TimedAsync("freshnessHashing", () => IndexStore.CheckFreshnessAsync(index, cancellation.Token));

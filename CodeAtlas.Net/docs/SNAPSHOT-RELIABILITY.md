@@ -54,6 +54,12 @@ Targeted diagnosis replayed the actual input model (4,908 tracked paths, 205,605
 
 After diagnostic cleanup, all 25 product C# source files matched the retained pre-probe input hashes. The Debug build again passed with no warnings/errors. A minimal-output test run stalled after 107 completions and was explicitly terminated; the retained log records its abortion, not a pass. A diagnostic rerun with per-test output and a 90-second hang collector completed **all 118 tests in 24.953 seconds**, so no hang dump was produced and no cause is established for the earlier stall. All **21 Python tests** pass with ordinary Windows permissions (the restricted automation sandbox denies temporary-directory writes). The final own-solution index was regenerated and its status verified at **0.00.12**. No temporary diagnostic code remains in the product. These checks validate the implementation; they do not close the separate failed large-query performance gate.
 
+## Release requalification — 20 October 2026
+
+Symbol documentation, structural facts and duplicate groups made one combined `index.json` 581,733,388 bytes. Method queries then missed the frozen large budgets: medians were about 4.47 seconds and the peak was 1,003,843,584 bytes. The 24.334 second sample did not return. That failed report remains at `.codeatlas/query-benchmarks/20261020T122348656757Z-release-large-v20/`.
+
+Method and reference queries now read `index.json` only. Documentation, facts and duplicate groups are in `catalog.json`, which those queries do not hash or deserialize. A new eConnector generation `fc8a59061ead4250966321e4afd3c00d` has `index.json` of 146,018,786 bytes and `catalog.json` of 435,714,712 bytes. The large qualification passed all six cases. Medians were 1.966–1.999 seconds, maxima were 2.019–2.053 seconds, and peaks were 335.6–357.0 MiB. The previously failing second reference page had median 1.989 seconds and maximum 2.041 seconds. The report is `.codeatlas/query-benchmarks/20261020T125043388696Z-release-large-v20-split/`. The historical 24.334 second sample is retained and was not reproduced.
+
 
 ## Reproduction
 

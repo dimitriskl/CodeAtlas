@@ -1,6 +1,6 @@
 # CodeAtlas .NET
 
-Version: **0.00.20**
+Version: **0.00.21**
 
 See [version history](docs/VERSION.md) for what is implemented and the versioning rules. `Version.props` is the build's version source. Run `dotnet run --project src/CodeAtlas.Cli --no-build -- --version` to check the built CLI.
 
@@ -57,6 +57,7 @@ dotnet run --project src/CodeAtlas.Cli --no-build -- index --solution CodeAtlas.
 Outputs commit as one immutable generation under `.codeatlas/solutions/<solution-file>-<absolute-path-hash>/`. The index command returns `index`, the stable `current.json` manifest to pass to queries, and immutable `snapshotIndex`, `overview`, `warningsFile`, and `timings` paths. Each solution has its own pointer even when solutions share a directory.
 
 - `index.json`: versioned projects, files, types, methods, references, warnings, fingerprints and input-coverage evidence.
+- `catalog.json`: symbol documentation, structural facts and duplicate candidates. Method and reference queries do not read it.
 - `overview.md`: a compact project/type map with generation identity and query instructions.
 - `warnings.txt`: the complete warning report, including an explicit zero-warning report.
 - `timings.json`: measured indexing stages, bound to the same generation. Measurements include index, overview and warning staging; timing staging, final input validation, manifest commit and console output are excluded. `elapsedSeconds` includes publication.

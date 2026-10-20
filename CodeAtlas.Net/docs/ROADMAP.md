@@ -47,7 +47,7 @@ Acceptance: representative queries meet recorded latency and memory budgets, det
 
 ### 4. Harden snapshot reliability and freshness
 
-Status: implementation and Windows failure qualification complete in the 0.00.12 candidate; final two-pass eConnector indexing and complete comparison pass, as do small query budgets. One large freshness check exceeded the maximum-time budget and is under diagnosis; milestone completion remains pending. [Reliability evidence](SNAPSHOT-RELIABILITY.md) records the publication boundary, read-only queries, two-pass input capture, actual process-kill/ACL checks and explicit input-coverage limits. The versioned build passes 118 .NET and 21 Python tests.
+Status: large-query budgets passed on 20 October 2026 after method queries stopped reading the symbol catalog. [Reliability evidence](SNAPSHOT-RELIABILITY.md) keeps the historical 24.334 second sample and records the passing rerun.
 
 Test concurrent readers/writers, cancellation, process interruption, corrupt or incompatible indexes, and permission/disk failures. Define recovery and consistency across index, overview, warnings, and timings. Account for Windows path behavior, multiple solutions sharing a directory, and queries against read-only artifacts.
 
@@ -75,7 +75,7 @@ Acceptance: documentation is returned with the correct symbol and overload, miss
 
 ### 7. Add structural facts and discovery by purpose
 
-Status: implemented in 0.00.15. [Search evidence](STRUCTURAL-SEARCH.md) records the fact and ranking contract and 236 passing .NET tests. The eConnector retrieval comparison is still outstanding, so the production retrieval gate is not closed.
+Status: implemented in 0.00.15 and scored on 20 October 2026. [Search evidence](STRUCTURAL-SEARCH.md). Assisted search improved D1–D3 and H1, H2 and H4. D4, H3, H5, H6, N1 and N2 failed the accepted checks, so the retrieval gate is not closed.
 
 Expose supported Roslyn-derived facts such as implemented interfaces and resolved dependencies, with locations and coverage boundaries. Add text search across names, signatures, and documentation, followed by ranked purpose-oriented retrieval where evaluation justifies it. Return why a result matched and evidence that lets an agent inspect the source.
 
@@ -140,4 +140,4 @@ An agent should follow purpose → candidate symbols → source and references �
 
 For each completed change, record the relevant acceptance evidence here or in a linked validation report, run the required checks, and increment the version once with `scripts/bump-version.py`. Regenerate CodeAtlas's own index after the versioned change. Run target-solution benchmarks when the change affects analysis/performance; routine roadmap edits do not require repeating the long eConnector run.
 
-Immediate next step: close the open release gates before version 1. Those gates are the milestone 4 large freshness maximum, the milestone 7 eConnector retrieval comparison, and a clean-machine install. Milestones 9 and 10 also still need their accuracy and false-positive studies. Semantic descriptions and discovery are accepted roadmap scope; AI-generated explanations, duplicate detection, and graph traversal have their own acceptance gates and do not delay the initial core production gate.
+Immediate next step: the milestone 7 retrieval gate is still open. Assisted search improved several accepted questions, and the ambiguous and unsupported-scope questions failed. Duplicate groups include false matches among short methods. Version 1 is not published. Semantic descriptions and discovery are accepted roadmap scope; AI-generated explanations, duplicate detection, and graph traversal have their own acceptance gates and do not delay the initial core production gate.

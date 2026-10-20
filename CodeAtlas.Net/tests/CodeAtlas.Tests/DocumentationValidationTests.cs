@@ -18,7 +18,8 @@ public sealed class DocumentationValidationTests(IndexedSolution fixture) : ICla
     public async Task SchemaTwoRejectsMissingAndMalformedCatalogBeforeQueries(string corruption)
     {
         // Arrange
-        var json = JsonNode.Parse(await File.ReadAllTextAsync(fixture.IndexArtifactPath))!.AsObject();
+        var options = new System.Text.Json.JsonSerializerOptions { PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase };
+        var json = JsonNode.Parse(System.Text.Json.JsonSerializer.Serialize(fixture.Index, options))!.AsObject();
         switch (corruption)
         {
             case "absent-catalog": json.Remove("symbols"); break;
