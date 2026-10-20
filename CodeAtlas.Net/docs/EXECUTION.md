@@ -30,7 +30,7 @@ The roadmap setup was committed as `7d6d0cc` (`0.00.08`). Each implementation mi
 | 6. Symbol documentation | Complete, 0.00.14, commit `5a78085` | [Catalog evidence](SYMBOL-DOCUMENTATION.md). 228 .NET / 23 Python tests pass serially. eConnector documentation collection took 1.419 seconds and left projects, types, methods, and references unchanged. |
 | 7. Structural facts/discovery | Implemented, 0.00.15; eConnector retrieval comparison outstanding | [Search evidence](STRUCTURAL-SEARCH.md). 236 .NET / 23 Python tests pass serially. |
 | 8. Packaging/qualification | Local package implemented, 0.00.16; not published | [Packaging](PACKAGING.md). `CodeAtlas.Tool` 0.0.16 installed from a local folder and printed `0.00.16`. Clean machine and Linux are not qualified. |
-| 9. AI explanations | Planned | Local request/response integration selected. |
+| 9. AI explanations | Local files implemented, 0.00.17 | [Explanations](EXPLANATIONS.md). Import rejects a changed symbol. No provider call and no accuracy study. |
 | 10. Duplicate candidates | Planned | — |
 | 11. Callers/impact | Planned | — |
 | 12. Coverage expansion | Planned | Roadmap scope: C# expansion and separate Angular/TypeScript engine design; SQL remains a later design decision. |

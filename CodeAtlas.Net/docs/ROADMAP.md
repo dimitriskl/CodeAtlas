@@ -93,6 +93,8 @@ Acceptance: milestones 1–7 have recorded evidence; a clean supported machine c
 
 ### 9. Add optional AI-generated explanations
 
+Status: local request/response files implemented in 0.00.17. [Explanation evidence](EXPLANATIONS.md). No model is called. Accuracy on reviewed examples is not measured.
+
 Generate missing or requested explanations on demand for selected symbols and their relevant context. Keep developer documentation, structural facts, and AI interpretations in separate fields. Store source evidence, model/provider and generation-version provenance, and the content/dependency fingerprints used to produce each explanation.
 
 Invalidate or clearly mark explanations when their source or supplied context changes. Make provider use explicit and configurable, with cancellation, cost limits, and clear control over source sent outside the machine. Avoid generating explanations for every symbol by default. Explain local variables only when needed for the selected method.
@@ -132,4 +134,4 @@ An agent should follow purpose → candidate symbols → source and references �
 
 For each completed change, record the relevant acceptance evidence here or in a linked validation report, run the required checks, and increment the version once with `scripts/bump-version.py`. Regenerate CodeAtlas's own index after the versioned change. Run target-solution benchmarks when the change affects analysis/performance; routine roadmap edits do not require repeating the long eConnector run.
 
-Immediate next step: optional local AI explanations. The milestone 4 freshness maximum, the milestone 7 retrieval comparison, and clean-machine installation remain open release gates. Semantic descriptions and discovery are accepted roadmap scope; AI-generated explanations, duplicate detection, and graph traversal have their own acceptance gates and do not delay the initial core production gate.
+Immediate next step: duplicate candidates. The milestone 4 freshness maximum, the milestone 7 retrieval comparison, and clean-machine installation remain open release gates. Semantic descriptions and discovery are accepted roadmap scope; AI-generated explanations, duplicate detection, and graph traversal have their own acceptance gates and do not delay the initial core production gate.

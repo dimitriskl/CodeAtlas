@@ -16,6 +16,9 @@ Usage: codeatlas index --solution <path.sln|path.slnx> [--reference-workers <1-8
        codeatlas search-symbols (--index <path-to-index.json> | --solution <path>) --query <text> [--mode names|assisted]
                   [--kind method|type|property|field|all] [--language csharp]
        codeatlas get-facts --index <path-to-index.json> --symbol <id>
+       codeatlas explain-request --index <path-to-index.json> --symbol <id> --output <request.json>
+       codeatlas explain-import --index <path-to-index.json> --response <response.json>
+       codeatlas get-explanation --index <path-to-index.json> --symbol <id>
 
 Query options: --project <relative-project-path> --limit <1-1000> --offset <nonnegative> --snapshot <indexId> --profile
 Default limit is 100. Indexed continuations require --snapshot; live queries support only the first page.
@@ -28,6 +31,7 @@ Default/explicit method discovery returns MethodInfo. Other kinds/all return com
 get-documentation returns full developer XML, resolved sections and provenance; missing documentation remains missing.
 search-symbols ranks lexical evidence in names, signatures, authored documentation, and one-hop structural facts.
 It does not call a model. get-facts returns Roslyn facts for one saved symbol. A resolved call is a relationship, not a runtime effect.
+explain-request writes a local file for an external agent. explain-import stores that agent's reply only when the symbol hash still matches.
 """;
 if (args.Length == 1 && args[0] == "--version")
 {
@@ -52,7 +56,7 @@ var coverageAvailable = false;
 QueryProfile? profile = null;
 try
 {
-    if (args.Length < 3 || command is not ("index" or "refresh" or "index-status" or "find-symbol" or "find-references" or "get-documentation" or "search-symbols" or "get-facts"))
+    if (args.Length < 3 || command is not ("index" or "refresh" or "index-status" or "find-symbol" or "find-references" or "get-documentation" or "search-symbols" or "get-facts" or "explain-request" or "explain-import" or "get-explanation"))
         throw new ArgumentException(usage);
     var options = new Dictionary<string, string>(StringComparer.Ordinal);
     for (var i = 1; i < args.Length; i++)
@@ -125,6 +129,47 @@ try
         result = new { index.Solution, index.IndexId, index.CreatedAtUtc, index.ToolVersion,
             refresh = index.Refresh,
             warningCount = index.Warnings.Length, index.Warnings };
+    }
+    else if (command is "explain-request" or "explain-import" or "get-explanation")
+    {
+        if (!options.TryGetValue("--index", out var explainIndex) || options.ContainsKey("--solution"))
+            throw new ArgumentException("Explanation commands read a saved index and do not load a solution.");
+        loadedSnapshot = await TimedAsync("jsonLoading", () => IndexStore.LoadSnapshotAsync(explainIndex, cancellation.Token));
+        var index = loadedIndex = loadedSnapshot.Index;
+        coverageAvailable = index.SchemaVersion >= 2;
+        var symbols = index.Symbols ?? throw new QueryException("rebuild_required", "Rebuild to extract symbol documentation.");
+        if (command == "explain-import")
+        {
+            if (!options.TryGetValue("--response", out var responsePath))
+                throw new ArgumentException(usage);
+            var response = JsonSerializer.Deserialize<ExplanationResponse>(await File.ReadAllTextAsync(responsePath, cancellation.Token), jsonOptions)
+                ?? throw new ArgumentException("The explanation response is empty.");
+            var symbol = symbols.SingleOrDefault(item => item.Id == response.SymbolId)
+                ?? throw new QueryException("symbol_not_found", "Source symbol ID was not found in this snapshot.");
+            var stored = await Explanations.ImportAsync(Path.GetDirectoryName(index.Solution)!, symbol, index.IndexId, response, cancellation.Token);
+            result = new { source = "index", index.Solution, index.IndexId, explanation = stored, warningCount = index.Warnings.Length, warnings = index.Warnings };
+        }
+        else
+        {
+            if (!options.TryGetValue("--symbol", out var explainSymbol))
+                throw new ArgumentException(usage);
+            var symbol = symbols.SingleOrDefault(item => item.Id == explainSymbol)
+                ?? throw new QueryException("symbol_not_found", "Source symbol ID was not found in this snapshot.");
+            if (command == "explain-request")
+            {
+                if (!options.TryGetValue("--output", out var outputPath))
+                    throw new ArgumentException(usage);
+                var request = Explanations.CreateRequest(symbol, index.IndexId, CodeAtlasVersion.Current);
+                await Explanations.WriteRequestAsync(outputPath, request, cancellation.Token);
+                result = new { source = "index", index.Solution, index.IndexId, request, output = Path.GetFullPath(outputPath),
+                    warningCount = index.Warnings.Length, warnings = index.Warnings };
+            }
+            else
+            {
+                var stored = await Explanations.ReadAsync(Path.GetDirectoryName(index.Solution)!, symbol, index.IndexId, cancellation.Token);
+                result = new { source = "index", index.Solution, index.IndexId, explanation = stored, warningCount = index.Warnings.Length, warnings = index.Warnings };
+            }
+        }
     }
     else if (command is "search-symbols" or "get-facts")
     {
