@@ -5,7 +5,7 @@ namespace CodeAtlas;
 /// <summary>Disk-only queries: these operations never open an MSBuild workspace.</summary>
 public static class IndexStore
 {
-    public const int SchemaVersion = 2;
+    public const int SchemaVersion = 3;
     private static readonly JsonSerializerOptions JsonOptions = new() { PropertyNamingPolicy = JsonNamingPolicy.CamelCase, WriteIndented = true };
 
     public static string DefaultPath(string solution) => GenerationStore.DefaultPath(solution);
@@ -60,7 +60,7 @@ public static class IndexStore
             throw new IndexFormatException("invalid_index", "Invalid index contents. Rebuild the index.");
         if (index.VirtualSnapshot is not null)
             throw new IndexFormatException("invalid_index", "A virtual benchmark snapshot cannot be loaded or published as a disk index.");
-        if (index.SchemaVersion is not (1 or SchemaVersion))
+        if (index.SchemaVersion is not (1 or 2 or SchemaVersion))
             throw new IndexFormatException("unsupported_index", "Unsupported index version. Rebuild the index with this version of CodeAtlas.");
         if (string.IsNullOrWhiteSpace(index.IndexId) || !Path.IsPathFullyQualified(index.Solution)
             || index.Warnings is null || index.Projects is null || index.Types is null || index.Methods is null
@@ -77,8 +77,10 @@ public static class IndexStore
             || index.References.Count != index.Methods.Length
             || index.References.Any(r => r.Value is null || r.Value.Any(v => v is null || !Text(v.DefinitionId) || !Text(v.Project) || !Text(v.Kind) || !Position(v.Location))))
             throw new IndexFormatException("invalid_index", "Invalid index contents. Rebuild the index.");
-        if (index.SchemaVersion == SchemaVersion)
+        if (index.SchemaVersion is 2 or SchemaVersion)
             DocumentationValidation.Validate(index);
+        if (index.SchemaVersion == SchemaVersion)
+            StructuralValidation.Validate(index);
     }
 
     public static Task<IndexFreshness> CheckFreshnessAsync(CodebaseIndex index, CancellationToken cancellationToken = default) =>

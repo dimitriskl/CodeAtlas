@@ -32,6 +32,12 @@ Get-Content -LiteralPath $indexed.warningsFile
 
 Stdout contains the JSON outcome. Stderr contains progress and, on failure, error JSON. Redirect stderr as above to keep the outcome readable. Progress counts are completed work, not an ETA. The returned `timings` file records measured stages.
 
+## Search by purpose and read structural facts
+
+`search-symbols --query "claim dispatch ownership" --mode assisted` ranks methods using names, signatures, authored documentation, and one-hop relationships. `--mode names` ignores documentation. The result explains each score. An abstention means the words were too weak or absent, not that the behavior is missing.
+
+`get-facts --index $manifest --symbol <id>` lists Roslyn facts such as interfaces and resolved calls. A resolved call is a relationship in source. It is not proof of what runs.
+
 ## Read authored documentation
 
 `find-symbol --kind type|property|field|all` returns a compact summary with a bounded documentation preview. `get-documentation --symbol <id>` returns the full authored XML and where each section came from, including inherited documentation. CodeAtlas does not invent wording and does not call a language model. A symbol with no documentation is a successful missing result.

@@ -127,6 +127,9 @@ public sealed partial class SolutionAnalysis
         progress?.Report(new(IndexStage.CollectingDocumentation));
         var documentedSymbols = await analysis.GetDocumentedSymbolsAsync(cancellationToken);
         DocumentationValidation.RequireInventoryAgreement(documentedSymbols, methods, types.Values);
+        progress?.Report(new(IndexStage.CollectingFacts));
+        var structuralCatalog = await StructuralCatalogBuilder.CreateAsync(
+            analysis.solution, analysis.SolutionPath, documentedSymbols, cancellationToken);
 
         return new CodebaseIndex
         {
@@ -143,6 +146,7 @@ public sealed partial class SolutionAnalysis
             Types = types.Values.OrderBy(t => t.Name, StringComparer.Ordinal).ThenBy(t => t.Id, StringComparer.Ordinal).ToArray(),
             Symbols = documentedSymbols,
             DocumentationCoverage = DocumentationCoverage.Current,
+            StructuralCatalog = structuralCatalog,
             Methods = methods,
             References = references,
             InputRoots = roots,

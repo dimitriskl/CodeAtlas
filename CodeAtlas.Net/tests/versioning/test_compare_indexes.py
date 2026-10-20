@@ -74,7 +74,7 @@ class ComparisonTests(unittest.TestCase):
 
     def test_malformed_schema_and_nested_collections_are_rejected(self):
         mutations = [
-            lambda value: value.update(schemaVersion=3),
+            lambda value: value.update(schemaVersion=4),
             lambda value: value.update(schemaVersion=True),
             lambda value: value.update(projects={}),
             lambda value: value.update(types=None),

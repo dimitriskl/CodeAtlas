@@ -13,6 +13,9 @@ Usage: codeatlas index --solution <path.sln|path.slnx> [--reference-workers <1-8
                   [--kind method|type|property|field|all]
        codeatlas find-references (--index <path-to-index.json> | --solution <path>) --symbol <id>
        codeatlas get-documentation (--index <path-to-index.json> | --solution <path>) --symbol <id> [--snapshot <indexId>] [--profile]
+       codeatlas search-symbols (--index <path-to-index.json> | --solution <path>) --query <text> [--mode names|assisted]
+                  [--kind method|type|property|field|all] [--language csharp]
+       codeatlas get-facts --index <path-to-index.json> --symbol <id>
 
 Query options: --project <relative-project-path> --limit <1-1000> --offset <nonnegative> --snapshot <indexId> --profile
 Default limit is 100. Indexed continuations require --snapshot; live queries support only the first page.
@@ -23,6 +26,8 @@ Indexing artifacts commit together under .codeatlas/solutions/<solution-identity
 Reference indexing uses 2 concurrent searches by default; use 1 for serial comparison.
 Default/explicit method discovery returns MethodInfo. Other kinds/all return compact SymbolSummary records.
 get-documentation returns full developer XML, resolved sections and provenance; missing documentation remains missing.
+search-symbols ranks lexical evidence in names, signatures, authored documentation, and one-hop structural facts.
+It does not call a model. get-facts returns Roslyn facts for one saved symbol. A resolved call is a relationship, not a runtime effect.
 """;
 if (args.Length == 1 && args[0] == "--version")
 {
@@ -47,7 +52,7 @@ var coverageAvailable = false;
 QueryProfile? profile = null;
 try
 {
-    if (args.Length < 3 || command is not ("index" or "refresh" or "index-status" or "find-symbol" or "find-references" or "get-documentation"))
+    if (args.Length < 3 || command is not ("index" or "refresh" or "index-status" or "find-symbol" or "find-references" or "get-documentation" or "search-symbols" or "get-facts"))
         throw new ArgumentException(usage);
     var options = new Dictionary<string, string>(StringComparer.Ordinal);
     for (var i = 1; i < args.Length; i++)
@@ -120,6 +125,64 @@ try
         result = new { index.Solution, index.IndexId, index.CreatedAtUtc, index.ToolVersion,
             refresh = index.Refresh,
             warningCount = index.Warnings.Length, index.Warnings };
+    }
+    else if (command is "search-symbols" or "get-facts")
+    {
+        if (command == "get-facts" && (options.ContainsKey("--solution") || !options.ContainsKey("--index") || !options.ContainsKey("--symbol")))
+            throw new ArgumentException("get-facts requires --index and --symbol. Live fact queries are not supported.");
+        if (command == "search-symbols" && (!options.ContainsKey("--query")
+            || options.ContainsKey("--solution") == options.ContainsKey("--index")))
+            throw new ArgumentException(usage);
+        var mode = options.GetValueOrDefault("--mode") ?? "assisted";
+        var kind = options.GetValueOrDefault("--kind") ?? "method";
+        var language = options.GetValueOrDefault("--language") ?? "csharp";
+        static int Integer(Dictionary<string, string> values, string key, int fallback) =>
+            !values.TryGetValue(key, out var raw) ? fallback : int.TryParse(raw, out var number)
+                ? number : throw new ArgumentException($"{key} must be an integer.");
+        var request = new QueryRequest(options.GetValueOrDefault("--project"), options.GetValueOrDefault("--type"),
+            Integer(options, "--limit", 100), Integer(options, "--offset", 0), options.GetValueOrDefault("--snapshot"));
+        if (options.TryGetValue("--index", out var factIndex))
+        {
+            loadedSnapshot = await TimedAsync("jsonLoading", () => IndexStore.LoadSnapshotAsync(factIndex, cancellation.Token));
+            var index = loadedIndex = loadedSnapshot.Index;
+            coverageAvailable = true;
+            var status = await TimedAsync("freshnessHashing", () => IndexStore.CheckFreshnessAsync(index, cancellation.Token));
+            freshness = ResponseContract.Freshness(status);
+            if (status.IsStale)
+                throw new StaleIndexException(status.ChangedFiles);
+            if (command == "get-facts")
+            {
+                var page = await TimedAsync("lookup", () => PurposeSnapshotQueries.GetFactsAsync(
+                    loadedSnapshot, options["--symbol"], request, cancellation.Token));
+                result = new { source = "index", index.Solution, index.IndexId, index.CreatedAtUtc, index.ToolVersion,
+                    symbol = options["--symbol"], facts = page.Items, page.Pagination,
+                    warningCount = index.Warnings.Length, warnings = index.Warnings };
+            }
+            else
+            {
+                var search = await TimedAsync("lookup", () => PurposeSnapshotQueries.SearchAsync(
+                    loadedSnapshot, options["--query"], mode, kind, request, language, cancellation.Token));
+                result = new { source = "index", index.Solution, index.IndexId, index.CreatedAtUtc, index.ToolVersion,
+                    symbols = search.Page.Items, pagination = search.Page.Pagination, search.RankingVersion, search.Mode,
+                    search.Language, search.QueryTokens, search.UnmatchedQueryTokens, search.EvidencePolicy, search.Decision,
+                    search.WithheldWeakMatches, search.Limitations, searchCoverage = search.Coverage,
+                    warningCount = index.Warnings.Length, warnings = index.Warnings };
+            }
+        }
+        else
+        {
+            using var analysis = await TimedAsync("liveLoading", () => SolutionAnalysis.LoadAsync(options["--solution"], cancellation.Token));
+            coverageAvailable = true;
+            freshness = ResponseContract.LiveFreshness;
+            var catalog = await TimedAsync("liveLookup", () => analysis.GetDocumentedSymbolsAsync(cancellation.Token));
+            var facts = await TimedAsync("liveLookup", () => analysis.GetStructuralCatalogAsync(catalog, cancellation.Token));
+            var search = Timed("lookup", () => PurposeSearch.Search(catalog, facts, options["--query"], mode, kind, request, snapshotId: null, language));
+            result = new { source = "live", solution = analysis.SolutionPath, symbols = search.Page.Items,
+                pagination = search.Page.Pagination, search.RankingVersion, search.Mode, search.Language, search.QueryTokens,
+                search.UnmatchedQueryTokens, search.EvidencePolicy, search.Decision, search.WithheldWeakMatches,
+                search.Limitations, searchCoverage = search.Coverage,
+                warningCount = analysis.Warnings.Count, warnings = analysis.Warnings };
+        }
     }
     else
     {

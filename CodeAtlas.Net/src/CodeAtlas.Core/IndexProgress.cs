@@ -10,6 +10,7 @@ public enum IndexStage
     FindingReferences,
     CollectingTypes,
     CollectingDocumentation,
+    CollectingFacts,
     VerifyingInputs,
     Saving,
     Completed

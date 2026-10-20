@@ -156,6 +156,9 @@ public sealed partial class SolutionAnalysis : IDisposable
     public Task<DocumentedSymbol[]> GetDocumentedSymbolsAsync(CancellationToken cancellationToken = default) =>
         DocumentationCatalog.CreateAsync(solution, SolutionPath, cancellationToken);
 
+    public Task<StructuralCatalog> GetStructuralCatalogAsync(DocumentedSymbol[] symbols, CancellationToken cancellationToken = default) =>
+        StructuralCatalogBuilder.CreateAsync(solution, SolutionPath, symbols, cancellationToken);
+
     private static IMethodSymbol Canonical(IMethodSymbol symbol) => symbol.OriginalDefinition.PartialDefinitionPart ?? symbol.OriginalDefinition;
     private string Id(Project project, IMethodSymbol symbol) => $"{Relative(project.FilePath!)}::{symbol.GetDocumentationCommentId()}";
     private string Relative(string path) => Path.GetRelativePath(directory, path).Replace('\\', '/');

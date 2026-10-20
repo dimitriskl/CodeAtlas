@@ -31,8 +31,10 @@ def canonical(index):
         if name not in index:
             raise ValueError(f"Missing analysis field: {name}")
     fields = ["projects", "types", "methods", "references"]
-    if index["schemaVersion"] == 2:
+    if index["schemaVersion"] >= 2:
         fields.extend(("symbols", "documentationCoverage"))
+    if index["schemaVersion"] == 3:
+        fields.append("structuralCatalog")
     return normalize({key: index[key] for key in fields})
 
 
@@ -59,8 +61,8 @@ def validate(index):
                     f"{label}.location.{field} must be a positive integer")
 
     require(isinstance(index, dict), "Index must be an object")
-    require(type(index.get("schemaVersion")) is int and index["schemaVersion"] in (1, 2),
-            "Unsupported or missing schemaVersion (expected 1 or 2)")
+    require(type(index.get("schemaVersion")) is int and index["schemaVersion"] in (1, 2, 3),
+            "Unsupported or missing schemaVersion (expected 1, 2, or 3)")
     for section in ("projects", "types", "methods"):
         require(isinstance(index.get(section), list), f"{section} must be an array")
     require(isinstance(index.get("references"), dict), "references must be an object")
@@ -79,7 +81,7 @@ def validate(index):
         for reference in references:
             located(reference, ("definitionId", "project", "kind"), "reference")
             require(reference["kind"] in ("invocation", "reference"), "Unknown reference kind")
-    if index["schemaVersion"] == 2:
+    if index["schemaVersion"] >= 2:
         require(isinstance(index.get("symbols"), list), "symbols must be an array")
         require(isinstance(index.get("documentationCoverage"), dict), "documentationCoverage must be an object")
         require(index["documentationCoverage"].get("version") == 1, "Unsupported documentation coverage")
@@ -89,6 +91,13 @@ def validate(index):
             symbol_ids.append(symbol["id"])
             require(isinstance(symbol.get("documentation"), dict), "symbol.documentation must be an object")
         require(len(symbol_ids) == len(set(symbol_ids)), "Duplicate symbol IDs")
+    if index["schemaVersion"] == 3:
+        catalog = index.get("structuralCatalog")
+        require(isinstance(catalog, dict), "structuralCatalog must be an object")
+        require(isinstance(catalog.get("facts"), list) and isinstance(catalog.get("issues"), list),
+                "structuralCatalog facts and issues must be arrays")
+        require(isinstance(catalog.get("coverage"), dict) and catalog["coverage"].get("version") == 1,
+                "Unsupported structural coverage")
     if "fingerprints" in index:
         require(isinstance(index["fingerprints"], dict) and
                 all(isinstance(path, str) and isinstance(digest, str) for path, digest in index["fingerprints"].items()),
@@ -97,10 +106,10 @@ def validate(index):
 
 def differences(before, after):
     result = {}
-    for section in ("projects", "types", "methods", "references", "symbols", "documentationCoverage"):
+    for section in ("projects", "types", "methods", "references", "symbols", "documentationCoverage", "structuralCatalog"):
         if section not in before and section not in after:
             continue
-        if section == "documentationCoverage":
+        if section == "documentationCoverage" or section == "structuralCatalog":
             if encoded(before.get(section)) != encoded(after.get(section)):
                 result[section] = {"before": before.get(section), "after": after.get(section)}
             continue
