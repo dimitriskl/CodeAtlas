@@ -1,5 +1,7 @@
 # Installable CLI
 
+[Current qualification](QUALIFICATION-2026-10.md) records the 21 October hosted Windows pass and Linux interruption-test failure. Clean-host installation and final release remain unqualified; historical local evidence below is kept separately.
+
 Milestone 8 packages the CLI as the .NET tool `CodeAtlas.Tool`, command `codeatlas`. The package is framework-dependent, not self-contained, not trimmed, and not published to NuGet.org. The selected download location remains a GitHub Release on `dimitriskl/CodeAtlas`. This machine produced a local package and installed it from that folder. A clean machine and Linux have not been qualified.
 
 NuGet normalizes the padded version: `0.00.16` becomes package version `0.0.16`. The installed command still prints the padded version from `Version.props`.
@@ -21,7 +23,7 @@ The installed smoke uses an explicit local-only feed, cleared fallback package f
 
 The package bundles upstream runtime notice files and an inventory derived from the locked restored assets. `verify-package.py --assets src/CodeAtlas.Cli/obj/project.assets.json` verifies exact notice bytes as well as the Roslyn BuildHost payload. When dependency versions change, explicitly refresh and review `python scripts/package_notices.py --assets src/CodeAtlas.Cli/obj/project.assets.json`; verification fails on drift. This preserves upstream metadata/notices and is not a legal certification.
 
-`build/qualification.yml` is the locally prepared Windows/Ubuntu workflow. Activation at the Git-root `.github/workflows/qualification.yml` and hosted execution require the explicit directory/machine exception in AGENTS.md. It builds/tests on both hosts and installs the same Windows-built package on separate hosts with no source checkout. Actions are pinned to resolved commit IDs. Hosted qualification and publication remain pending until actual run evidence is recorded.
+`build/qualification.yml` is the Windows/Ubuntu workflow, activated at the Git-root `.github/workflows/qualification.yml` under the user's explicit directory/machine exception in AGENTS.md. It builds/tests on both hosts and installs the same Windows-built package on separate hosts with no source checkout. Actions are pinned to resolved commit IDs. A build/test failure blocks both install jobs; a package build alone is not clean-host installation evidence.
 
 ## Local 0.00.23 candidate — 21 October 2026
 

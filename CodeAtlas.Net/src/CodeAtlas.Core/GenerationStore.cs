@@ -213,9 +213,12 @@ internal sealed class GenerationStore(
     private static FileStream AcquireWriterLock(string path)
     {
         try { return new(path, FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None); }
-        catch (IOException exception) when ((exception.HResult & 0xffff) is 32 or 33)
+        catch (IOException exception) when (
+            (OperatingSystem.IsWindows() && (exception.HResult & 0xffff) is 32 or 33)
+            || (OperatingSystem.IsLinux() && exception.HResult == 11))
         {
-            // Windows sharing/lock violation only; disk and permission failures are not "busy".
+            // Windows sharing/lock violations; Linux FileShare.None uses flock and
+            // exposes EWOULDBLOCK/EAGAIN as raw errno 11. Other I/O failures are not busy.
             throw new SnapshotStoreException("index_busy", "Another writer is publishing this solution. Retry later.", exception);
         }
     }

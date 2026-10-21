@@ -22,6 +22,14 @@ class VersionTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "major-release"):
             versioning.next_version("0.99.99")
 
+    def test_explicit_major_release_resets_components_and_preserves_padding(self):
+        for current, expected in [("0.00.24", "1.00.00"), ("0.99.99", "1.00.00"),
+                                  ("1.02.03", "2.00.00")]:
+            with self.subTest(current=current):
+                self.assertEqual(versioning.next_version(current, major_release=True), expected)
+        with self.assertRaisesRegex(ValueError, "Major version range"):
+            versioning.next_version("9.99.99", major_release=True)
+
     def test_invalid_formats_are_rejected(self):
         for current in ["0.0.1", "0.00.100", "0.100.01", "-1.00.01", "0.00.01-preview", "10.00.01"]:
             with self.subTest(current=current), self.assertRaises(ValueError):
@@ -54,6 +62,18 @@ class VersionTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 versioning.bump(root, "A change")
             self.assertEqual(before, {p: p.read_bytes() for p in before})
+
+    def test_explicit_major_release_synchronizes_documents_and_history(self):
+        with tempfile.TemporaryDirectory(prefix="codeatlas-version-") as directory:
+            root = Path(directory)
+            self.make_fixture(root)
+            self.assertEqual(versioning.bump(root, "Publish qualified initial release.", major_release=True), "1.00.00")
+            self.assertIn("<CodeAtlasVersion>1.00.00</CodeAtlasVersion>", (root / "Version.props").read_text())
+            for relative in ["README.md", "docs/CodeAtlas-Project-Recap.md", "docs/VERSION.md"]:
+                self.assertIn("Version: **1.00.00**", (root / relative).read_text())
+            history = (root / "docs/VERSION.md").read_text()
+            self.assertIn("### 1.00.00\n\n- Publish qualified initial release.", history)
+            self.assertIn("### 0.00.99\n\n- Earlier work.", history)
 
     def test_summary_is_required_and_single_line(self):
         for summary in ["", "  ", "A change\nAnother line"]:

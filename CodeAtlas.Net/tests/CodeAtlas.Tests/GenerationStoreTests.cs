@@ -211,11 +211,9 @@ public sealed class GenerationStoreTests : IDisposable
     }
 
     [Fact]
-    public async Task SecondWindowsWriterReportsBusyWithoutChangingActivePointer()
+    public async Task SecondWriterReportsBusyWithoutChangingActivePointer()
     {
         // Arrange
-        if (!OperatingSystem.IsWindows())
-            return;
         var oldId = Id();
         var previous = await new GenerationStore().PublishAsync(Solution, oldId, Artifacts(oldId), Fresh);
         using var writerLock = new FileStream(Path.Combine(Path.GetDirectoryName(previous.ManifestPath)!, ".write.lock"),
@@ -226,7 +224,35 @@ public sealed class GenerationStoreTests : IDisposable
         var failure = await Record.ExceptionAsync(() => new GenerationStore().PublishAsync(Solution, nextId, Artifacts(nextId), Fresh));
 
         // Assert
-        Assert.Equal("index_busy", Assert.IsType<SnapshotStoreException>(failure).Code);
+        var busy = Assert.IsType<SnapshotStoreException>(failure);
+        Assert.Equal("index_busy", busy.Code);
+        var nativeFailure = Assert.IsType<IOException>(busy.InnerException);
+        if (OperatingSystem.IsLinux())
+            Assert.Equal(11, nativeFailure.HResult);
+        else if (OperatingSystem.IsWindows())
+            Assert.Contains(nativeFailure.HResult & 0xffff, new[] { 32, 33 });
+        Assert.Equal(oldId, (await GenerationStore.ResolveAsync(previous.ManifestPath)).Manifest.IndexId);
+    }
+
+    [Fact]
+    public async Task WriterLockPathObstructionIsNotReportedAsContention()
+    {
+        // Arrange
+        var oldId = Id();
+        var previous = await new GenerationStore().PublishAsync(Solution, oldId, Artifacts(oldId), Fresh);
+        var pointerBytes = await File.ReadAllBytesAsync(previous.ManifestPath);
+        var lockPath = Path.Combine(Path.GetDirectoryName(previous.ManifestPath)!, ".write.lock");
+        File.Delete(lockPath);
+        Directory.CreateDirectory(lockPath);
+        var nextId = Id();
+
+        // Act
+        var failure = await Record.ExceptionAsync(() => new GenerationStore().PublishAsync(Solution, nextId, Artifacts(nextId), Fresh));
+
+        // Assert
+        Assert.True(failure is IOException or UnauthorizedAccessException, failure?.ToString() ?? "Publication unexpectedly succeeded.");
+        Assert.IsNotType<SnapshotStoreException>(failure);
+        Assert.Equal(pointerBytes, await File.ReadAllBytesAsync(previous.ManifestPath));
         Assert.Equal(oldId, (await GenerationStore.ResolveAsync(previous.ManifestPath)).Manifest.IndexId);
     }
 
@@ -428,19 +454,18 @@ public sealed class GenerationStoreTests : IDisposable
         var expectedId = killPoint == "before" ? oldId : nextId;
         var nextDirectory = Path.Combine(Path.GetDirectoryName(previous.ManifestPath)!, "generations", nextId);
         var recoveryId = Id();
+        var competingId = Id();
+        Process? writer = null;
 
         // Act
         try
         {
             using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(45));
-            while (!File.Exists(ready))
-            {
-                if (child.HasExited)
-                    throw new InvalidOperationException("Publication child exited before checkpoint: " + await stdout + await stderr);
-                await Task.Delay(25, timeout.Token);
-            }
-            child.Kill(entireProcessTree: true);
-            await child.WaitForExitAsync();
+            writer = await PublicationChildProcess.WaitForCheckpointAsync(child, ready, nextId, killPoint, timeout.Token);
+            var competingFailure = killPoint == "before"
+                ? await Record.ExceptionAsync(() => new GenerationStore().PublishAsync(Solution, competingId, Artifacts(competingId), Fresh))
+                : null;
+            await PublicationChildProcess.KillAndWaitAsync(child, writer, timeout.Token);
             var current = await GenerationStore.ResolveAsync(previous.ManifestPath);
             var reports = await Task.WhenAll(current.Manifest.Artifacts.Keys.Select(name => ReadText(current, name)));
             var pointerAfterKill = await File.ReadAllBytesAsync(previous.ManifestPath);
@@ -453,19 +478,23 @@ public sealed class GenerationStoreTests : IDisposable
             Assert.Equal(expectedId, current.Manifest.IndexId);
             Assert.All(reports, report => Assert.Contains(expectedId, report));
             if (killPoint == "before")
+            {
+                Assert.Equal("index_busy", Assert.IsType<SnapshotStoreException>(competingFailure).Code);
                 Assert.Equal(pointerBytes, pointerAfterKill);
+            }
             Assert.True(Directory.Exists(nextDirectory));
             Assert.Contains(oldId, previousWarnings);
             Assert.Equal(recoveryId, recovered.Manifest.IndexId);
         }
         finally
         {
-            if (!child.HasExited)
+            using var cleanupTimeout = new CancellationTokenSource(TimeSpan.FromSeconds(45));
+            try
             {
-                child.Kill(entireProcessTree: true);
-                await child.WaitForExitAsync();
+                await PublicationChildProcess.KillAndWaitAsync(child, writer, cleanupTimeout.Token);
+                await Task.WhenAll(stdout, stderr).WaitAsync(cleanupTimeout.Token);
             }
-            await Task.WhenAll(stdout, stderr);
+            finally { writer?.Dispose(); }
         }
     }
 
@@ -478,7 +507,7 @@ public sealed class GenerationStoreTests : IDisposable
         var args = JsonSerializer.Deserialize<string[]>(encoded)!;
         async Task Pause()
         {
-            await File.WriteAllTextAsync(args[2], "ready");
+            await PublicationChildProcess.WriteCheckpointAsync(args[2], args[1], args[3]);
             await Task.Delay(Timeout.InfiniteTimeSpan);
         }
         var store = new GenerationStore(async (point, _) =>

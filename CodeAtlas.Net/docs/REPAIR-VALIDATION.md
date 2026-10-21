@@ -1,5 +1,7 @@
 # Audit repairs and requalification
 
+This file preserves the repair sequence. [October qualification](QUALIFICATION-2026-10.md) records the latest completed application/semantic/query/resource measurements, hosted Windows success, retained Linux failure and v4 ranking repair. Pending statements below describe their stage of the earlier sequence; subsequently completed checks are distinguished in that current report.
+
 The audit of development commit `32e770e` (0.00.22) reproduced three failing non-method reference tests, stale-result acceptance in newer commands, false graph cycles, ignored caller flags, unsafe duplicate normalization, split-catalog comparison/retention failures and insufficient explanation evidence. Original failed outputs are retained locally in `.codeatlas/audit-20261020-v22/` and `.codeatlas/repair-v23/`; target application source is unchanged.
 
 Repairs centralize saved-query freshness checks, restore the explicit unsupported-reference-kind error, enforce bounded traversal arguments and real cycle detection, and preserve complete immutable generation identity. Duplicate evidence now retains supported binding/literal differences and reports bounded coverage. Optional explanations use registered, bounded source context, exact citations, dependency checks, separate derived storage and responder-reported provenance. The user guides describe these contracts and their limits.

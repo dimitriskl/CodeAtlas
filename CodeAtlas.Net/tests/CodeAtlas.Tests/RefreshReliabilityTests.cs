@@ -114,17 +114,13 @@ public sealed class RefreshReliabilityTests
         using var child = Process.Start(start)!;
         var stdout = child.StandardOutput.ReadToEndAsync();
         var stderr = child.StandardError.ReadToEndAsync();
+        Process? writer = null;
         try
         {
             // Act
             using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(60));
-            while (!File.Exists(ready))
-            {
-                if (child.HasExited) throw new InvalidOperationException(await stdout + await stderr);
-                await Task.Delay(25, timeout.Token);
-            }
-            child.Kill(entireProcessTree: true);
-            await child.WaitForExitAsync();
+            writer = await PublicationChildProcess.WaitForCheckpointAsync(child, ready, refreshed.IndexId, killPoint, timeout.Token);
+            await PublicationChildProcess.KillAndWaitAsync(child, writer, timeout.Token);
             var current = await IndexStore.LoadSnapshotAsync(fixture.Manifest);
 
             // Assert
@@ -135,8 +131,13 @@ public sealed class RefreshReliabilityTests
         }
         finally
         {
-            if (!child.HasExited) { child.Kill(entireProcessTree: true); await child.WaitForExitAsync(); }
-            await Task.WhenAll(stdout, stderr);
+            using var cleanupTimeout = new CancellationTokenSource(TimeSpan.FromSeconds(45));
+            try
+            {
+                await PublicationChildProcess.KillAndWaitAsync(child, writer, cleanupTimeout.Token);
+                await Task.WhenAll(stdout, stderr).WaitAsync(cleanupTimeout.Token);
+            }
+            finally { writer?.Dispose(); }
         }
     }
 
@@ -151,7 +152,7 @@ public sealed class RefreshReliabilityTests
         var index = JsonSerializer.Deserialize<CodebaseIndex>(await File.ReadAllTextAsync(args[0]), Json)!;
         async Task Pause()
         {
-            await File.WriteAllTextAsync(args[1], "ready");
+            await PublicationChildProcess.WriteCheckpointAsync(args[1], index.IndexId, args[2]);
             await Task.Delay(Timeout.InfiniteTimeSpan);
         }
         var store = new GenerationStore(async (point, _) =>

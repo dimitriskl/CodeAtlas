@@ -75,7 +75,7 @@ Acceptance: documentation is returned with the correct symbol and overload, miss
 
 ### 7. Add structural facts and discovery by purpose
 
-Status: 0.00.22 repeated the original question set and left H3/H5 failing. [Historical search evidence](STRUCTURAL-SEARCH.md). The audit repair adds general lexical normalization and provenance-aware weighting. A fresh eleven-case source-backed set was explicitly accepted by the user on 21 October 2026; final frozen-binary measurement is pending. Earlier questions are development data, not fresh held-out evidence.
+Status: the first new eleven-case v3 measurement failed both ambiguous checks despite passing the single-answer thresholds. It is now development evidence. Generic v4 ranking fixes pass synthetic regressions; an independently authored reserved packet was sealed through algorithm freeze and awaits human review before measurement. [Current qualification](QUALIFICATION-2026-10.md) preserves failures and exact pending gates; [historical search evidence](STRUCTURAL-SEARCH.md) is distinct.
 
 Expose supported Roslyn-derived facts such as implemented interfaces and resolved dependencies, with locations and coverage boundaries. Add text search across names, signatures, and documentation, followed by ranked purpose-oriented retrieval where evaluation justifies it. Return why a result matched and evidence that lets an agent inspect the source.
 
@@ -85,7 +85,7 @@ Acceptance: measured retrieval improves on the baseline for agreed cases without
 
 ### 8. Package and qualify the initial production scope
 
-Status: local Windows package implemented in 0.00.16. [Packaging evidence](PACKAGING.md) records a local tool install. Clean-machine and Linux qualification are not done, and this is not a publication.
+Status: local install and update passed for 0.00.23; hosted Windows full tests and package verification passed. The first hosted Linux run failed a writer-interruption test and both no-checkout install jobs were skipped. Repairs and rerun are required. [Current qualification](QUALIFICATION-2026-10.md) and [packaging](PACKAGING.md). This is not a publication.
 
 Provide an installable CLI with prerequisite checks, useful diagnostics, and setup/upgrade/rebuild instructions. Test installation from a local package feed on a clean environment before any publication. Automate locked restore, builds, tests, package-install smoke tests, and version/contract checks for supported Windows/Linux environments. Establish repeatable large-solution performance checks and a supported configuration matrix.
 
@@ -93,7 +93,7 @@ Acceptance: milestones 1–7 have recorded evidence; a clean supported machine c
 
 ### 9. Add optional AI-generated explanations
 
-Status: the audit repair replaces the 0.00.17 file contract with registered bounded source evidence, exact citations and input/dependency freshness. [Explanation workflow](EXPLANATIONS.md). Actual CLI/workflow regressions pass before final versioned validation. A frozen public generated-quality/selection pilot is prepared; results are pending. No provider is called by CodeAtlas.
+Status: the repaired bounded local evidence contract passes actual CLI/workflow tests. The frozen generated-quality/selection pilot and independent review are complete, with small-sample limitations recorded in [EXPLANATIONS.md](EXPLANATIONS.md). No provider is called by CodeAtlas.
 
 Generate missing or requested explanations on demand for selected symbols and their relevant context. Keep developer documentation, structural facts, and AI interpretations in separate fields. Store source evidence, model/provider and generation-version provenance, and the content/dependency fingerprints used to produce each explanation.
 
@@ -103,7 +103,7 @@ Acceptance: cached explanations have verified freshness and traceable evidence; 
 
 ### 10. Detect duplicate and overlapping implementations
 
-Status: the audit repair replaces unsafe lexical grouping with bounded semantic structural candidates and selected-symbol purpose overlap. [Duplicate contract](DUPLICATES.md). Small public pair-label measurements and an independent source review are retained; final-binary, application usefulness and resource qualification remain pending.
+Status: semantic body candidates passed the final 0.00.23 public labeled corpora, private source/usefulness sample, three predeclared resource pairs and ordinary-query regression checks. Coverage is strongly capped and purpose overlap retains false leads. [Current qualification](QUALIFICATION-2026-10.md) and [duplicate contract](DUPLICATES.md); v4 search changes still need their separate overlap regression checks.
 
 Start with exact and near-duplicate code structure, accounting for renamed identifiers while retaining important semantic differences. Then evaluate similar-purpose candidates using documentation and, optionally, generated descriptions. Report both locations, the reason for similarity, and differences requiring review.
 

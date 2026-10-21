@@ -5,8 +5,8 @@ namespace CodeAtlas;
 // Deterministic lexical retrieval. No embeddings, model calls, labels, or synonym lists.
 public static class PurposeSearch
 {
-    public const string RankingVersion = "lexical-distinct-tfidf-v3";
-    public const string EvidencePolicy = "distinct-query-terms-v3: a rare symbol-name, signature, containing-type or resolved-call-name token is sufficient; otherwise >=2 terms including one in <=max(1,floor(N/5)) documents. Own names outrank type context. Test projects sort after production unless the query says test.";
+    public const string RankingVersion = "lexical-distinct-field-normalized-v4";
+    public const string EvidencePolicy = "distinct-query-terms-v4: same rarity threshold in both modes; one best normalized field per token. Binary field-length normalization k1=1.2, b=0 for names/calls, 0.25 for signatures/type names, 0.75 for XML by tag family; corpus means precede request filters and share own/related XML. Own names and own XML weight 6. Matching semantic interface contracts follow ordinary candidates unless explicitly named or scoped alone. Test projects sort after production unless the query says test.";
     public const int MaximumQueryCharacters = 4096;
     private static readonly Regex AcronymBoundary = new(@"(\p{Lu})(\p{Lu}\p{Ll})", RegexOptions.CultureInvariant);
     private static readonly Regex WordBoundary = new(@"(\p{Ll}|\p{Nd})(\p{Lu})", RegexOptions.CultureInvariant);
@@ -60,13 +60,28 @@ public static class PurposeSearch
                 "Only C# source is indexed. Angular and TypeScript are not these symbols.");
         // Calculate IDF over the whole selected-kind corpus, independently of page/filter.
         // Exact project/type filters cannot change a symbol's relevance score in this generation.
-        var documents = symbols.Where(s => kind == "all" || s.Kind == kind)
-            .Select(s => new SearchDocument(s, Fields(s, byId, byOwner, mode).ToArray())).ToArray();
+        var documents = new List<SearchDocument>();
+        foreach (var symbol in symbols)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            if (kind == "all" || symbol.Kind == kind)
+                documents.Add(new(symbol, Fields(symbol, byId, byOwner, mode).ToArray()));
+        }
+        var averageLengths = AverageFieldLengths(documents, cancellationToken);
+        double Weight(SearchField field)
+        {
+            var b = field.LengthFamily.StartsWith("xml:", StringComparison.Ordinal) ? 0.75
+                : field.Name is "name-signature" or "containing-type-name" ? 0.25 : 0;
+            if (b == 0 || field.Tokens.Count == 0) return field.Weight;
+            const double k1 = 1.2;
+            return field.Weight * (k1 + 1)
+                / (1 + k1 * (1 - b + b * field.Tokens.Count / averageLengths[field.LengthFamily]));
+        }
         var documentFrequency = queryTokens.ToDictionary(token => token,
             token => documents.Count(d => d.Fields.Any(f => f.Tokens.Contains(token))), StringComparer.Ordinal);
         var matches = new List<RankedSymbol>();
         var weakMatches = 0;
-        var rareDocumentLimit = Math.Max(1, documents.Length / 5);
+        var rareDocumentLimit = Math.Max(1, documents.Count / 5);
         foreach (var document in documents)
         {
             cancellationToken.ThrowIfCancellationRequested();
@@ -77,20 +92,23 @@ public static class PurposeSearch
             {
                 // One best source per token: repetition/duplicate XML cannot inflate relevance.
                 var field = document.Fields.Where(f => f.Tokens.Contains(token))
-                    .OrderByDescending(f => f.Weight).ThenBy(f => f.Name, StringComparer.Ordinal)
+                    .OrderByDescending(Weight).ThenBy(f => f.Name, StringComparer.Ordinal)
                     .ThenBy(f => f.SourceSymbolId, StringComparer.Ordinal)
                     .ThenBy(f => f.Location.Start.File, StringComparer.Ordinal)
                     .ThenBy(f => f.Location.Start.Line).ThenBy(f => f.Location.Start.Column).FirstOrDefault();
                 if (field is null) continue;
-                var idf = 1 + Math.Log((documents.Length + 1.0) / (documentFrequency[token] + 1.0));
-                reasons.Add(new(field.Name, [token], field.Weight * idf / queryTokens.Length,
+                var idf = 1 + Math.Log((documents.Count + 1.0) / (documentFrequency[token] + 1.0));
+                reasons.Add(new(field.Name, [token], Weight(field) * idf / queryTokens.Length,
                     field.SourceSymbolId, field.Location, field.FactKind,
                     field.DocumentationEvidence, field.RelationshipEvidence));
             }
             if (reasons.Count == 0) continue;
             // Fixed before any held-out evaluation. Shared identically by both retrieval modes.
             var rare = reasons.Any(r => documentFrequency[r.MatchedTokens[0]] <= rareDocumentLimit);
-            var rareName = reasons.Any(r => IsIdentityField(r.Field) && documentFrequency[r.MatchedTokens[0]] <= rareDocumentLimit);
+            // A stronger XML field must not erase the fact that the same rare token
+            // also occurred in the symbol identity when applying the evidence gate.
+            var rareName = queryTokens.Any(token => documentFrequency[token] <= rareDocumentLimit
+                && document.Fields.Any(field => IsIdentityField(field.Name) && field.Tokens.Contains(token)));
             var sufficient = queryTokens.Length == 1
                 ? rareName
                 : rareName || (rare && reasons.Count >= 2);
@@ -103,7 +121,9 @@ public static class PurposeSearch
                 queryTokens.Except(reasons.SelectMany(r => r.MatchedTokens), StringComparer.Ordinal).ToArray(), grouped));
         }
         var asksForTests = queryTokens.Contains("test") || queryTokens.Contains("tests");
+        var deferredContracts = DeferredContracts(matches, byId, byOwner, query, cancellationToken);
         var ordered = matches.OrderByDescending(m => asksForTests || !IsTestProject(m.Symbol.Project))
+            .ThenBy(m => deferredContracts.Contains(m.Symbol.Id))
             .ThenByDescending(m => m.Score)
             .ThenByDescending(m => m.MatchedQueryTokens).ThenBy(m => m.Symbol.Id, StringComparer.Ordinal).ToArray();
         var items = ordered.Skip(request.Offset).Take(request.Limit).ToArray();
@@ -117,6 +137,7 @@ public static class PurposeSearch
                 : weakMatches != 0 ? "abstained-insufficient-evidence" : "abstained-no-token-overlap", weakMatches,
             ["Scores indicate lexical evidence, not confidence or verified purpose.",
              "Partial lexical matches remain visible; unmatched query terms can change the intended meaning.",
+             "Linked interface declarations remain in the complete result set; ordinary candidates are shown first when their matching implementations are available.",
              "English suffix normalization is lexical only; no translation, synonym expansion, negation reasoning, runtime effects or cross-language analysis.",
              "Empty matches do not establish absence outside the supported loaded C# snapshot."]);
     }
@@ -131,7 +152,7 @@ public static class PurposeSearch
         yield return Field("containing-type-name", 2, symbol.ContainingType ?? "", symbol.Id, point);
         if (mode == "names") yield break;
         foreach (var section in symbol.Documentation.Sections)
-            yield return DocField("developer-documentation", 3, section, null);
+            yield return DocField("developer-documentation", 6, section, null);
         foreach (var fact in byOwner[symbol.Id])
         {
             // Callee parameter/return types are not words in the caller's own signature.
@@ -148,6 +169,57 @@ public static class PurposeSearch
             foreach (var section in related.Documentation.Sections)
                 yield return DocField("related-developer-documentation", weight, section, fact);
         }
+    }
+
+    private static Dictionary<string, double> AverageFieldLengths(IEnumerable<SearchDocument> documents,
+        CancellationToken cancellationToken)
+    {
+        // The same authored section can be linked from many callers. Count its
+        // length once, shared between own and related XML, rather than letting
+        // relationship fan-out inflate the expected length of that XML family.
+        var seen = new HashSet<(string Family, string Source, DocumentationRange Location, string Text)>();
+        var totals = new Dictionary<string, (long Length, int Count)>(StringComparer.Ordinal);
+        foreach (var document in documents)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            foreach (var field in document.Fields)
+            {
+                if (field.Name is not ("name-signature" or "containing-type-name")
+                    && !field.LengthFamily.StartsWith("xml:", StringComparison.Ordinal)) continue;
+                if (field.Tokens.Count == 0
+                    || !seen.Add((field.LengthFamily, field.SourceSymbolId, field.Location, field.Text))) continue;
+                var total = totals.GetValueOrDefault(field.LengthFamily);
+                totals[field.LengthFamily] = (total.Length + field.Tokens.Count, total.Count + 1);
+            }
+        }
+        return totals.ToDictionary(pair => pair.Key,
+            pair => pair.Value.Length / (double)pair.Value.Count, StringComparer.Ordinal);
+    }
+
+    private static HashSet<string> DeferredContracts(IReadOnlyCollection<RankedSymbol> matches,
+        Dictionary<string, DocumentedSymbol> byId, ILookup<string, StructuralFact> byOwner,
+        string query, CancellationToken cancellationToken)
+    {
+        var candidates = matches.Select(match => match.Symbol.Id).ToHashSet(StringComparer.Ordinal);
+        var identifiers = Words.Matches(query).Select(word => word.Value).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var deferred = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var match in matches)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            foreach (var implementation in byOwner[match.Symbol.Id].Where(fact => fact.Kind == "implements-member"))
+            {
+                if (implementation.Target.SourceSymbolId is not { } contractId
+                    || !candidates.Contains(contractId) || query.Contains(contractId, StringComparison.Ordinal)) continue;
+                // Exact semantic source links only: neither matching names nor an
+                // I-prefixed class establish an interface/implementation relation.
+                var interfaceTypes = byOwner[contractId].Where(fact => fact.Kind == "containing-type")
+                    .Select(fact => fact.Target.SourceSymbolId is { } id && byId.TryGetValue(id, out var type) ? type : null)
+                    .Where(type => type?.TypeKind == "interface").ToArray();
+                if (interfaceTypes.Length != 0 && !interfaceTypes.Any(type => identifiers.Contains(type!.Name)))
+                    deferred.Add(contractId);
+            }
+        }
+        return deferred;
     }
 
     private static string FoldPlural(string token) =>
@@ -199,15 +271,17 @@ public static class PurposeSearch
 
     private static SearchField DocField(string name, double weight, DocumentationSection section, StructuralFact? fact) =>
         Field(name, weight, section.Text, section.Evidence.SourceSymbolId,
-            section.Evidence.Location, fact?.Kind, section.Evidence, fact?.Evidence);
+            section.Evidence.Location, fact?.Kind, section.Evidence, fact?.Evidence, "xml:" + section.Tag);
 
     private static SearchField Field(string name, double weight, string text, string source,
         DocumentationRange location, string? factKind = null, DocumentationEvidence? documentation = null,
-        StructuralEvidence? relationship = null) =>
-        new(name, weight, SearchTokens(text).ToHashSet(StringComparer.Ordinal), source, location, factKind, documentation, relationship);
+        StructuralEvidence? relationship = null, string? lengthFamily = null) =>
+        new(name, weight, SearchTokens(text).ToHashSet(StringComparer.Ordinal), source, location, factKind,
+            documentation, relationship, lengthFamily ?? name, text);
 
     private sealed record SearchField(string Name, double Weight, HashSet<string> Tokens,
         string SourceSymbolId, DocumentationRange Location, string? FactKind,
-        DocumentationEvidence? DocumentationEvidence, StructuralEvidence? RelationshipEvidence);
+        DocumentationEvidence? DocumentationEvidence, StructuralEvidence? RelationshipEvidence,
+        string LengthFamily, string Text);
     private sealed record SearchDocument(DocumentedSymbol Symbol, SearchField[] Fields);
 }

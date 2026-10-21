@@ -203,6 +203,186 @@ public sealed class PurposeSearchTests
         Assert.True(match.Score > assisted.Page.Items.Single(item => item.Symbol.Id == decoy.Id).Score);
     }
 
+    [Fact]
+    public void ConciseAuthoredDescriptionCanOutrankFewerMatchingNameTerms()
+    {
+        // Arrange
+        var described = Symbol("described", "Renew", "method", "Select parcel direct delegated receipt.");
+        var decoy = Symbol("decoy", "GetDelegatedParcelReceipt", "method", null);
+        var symbols = Fill(described, decoy);
+        var catalog = Catalog();
+        var request = new QueryRequest();
+
+        // Act
+        var result = PurposeSearch.Search(symbols, catalog, "select parcel direct delegated receipt",
+            "assisted", "method", request, "snapshot");
+
+        // Assert
+        Assert.Equal(described.Id, result.Page.Items[0].Symbol.Id);
+        Assert.Contains(result.Page.Items, item => item.Symbol.Id == decoy.Id);
+        Assert.Contains(result.Page.Items[0].Reasons, reason => reason.Field == "developer-documentation");
+    }
+
+    [Fact]
+    public void LongerUnrelatedOwnerDocumentationDoesNotImproveItsMatchingEvidence()
+    {
+        // Arrange
+        var concise = Symbol("concise", "Execute", "method", null);
+        var broad = Symbol("broad", "Execute", "method", null);
+        var conciseOwner = Symbol("concise-owner", "Store", "type", "Reserves permits immediately without waiting.");
+        var broadOwner = Symbol("broad-owner", "Store", "type", "Reserves permits immediately without waiting. "
+            + string.Join(" ", Enumerable.Range(0, 70).Select(i => "UnrelatedConcept" + i)));
+        var symbols = Fill(concise, broad, conciseOwner, broadOwner);
+        var catalog = Catalog(Containment(concise, conciseOwner), Containment(broad, broadOwner));
+        var request = new QueryRequest();
+
+        // Act
+        var result = PurposeSearch.Search(symbols, catalog, "reserves permits without waiting",
+            "assisted", "method", request, "snapshot");
+
+        // Assert
+        var conciseMatch = Assert.Single(result.Page.Items, item => item.Symbol.Id == concise.Id);
+        var broadMatch = Assert.Single(result.Page.Items, item => item.Symbol.Id == broad.Id);
+        Assert.True(conciseMatch.Score > broadMatch.Score);
+        Assert.All(broadMatch.Reasons, reason => Assert.Equal(broadOwner.Id, reason.SourceSymbolId));
+    }
+
+    [Theory]
+    [InlineData("names")]
+    [InlineData("assisted")]
+    public void SemanticContractsAreDeferredWithoutLosingIdentitiesOrDistinctImplementations(string mode)
+    {
+        // Arrange
+        var contractType = Symbol("interface", "IParcelStore", "type", null) with { TypeKind = "interface" };
+        var contracts = Enumerable.Range(0, 3).Select(i => Symbol("a-contract-" + i,
+            "StoreParcel" + (char)('A' + i), "method", null) with { ContainingType = "Tests.IParcelStore" }).ToArray();
+        var implementations = Enumerable.Range(0, 3).Select(i => Symbol("z-implementation-" + i,
+            contracts[i].Name, "method", null)).ToArray();
+        var secondImplementation = Symbol("z-second-implementation", contracts[0].Name, "method", null);
+        var facts = contracts.Select(c => Containment(c, contractType))
+            .Concat(implementations.Select((implementation, i) => Containment(implementation, contracts[i]) with { Kind = "implements-member" }))
+            .Append(Containment(secondImplementation, contracts[0]) with { Kind = "implements-member" }).ToArray();
+        var symbols = Fill(contracts.Concat(implementations).Append(secondImplementation).Append(contractType).ToArray())
+            .Concat(Enumerable.Range(0, 40).Select(i => Symbol("extra-filler-" + i, "OtherTopic" + i, "method", null))).ToArray();
+        var catalog = Catalog(facts);
+        var firstRequest = new QueryRequest(Limit: 4);
+        var restRequest = new QueryRequest(Offset: 4, Limit: 20, Snapshot: "snapshot");
+
+        // Act
+        var first = PurposeSearch.Search(symbols, catalog, "store parcel", mode,
+            "method", firstRequest, "snapshot");
+        var rest = PurposeSearch.Search(symbols, catalog, "store parcel", mode,
+            "method", restRequest, "snapshot");
+
+        // Assert
+        Assert.Equal(7, first.Page.Pagination.Total);
+        Assert.All(first.Page.Items, item => Assert.DoesNotContain(contracts, c => c.Id == item.Symbol.Id));
+        Assert.Contains(first.Page.Items, item => item.Symbol.Id == secondImplementation.Id);
+        Assert.Equal(contracts.Select(c => c.Id).Order(), rest.Page.Items.Select(item => item.Symbol.Id).Order());
+        Assert.Equal(7, first.Page.Items.Concat(rest.Page.Items).Select(item => item.Symbol.Id).Distinct().Count());
+    }
+
+    [Theory]
+    [InlineData("names")]
+    [InlineData("assisted")]
+    public void ExplicitInterfaceIdentifierAndInterfaceOnlyFilterPreserveContractDiscovery(string mode)
+    {
+        // Arrange
+        var contractType = Symbol("interface", "IParcelStore", "type", null) with { TypeKind = "interface" };
+        var contract = Symbol("a-contract", "StoreParcel", "method", null) with { ContainingType = "Tests.IParcelStore" };
+        var implementation = Symbol("z-implementation", "StoreParcel", "method", null);
+        var catalog = Catalog(Containment(contract, contractType),
+            Containment(implementation, contract) with { Kind = "implements-member" });
+        var symbols = Fill(contractType, contract, implementation);
+        var explicitRequest = new QueryRequest();
+        var filteredRequest = new QueryRequest(Type: "Tests.IParcelStore");
+
+        // Act
+        var explicitName = PurposeSearch.Search(symbols, catalog, "IParcelStore StoreParcel", mode,
+            "method", explicitRequest, "snapshot");
+        var filtered = PurposeSearch.Search(symbols, catalog, "store parcel", mode,
+            "method", filteredRequest, "snapshot");
+
+        // Assert
+        Assert.Equal(contract.Id, explicitName.Page.Items[0].Symbol.Id);
+        Assert.Equal(contract.Id, Assert.Single(filtered.Page.Items).Symbol.Id);
+    }
+
+    [Fact]
+    public void MatchingNamesAndInterfaceLikeClassNamesDoNotCreateSemanticDeferrals()
+    {
+        // Arrange
+        var ordinaryType = Symbol("class", "IParcelStore", "type", null);
+        var first = Symbol("a-first", "StoreParcel", "method", null);
+        var other = Symbol("z-other", "StoreParcel", "method", null) with { Project = "Other.csproj" };
+        var symbols = Fill(ordinaryType, first, other);
+        var catalog = Catalog(Containment(first, ordinaryType),
+            Containment(other, first) with { Kind = "implements-member" });
+        var request = new QueryRequest();
+
+        // Act
+        var result = PurposeSearch.Search(symbols, catalog, "store parcel", "names", "method", request, "snapshot");
+
+        // Assert
+        Assert.Equal(first.Id, result.Page.Items[0].Symbol.Id);
+        Assert.Equal(2, result.Page.Pagination.Total);
+    }
+
+    [Theory]
+    [InlineData("names")]
+    [InlineData("assisted")]
+    public void ScoresRemainAdditiveFiniteAndIndependentOfRequestFilters(string mode)
+    {
+        // Arrange
+        var candidate = Symbol("candidate", "StoreParcel", "method", "Stores a parcel with a signed receipt.");
+        var decoy = Symbol("decoy", "StoreReceipt", "method", "Stores receipts. "
+            + string.Join(" ", Enumerable.Range(0, 40).Select(i => "Detail" + i))) with { Project = "Other.csproj" };
+        var symbols = Fill(candidate, decoy);
+        var catalog = Catalog();
+        var allRequest = new QueryRequest();
+        var filteredRequest = new QueryRequest(Project: candidate.Project, Type: candidate.ContainingType);
+
+        // Act
+        var all = PurposeSearch.Search(symbols, catalog, "store parcel receipt", mode,
+            "method", allRequest, "snapshot");
+        var filtered = PurposeSearch.Search(symbols, catalog, "store parcel receipt", mode,
+            "method", filteredRequest, "snapshot");
+
+        // Assert
+        var original = Assert.Single(all.Page.Items, item => item.Symbol.Id == candidate.Id);
+        Assert.Equal(original.Score, Assert.Single(filtered.Page.Items).Score);
+        Assert.All(all.Page.Items, item =>
+        {
+            Assert.True(double.IsFinite(item.Score));
+            Assert.Equal(item.Score, item.Reasons.Sum(reason => reason.Contribution), precision: 10);
+        });
+    }
+
+    [Fact]
+    public void RepeatedSemanticLinksDoNotChangeAuthoredFieldLengthAverages()
+    {
+        // Arrange
+        var candidate = Symbol("candidate", "PackParcel", "method", "Packs signed parcels safely.");
+        var caller = Symbol("caller", "Execute", "method", null);
+        var owner = Symbol("owner", "Owner", "type", "Unrelated extensive authored description "
+            + string.Join(" ", Enumerable.Range(0, 40).Select(i => "Concept" + i)));
+        var link = Containment(caller, owner);
+        var symbols = Fill(candidate, caller, owner);
+        var onceCatalog = Catalog(link);
+        var repeatedCatalog = Catalog(Enumerable.Repeat(link, 20).ToArray());
+        var request = new QueryRequest();
+
+        // Act
+        var once = PurposeSearch.Search(symbols, onceCatalog, "signed parcels safely",
+            "assisted", "method", request, "snapshot");
+        var repeated = PurposeSearch.Search(symbols, repeatedCatalog,
+            "signed parcels safely", "assisted", "method", request, "snapshot");
+
+        // Assert
+        Assert.Equal(Assert.Single(once.Page.Items).Score, Assert.Single(repeated.Page.Items).Score);
+        Assert.Equal(candidate.Id, Assert.Single(repeated.Page.Items).Symbol.Id);
+    }
+
     private static DocumentedSymbol Symbol(string id, string name, string kind, string? text)
     {
         var position = new SourcePosition("Source.cs", 1, 1);

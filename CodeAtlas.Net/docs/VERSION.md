@@ -1,6 +1,6 @@
 # CodeAtlas version history
 
-Version: **0.00.23**
+Version: **0.00.24**
 
 Status: unpublished development version. Version history starts at `0.00.01`; earlier work did not have assigned version numbers.
 
@@ -22,7 +22,19 @@ python3 scripts/bump-version.py --summary "Describe the completed change"
 
 The command updates `Version.props`, the current version in README.md and the project recap, and this document's current version and history. Then rebuild, test, and regenerate the index. Do not increment again merely because validation requires a correction to the same change.
 
+After the user has explicitly authorized publication and release qualification is complete, `--major-release` selects the next `x.00.00` instead of the routine patch increment:
+
+```powershell
+python scripts/bump-version.py --major-release --summary "Publish the qualified initial CodeAtlas release"
+```
+
+This flag synchronizes the same files; it does not publish a package, create a tag, or waive release checks. Routine increments never change the major component automatically.
+
 ## History
+
+### 0.00.24
+
+- Normalize discovery evidence and diversify semantic contracts; coordinate writer termination and Linux lock diagnostics; record qualification results and explicit release promotion
 
 ### 0.00.23
 

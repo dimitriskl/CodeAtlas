@@ -1,6 +1,6 @@
 # CodeAtlas .NET
 
-Version: **0.00.23**
+Version: **0.00.24**
 
 See [version history](docs/VERSION.md) for what is implemented and the versioning rules. `Version.props` is the build's version source. Run `dotnet run --project src/CodeAtlas.Cli --no-build -- --version` to check the built CLI.
 
@@ -9,6 +9,8 @@ CodeAtlas is a C# semantic-analysis library and CLI built with Roslyn. The CLI c
 CodeAtlas scans all C# projects in a solution, saves a structured index and a readable overview, and answers method/reference queries from that index. Refresh can reuse references after verified method-body edits and safely rebuilds when reuse cannot be established. Bounded caller traversal and duplicate candidates are available with explicit static-analysis limits. Angular/TypeScript analysis remains outside the initial C# scope.
 
 Start with the [user guide](docs/USER-GUIDE.md) for the solution-to-query workflow, warning reports, refresh, coding-agent usage and recovery.
+
+[October qualification](docs/QUALIFICATION-2026-10.md) records current real-solution measurements, tests, package checks and remaining release gates, including retained failures.
 
 See the [development roadmap](docs/ROADMAP.md) for the ordered production-readiness milestones, semantic descriptions and discovery, duplicate detection, and acceptance criteria. Planned capabilities are distinct from the implemented commands below.
 
