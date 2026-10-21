@@ -1,6 +1,6 @@
 # CodeAtlas version history
 
-Version: **0.00.25**
+Version: **0.00.26**
 
 Status: unpublished development version. Version history starts at `0.00.01`; earlier work did not have assigned version numbers.
 
@@ -31,6 +31,10 @@ python scripts/bump-version.py --major-release --summary "Publish the qualified 
 This flag synchronizes the same files; it does not publish a package, create a tag, or waive release checks. Routine increments never change the major component automatically.
 
 ## History
+
+### 0.00.26
+
+- Generate optional credential-based class and method descriptions and search current saved AI interpretations
 
 ### 0.00.25
 

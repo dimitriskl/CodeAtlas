@@ -42,6 +42,15 @@ internal static class SnapshotEnvironment
 
     public static Dictionary<string, string> Capture()
     {
-        lock (Gate) return Raw();
+        lock (Gate)
+        {
+            var environment = Raw();
+            // Provider settings belong to derived descriptions, not semantic build inputs.
+            // Configuring or rotating a credential must not invalidate a code map.
+            environment.Remove("CODEATLAS_AI_API_KEY");
+            environment.Remove("CODEATLAS_AI_MODEL");
+            environment.Remove("CODEATLAS_AI_ENDPOINT");
+            return environment;
+        }
     }
 }

@@ -1,8 +1,16 @@
 # Optional local explanations
 
-CodeAtlas exports bounded context for a selected source symbol. Your coding agent writes a local response; CodeAtlas validates and stores it separately from semantic snapshots. CodeAtlas never calls a provider or uploads source. Read the request before sharing it with an agent.
+CodeAtlas stores generated descriptions separately from authored documentation and semantic snapshots. With no credentials, AI is disabled. Configure `CODEATLAS_AI_API_KEY` and `CODEATLAS_AI_MODEL` and explicitly run `describe --index <manifest>` to generate missing class/type and method descriptions. `--limit 10` generates a small batch; `--symbol <id>` selects one symbol. The optional `CODEATLAS_AI_ENDPOINT` is a full OpenAI-compatible chat-completions URL; the default is OpenAI. The adapter follows the [official Chat Completions API](https://developers.openai.com/api/reference/resources/chat/subresources/completions/methods/create).
+
+Only `describe` calls the provider and sends selected bounded source evidence. Model output supplies descriptions and exact source quotations; CodeAtlas computes citation offsets and validates the existing explanation contract locally. Credentials stay in the process environment and are not written into indexes, requests or descriptions. Configured provider calls can incur usage charges. Search, indexing and refresh never invoke a provider.
+
+`search-symbols --mode assisted` includes current saved generated claims, with explicit AI provenance and source citations. `--mode names` excludes them. Stale, corrupt or old-generation cache entries are excluded from search. Missing descriptions fall back to the existing name/documentation/fact search. Searchable generated wording is an interpretation, not a verified fact.
+
+The local coding-agent request/response workflow below remains available without provider credentials. Read the exported request before sharing it with an agent.
 
 ## Request, respond, import
+
+The 0.00.26 implementation passed 416 .NET tests and 39 Python tests on Windows. A local test provider exercised the actual CLI path: no-key disablement, generation, validated storage, resumed batches and later search without credentials. Focused regressions cover class/method discovery, stale/corrupt cache exclusion, citation validation and description-aware pagination. These checks do not claim a live provider run or measure generated-description accuracy on eConnector.
 
 Use a fresh verified manifest and copy the symbol ID from `find-symbol`. With the source checkout launcher:
 
@@ -51,7 +59,7 @@ The responder must return strict JSON with these fields:
 
 Replace every placeholder and example offset. Citation offsets and lengths are UTF-16 code units relative to the excerpt's `text`, not byte offsets or whole-file offsets. Claim categories are `source-observation` or `interpretation`; every claim needs matching evidence. Duplicate/unknown properties, malformed identities, mismatched quotes and oversized responses are rejected. The canonical registered request is authoritative; changing the exported copy cannot expand accepted evidence.
 
-Default limits: six files, 64 KiB context, 128 KiB request, 64 KiB response, 1 MiB per source file and 32,768 estimated tokens. `--max-files`, `--max-context-bytes`, `--max-request-bytes`, `--max-response-bytes`, `--max-source-bytes`, `--max-estimated-tokens` and `--reference-limit` accept bounded overrides; reference limit is 0–8 (default two). Token estimates are a local size guard, not a tokenizer, billing estimate or provider spending limit. CodeAtlas invokes no paid service. Ctrl+C cancels pending work.
+Default limits: six files, 64 KiB context, 128 KiB request, 64 KiB response, 1 MiB per source file and 32,768 estimated tokens. `--max-files`, `--max-context-bytes`, `--max-request-bytes`, `--max-response-bytes`, `--max-source-bytes`, `--max-estimated-tokens` and `--reference-limit` accept bounded overrides; reference limit is 0–8 (default two). Token estimates are a local size guard, not a tokenizer, billing estimate or provider spending limit. The manual workflow makes no provider calls. Ctrl+C cancels pending work.
 
 ## Freshness and recovery
 
@@ -65,6 +73,6 @@ Developer XML, structural facts and AI interpretations remain separate. Provider
 
 A frozen public eight-symbol pilot used fresh coding-agent responder contexts that saw only one exported request each. Independent review judged 20 claims and 65 decomposed factual assertions, with zero unsupported assertions or critical invented guarantees and all 13 required observations covered. All eight strict imports/readbacks passed, exact citations matched and immutable semantic artifacts remained unchanged. Model identifiers, token usage, billing and overall generation duration were unavailable; provider/model labels remain self-reported.
 
-Separate blinded selectors answered six positive and two unsupported-claim tasks using identical ordered baseline fields. Documentation/facts alone yielded 3/6 positive selections; adding the generated interpretations and exact cited quotations yielded 6/6. Both conditions correctly abstained on 2/2 negative tasks, with zero identity or critical-guarantee errors. This is a small synthetic, source-authored and agent-reviewed pilot, not human accuracy approval or statistical evidence. The added quotations prevent attributing the gain solely to prose. Generated text remains optional and does not feed factual search ranking.
+Separate blinded selectors answered six positive and two unsupported-claim tasks using identical ordered baseline fields. Documentation/facts alone yielded 3/6 positive selections; adding the generated interpretations and exact cited quotations yielded 6/6. Both conditions correctly abstained on 2/2 negative tasks, with zero identity or critical-guarantee errors. This is a small synthetic, source-authored and agent-reviewed pilot, not human accuracy approval or statistical evidence. The added quotations prevent attributing the gain solely to prose. Generated text remains optional. Current assisted search includes validated saved descriptions; this historical pilot did not measure that search integration.
 
 [Public fixtures, frozen gold and reproduction protocol](../tests/Qualification/Explanations/README.md) are checked in. Exact requests, first responses, binary hashes, contract outputs and both independent reviews remain in the ignored `.codeatlas/repair-v23/m09-quality/` evidence directory. The request-export binary preceded the final search-only language-boundary correction; recorded payload hashes distinguish those builds rather than treating the same version label as identical binaries.

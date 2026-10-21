@@ -5,8 +5,8 @@ namespace CodeAtlas;
 // Deterministic lexical retrieval. No embeddings, model calls, labels, or synonym lists.
 public static class PurposeSearch
 {
-    public const string RankingVersion = "lexical-distinct-field-normalized-v4";
-    public const string EvidencePolicy = "distinct-query-terms-v4: same rarity threshold in both modes; one best normalized field per token. Binary field-length normalization k1=1.2, b=0 for names/calls, 0.25 for signatures/type names, 0.75 for XML by tag family; corpus means precede request filters and share own/related XML. Own names and own XML weight 6. Matching semantic interface contracts follow ordinary candidates unless explicitly named or scoped alone. Test projects sort after production unless the query says test.";
+    public const string RankingVersion = "lexical-distinct-field-normalized-v4-ai-descriptions-v1";
+    public const string EvidencePolicy = "distinct-query-terms-v4: same rarity threshold in both modes; one best normalized field per token. A complete lexical match in one checked generated claim is sufficient in assisted mode. Binary field-length normalization k1=1.2, b=0 for names/calls/generated claims, 0.25 for signatures/type names, 0.75 for XML by tag family; corpus means precede request filters and share own/related XML. Own names, own XML and generated claims weight 6. Matching semantic interface contracts follow ordinary candidates unless explicitly named or scoped alone. Test projects sort after production unless the query says test.";
     public const int MaximumQueryCharacters = 4096;
     private static readonly Regex AcronymBoundary = new(@"(\p{Lu})(\p{Lu}\p{Ll})", RegexOptions.CultureInvariant);
     private static readonly Regex WordBoundary = new(@"(\p{Ll}|\p{Nd})(\p{Lu})", RegexOptions.CultureInvariant);
@@ -41,7 +41,8 @@ public static class PurposeSearch
 
     public static SearchResult Search(DocumentedSymbol[] symbols, StructuralCatalog catalog,
         string query, string mode, string kind, QueryRequest request, string? snapshotId,
-        string language = "csharp", CancellationToken cancellationToken = default)
+        string language = "csharp", CancellationToken cancellationToken = default,
+        IReadOnlyDictionary<string, Explanations.AcceptedExplanation>? acceptedExplanations = null)
     {
         Validate(query, mode, kind, language);
         request.Validate(snapshotId, supportsType: true);
@@ -65,7 +66,7 @@ public static class PurposeSearch
         {
             cancellationToken.ThrowIfCancellationRequested();
             if (kind == "all" || symbol.Kind == kind)
-                documents.Add(new(symbol, Fields(symbol, byId, byOwner, mode).ToArray()));
+                documents.Add(new(symbol, Fields(symbol, byId, byOwner, mode, acceptedExplanations).ToArray()));
         }
         var averageLengths = AverageFieldLengths(documents, cancellationToken);
         double Weight(SearchField field)
@@ -100,7 +101,8 @@ public static class PurposeSearch
                 var idf = 1 + Math.Log((documents.Count + 1.0) / (documentFrequency[token] + 1.0));
                 reasons.Add(new(field.Name, [token], Weight(field) * idf / queryTokens.Length,
                     field.SourceSymbolId, field.Location, field.FactKind,
-                    field.DocumentationEvidence, field.RelationshipEvidence));
+                    field.DocumentationEvidence, field.RelationshipEvidence)
+                    { AiDescriptionEvidence = field.AiDescriptionEvidence });
             }
             if (reasons.Count == 0) continue;
             // Fixed before any held-out evaluation. Shared identically by both retrieval modes.
@@ -109,12 +111,16 @@ public static class PurposeSearch
             // also occurred in the symbol identity when applying the evidence gate.
             var rareName = queryTokens.Any(token => documentFrequency[token] <= rareDocumentLimit
                 && document.Fields.Any(field => IsIdentityField(field.Name) && field.Tokens.Contains(token)));
-            var sufficient = queryTokens.Length == 1
+            // A complete lexical match in one checked generated claim must remain
+            // discoverable even when a small corpus has no rare identity tokens.
+            var descriptionMatch = document.Fields.Any(field => field.Name == "ai-description"
+                && queryTokens.All(field.Tokens.Contains));
+            var sufficient = descriptionMatch || (queryTokens.Length == 1
                 ? rareName
-                : rareName || (rare && reasons.Count >= 2);
+                : rareName || (rare && reasons.Count >= 2));
             if (!sufficient) { weakMatches++; continue; }
             var grouped = reasons.GroupBy(r => (r.Field, r.SourceSymbolId, r.Location,
-                r.FactKind, r.DocumentationEvidence, r.RelationshipEvidence)).Select(group =>
+                r.FactKind, r.DocumentationEvidence, r.RelationshipEvidence, r.AiDescriptionEvidence)).Select(group =>
                     group.First() with { MatchedTokens = group.SelectMany(r => r.MatchedTokens).Order(StringComparer.Ordinal).ToArray(),
                         Contribution = group.Sum(r => r.Contribution) }).ToArray();
             matches.Add(new(document.Symbol, reasons.Sum(r => r.Contribution), reasons.Count,
@@ -143,7 +149,8 @@ public static class PurposeSearch
     }
 
     private static IEnumerable<SearchField> Fields(DocumentedSymbol symbol,
-        Dictionary<string, DocumentedSymbol> byId, ILookup<string, StructuralFact> byOwner, string mode)
+        Dictionary<string, DocumentedSymbol> byId, ILookup<string, StructuralFact> byOwner, string mode,
+        IReadOnlyDictionary<string, Explanations.AcceptedExplanation>? acceptedExplanations)
     {
         var point = new DocumentationRange(symbol.Location, symbol.Location);
         yield return Field("symbol-name", 6, symbol.Name, symbol.Id, point);
@@ -151,6 +158,11 @@ public static class PurposeSearch
             symbol.Id, point);
         yield return Field("containing-type-name", 2, symbol.ContainingType ?? "", symbol.Id, point);
         if (mode == "names") yield break;
+        if (acceptedExplanations?.TryGetValue(symbol.Id, out var accepted) == true)
+            foreach (var claim in accepted.Response.Claims)
+                yield return Field("ai-description", 6, claim.Text, symbol.Id, point,
+                    aiDescription: new(accepted.Origin, accepted.RequestId, accepted.ContextFingerprint,
+                        accepted.IndexId, accepted.ProvenanceTrust, accepted.Response.Provenance, claim));
         foreach (var section in symbol.Documentation.Sections)
             yield return DocField("developer-documentation", 6, section, null);
         foreach (var fact in byOwner[symbol.Id])
@@ -275,13 +287,14 @@ public static class PurposeSearch
 
     private static SearchField Field(string name, double weight, string text, string source,
         DocumentationRange location, string? factKind = null, DocumentationEvidence? documentation = null,
-        StructuralEvidence? relationship = null, string? lengthFamily = null) =>
+        StructuralEvidence? relationship = null, string? lengthFamily = null,
+        AiDescriptionEvidence? aiDescription = null) =>
         new(name, weight, SearchTokens(text).ToHashSet(StringComparer.Ordinal), source, location, factKind,
-            documentation, relationship, lengthFamily ?? name, text);
+            documentation, relationship, lengthFamily ?? name, text, aiDescription);
 
     private sealed record SearchField(string Name, double Weight, HashSet<string> Tokens,
         string SourceSymbolId, DocumentationRange Location, string? FactKind,
         DocumentationEvidence? DocumentationEvidence, StructuralEvidence? RelationshipEvidence,
-        string LengthFamily, string Text);
+        string LengthFamily, string Text, AiDescriptionEvidence? AiDescriptionEvidence);
     private sealed record SearchDocument(DocumentedSymbol Symbol, SearchField[] Fields);
 }

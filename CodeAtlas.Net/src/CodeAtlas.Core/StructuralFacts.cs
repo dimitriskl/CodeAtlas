@@ -30,7 +30,16 @@ public sealed record StructuralCatalog(StructuralCoverage Coverage, StructuralFa
 
 public sealed record SearchReason(string Field, string[] MatchedTokens, double Contribution,
     string SourceSymbolId, DocumentationRange Location, string? FactKind,
-    DocumentationEvidence? DocumentationEvidence, StructuralEvidence? RelationshipEvidence);
+    DocumentationEvidence? DocumentationEvidence, StructuralEvidence? RelationshipEvidence)
+{
+    public AiDescriptionEvidence? AiDescriptionEvidence { get; init; }
+}
+
+// Generated interpretation provenance and exact accepted claim/citations stay separate
+// from authored XML. Citation offsets refer to evidence in the registered request.
+public sealed record AiDescriptionEvidence(string Origin, string RequestId, string ContextFingerprint,
+    string IndexId, string ProvenanceTrust, Explanations.ExplanationProvenance Provenance,
+    Explanations.ExplanationClaim Claim);
 
 public sealed record RankedSymbol(DocumentedSymbol Symbol, double Score, int MatchedQueryTokens,
     string[] UnmatchedQueryTokens, SearchReason[] Reasons);

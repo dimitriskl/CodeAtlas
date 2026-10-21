@@ -20,6 +20,7 @@ Usage: codeatlas index --solution <path.sln|path.slnx> [--reference-workers <1-8
        codeatlas explain-request --index <path-to-index.json> --symbol <id> --output <request.json>
        codeatlas explain-import --index <path-to-index.json> --response <response.json>
        codeatlas get-explanation --index <path-to-index.json> (--symbol <id> | --request <requestId>)
+       codeatlas describe --index <path-to-index.json> [--symbol <id>] [--limit <positive-number>] [--project <path>]
        codeatlas find-duplicates --index <path-to-index.json> [--mode bodies|purpose] [--symbol <id>]
        codeatlas find-callers --index <path-to-index.json> --symbol <id> [--depth <1-5>] [--limit <1-1000>]
        codeatlas coverage --index <path-to-index.json>
@@ -34,8 +35,10 @@ Indexing artifacts commit together under .codeatlas/solutions/<solution-identity
 Reference indexing uses 2 concurrent searches by default; use 1 for serial comparison.
 Default/explicit method discovery returns MethodInfo. Other kinds/all return compact SymbolSummary records.
 get-documentation returns full developer XML, resolved sections and provenance; missing documentation remains missing.
-search-symbols ranks lexical evidence in names, signatures, authored documentation, and one-hop structural facts.
+search-symbols ranks names, signatures, authored documentation, saved AI descriptions, and one-hop structural facts.
 It does not call a model. get-facts returns Roslyn facts for one saved symbol. A resolved call is a relationship, not a runtime effect.
+describe generates missing class/type and method descriptions only when CODEATLAS_AI_API_KEY and CODEATLAS_AI_MODEL are configured.
+CODEATLAS_AI_ENDPOINT optionally selects an OpenAI-compatible chat-completions endpoint. No credentials means AI is disabled.
 explain-request exports selected source evidence locally; optional --local, --context, --reference-limit and byte limits bound that context.
 explain-import requires registered request identity, evidence citations, provenance and unchanged observed inputs. No provider is called.
 """;
@@ -62,7 +65,7 @@ var coverageAvailable = false;
 QueryProfile? profile = null;
 try
 {
-    if (args.Length < 3 || command is not ("index" or "refresh" or "index-status" or "find-symbol" or "find-references" or "get-documentation" or "search-symbols" or "get-facts" or "explain-request" or "explain-import" or "get-explanation" or "find-duplicates" or "find-callers" or "coverage"))
+    if (args.Length < 3 || command is not ("index" or "refresh" or "index-status" or "find-symbol" or "find-references" or "get-documentation" or "search-symbols" or "get-facts" or "explain-request" or "explain-import" or "get-explanation" or "describe" or "find-duplicates" or "find-callers" or "coverage"))
         throw new ArgumentException(usage);
     var options = new Dictionary<string, string>(StringComparer.Ordinal);
     for (var i = 1; i < args.Length; i++)
@@ -214,6 +217,70 @@ try
                 matches.CandidatePoolTruncated, matches.StructuralWork, matches.BodyCoverage, matches.FactCoverage, matches.Limitations,
                 warningCount = index.Warnings.Length, warnings = index.Warnings };
         }
+    }
+    else if (command == "describe")
+    {
+        if (!options.TryGetValue("--index", out var descriptionIndex)
+            || options.Keys.Any(key => key is not ("--index" or "--symbol" or "--limit" or "--project")))
+            throw new ArgumentException("describe requires --index; optional --symbol, --limit and --project select the work.");
+        var limit = Integer("--limit", int.MaxValue);
+        if (limit < 1) throw new ArgumentException("--limit must be a positive integer.");
+        var configuration = AiConfiguration.FromEnvironment();
+        var index = await LoadFreshIndexAsync(descriptionIndex);
+        var symbols = DocumentationSnapshotQueries.RequireCoverage(index)
+            .Where(symbol => symbol.Kind is "method" or "type")
+            .Where(symbol => !options.TryGetValue("--project", out var project) || symbol.Project == project)
+            .Where(symbol => !options.TryGetValue("--symbol", out var id) || symbol.Id == id)
+            .OrderBy(symbol => symbol.Id, StringComparer.Ordinal).ToArray();
+        if (options.ContainsKey("--symbol") && symbols.Length == 0)
+            throw new QueryException("symbol_not_found", "Select an indexed class/type or method ID.");
+        var generated = 0;
+        var cached = 0;
+        var failed = new List<string>();
+        string? failureFile = null;
+        if (configuration is not null)
+        {
+            var service = ExplanationSnapshotAdapter.ForSnapshot(loadedSnapshot!);
+            var descriptions = await service.GetSearchableAsync(cancellation.Token);
+            cached = symbols.Count(symbol => descriptions.ContainsKey(symbol.Id));
+            var selected = symbols.Where(symbol => !descriptions.ContainsKey(symbol.Id));
+            using var http = new HttpClient(new HttpClientHandler { AllowAutoRedirect = false })
+                { Timeout = TimeSpan.FromMinutes(2) };
+            var generator = new ExplanationGenerator(http, configuration);
+            var exchange = Path.Combine(Path.GetDirectoryName(index.Solution)!, ".codeatlas", "agent-exchange");
+            foreach (var symbol in selected)
+            {
+                if (generated >= limit) break;
+                cancellation.Token.ThrowIfCancellationRequested();
+                var stem = Path.Combine(exchange, Guid.NewGuid().ToString("N"));
+                try
+                {
+                    var request = await service.ExportAsync(symbol.Id, stem + ".request.json",
+                        referenceLimit: 0, cancellationToken: cancellation.Token);
+                    var response = await generator.GenerateAsync(request, cancellation.Token);
+                    await File.WriteAllTextAsync(stem + ".response.json",
+                        JsonSerializer.Serialize(response, jsonOptions), cancellation.Token);
+                    await service.AcceptAsync(stem + ".response.json", cancellation.Token);
+                    generated++;
+                }
+                catch (QueryException error) when (error.Code is "explanation_budget_exceeded" or "unsupported_explanation_context")
+                {
+                    failed.Add($"{symbol.Id}: {error.Code}: {error.Message}");
+                }
+            }
+            if (failed.Count != 0)
+            {
+                Directory.CreateDirectory(exchange);
+                failureFile = Path.Combine(exchange, "describe-" + Guid.NewGuid().ToString("N") + ".warnings.txt");
+                await File.WriteAllLinesAsync(failureFile, failed, cancellation.Token);
+            }
+        }
+        result = new { source = "index", index.Solution, index.IndexId,
+            ai = configuration is null ? "disabled" : "enabled", generated, cached,
+            remaining = symbols.Length - generated - cached, failed = failed.Count, descriptionWarningsFile = failureFile,
+            message = configuration is null ? "AI disabled. Configure CODEATLAS_AI_API_KEY and CODEATLAS_AI_MODEL to generate descriptions."
+                : "Descriptions saved locally and searchable with search-symbols --mode assisted.",
+            warningCount = index.Warnings.Length, warnings = index.Warnings };
     }
     else if (command is "explain-request" or "explain-import" or "get-explanation")
     {

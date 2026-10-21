@@ -4,6 +4,8 @@ Updated: 17 October 2026. This is the ordered development plan; [VERSION.md](VER
 
 ## Goal and boundaries
 
+**Current focus (user direction, 21 October 2026):** map C# code, optionally generate class/type and method descriptions using user-configured AI credentials, and search those saved descriptions. The broader qualification, ranking experiments, memory optimizations and publication are deferred. Historical milestones and evidence below remain a record, not the current task list.
+
 Make the C# library and CLI dependable for everyday code navigation by developers and AI agents: find code by name or purpose, inspect its source relationships, and make decisions using current evidence. Use the library and CLI directly; no MCP layer.
 
 The initial production scope is supported C# solutions in trusted local repositories. Define and test the supported SDK, operating-system, project, and language-feature combinations before declaring readiness. Static references and descriptions do not prove runtime behavior. Developing or packaging CodeAtlas does not authorize publication; keep the major version at 0 until the user explicitly authorizes publishing it.

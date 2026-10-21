@@ -204,12 +204,26 @@ public sealed class ExplanationRequestBuilder
     internal static async Task<IndexFreshness> VerifyInputsAsync(LoadedSnapshot snapshot, ExplanationRequest request,
         CancellationToken token)
     {
+        await VerifyContextInputsAsync(snapshot, request, token);
+        var freshness = await IndexStore.CheckFreshnessAsync(snapshot.Index, token);
+        if (freshness.IsStale) throw new StaleIndexException(freshness.ChangedFiles);
+        if (freshness.Diagnostics.Length != 0)
+            throw new IndexFormatException("snapshot_io_failed", "Cannot verify explanation dependencies.", freshness.Diagnostics);
+        return freshness; // Preserve unknown/partial; exact observed bytes do not prove complete build coverage.
+    }
+
+    // Bulk readers bracket the operation with full freshness checks, while reusing the
+    // same context validation and hashing each shared context file only once per pass.
+    internal static async Task VerifyContextInputsAsync(LoadedSnapshot snapshot, ExplanationRequest request,
+        CancellationToken token, Dictionary<string, (int Length, string Hash)>? verifiedFiles = null,
+        string? dependencyFingerprint = null)
+    {
         if (!snapshot.VerifiedGeneration || snapshot.Index.InputManifest is null)
             throw new QueryException("rebuild_required", "Explanations require a verified generation.");
         if (request.IndexId != snapshot.Index.IndexId)
             throw new QueryException("snapshot_mismatch", "This explanation request belongs to another generation. Export a new request.");
         if (request.ContextFingerprint != ExplanationContract.ContextHash(request)
-            || request.DependencyFingerprint != DependencyFingerprint(snapshot.Index))
+            || request.DependencyFingerprint != (dependencyFingerprint ?? DependencyFingerprint(snapshot.Index)))
             throw ExplanationContract.Invalid("Explanation request context/dependency fingerprint mismatch.");
         var root = Path.GetDirectoryName(snapshot.Index.Solution)!;
         foreach (var input in request.Inputs)
@@ -217,13 +231,21 @@ public sealed class ExplanationRequestBuilder
             var path = ExplanationFiles.InsideRoot(root, input.File);
             var expected = snapshot.Index.InputManifest.Files.FirstOrDefault(p => SamePath(p.Key, path)).Value;
             var semanticInput = input.SnapshotTracked || expected?.Exists == true;
-            byte[] bytes;
-            try { bytes = await ExplanationFiles.ReadBoundedAsync(path, request.Limits.MaxSourceFileBytes, token); }
-            catch (Exception exception) when (semanticInput && exception is FileNotFoundException or DirectoryNotFoundException)
+            (int Length, string Hash) verified;
+            if (verifiedFiles is null || !verifiedFiles.TryGetValue(path, out verified))
             {
-                throw new StaleIndexException([input.File]);
+                byte[] bytes;
+                try { bytes = await ExplanationFiles.ReadBoundedAsync(path, request.Limits.MaxSourceFileBytes, token); }
+                catch (Exception exception) when (semanticInput && exception is FileNotFoundException or DirectoryNotFoundException)
+                {
+                    throw new StaleIndexException([input.File]);
+                }
+                verified = (bytes.Length, ExplanationContract.Hash(bytes));
+                verifiedFiles?.Add(path, verified);
             }
-            var hash = ExplanationContract.Hash(bytes);
+            if (verified.Length > request.Limits.MaxSourceFileBytes)
+                throw new QueryException("explanation_budget_exceeded", "Context input exceeds this request's source byte budget.");
+            var hash = verified.Hash;
             if (hash != input.Sha256)
             {
                 if (semanticInput) throw new StaleIndexException([input.File]);
@@ -235,11 +257,6 @@ public sealed class ExplanationRequestBuilder
                     throw new StaleIndexException([input.File]);
             }
         }
-        var freshness = await IndexStore.CheckFreshnessAsync(snapshot.Index, token);
-        if (freshness.IsStale) throw new StaleIndexException(freshness.ChangedFiles);
-        if (freshness.Diagnostics.Length != 0)
-            throw new IndexFormatException("snapshot_io_failed", "Cannot verify explanation dependencies.", freshness.Diagnostics);
-        return freshness; // Preserve unknown/partial; exact observed bytes do not prove complete build coverage.
     }
 
     private static bool SamePath(string left, string right) => string.Equals(Path.GetFullPath(left), Path.GetFullPath(right),

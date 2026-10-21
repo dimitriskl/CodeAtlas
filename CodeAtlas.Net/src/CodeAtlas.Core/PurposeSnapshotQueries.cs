@@ -1,3 +1,5 @@
+using System.Security.Cryptography;
+
 namespace CodeAtlas;
 
 public static class PurposeSnapshotQueries
@@ -12,9 +14,30 @@ public static class PurposeSnapshotQueries
             ?? throw new QueryException("rebuild_required", "Rebuild to extract symbol documentation.");
         var facts = snapshot.Index.StructuralCatalog
             ?? throw new QueryException("rebuild_required", "Rebuild to extract structural facts.");
-        await IndexStore.RequireFreshAsync(snapshot.Index, cancellationToken);
+        IReadOnlyDictionary<string, Explanations.AcceptedExplanation>? accepted = null;
+        if (mode == "assisted" && snapshot.VerifiedGeneration && snapshot.Index.InputManifest is not null
+            && snapshot.Index.DocumentationCoverage?.Version == DocumentationCoverage.Current.Version)
+            accepted = await Explanations.ExplanationSnapshotAdapter.ForSnapshot(snapshot)
+                .GetSearchableAsync(cancellationToken);
+        else
+            await IndexStore.RequireFreshAsync(snapshot.Index, cancellationToken);
+        var viewToken = snapshot.Index.IndexId;
+        if (accepted is { Count: > 0 })
+        {
+            // The semantic generation stays immutable while accepted descriptions can
+            // change. Bind assisted continuations to the exact checked derived view.
+            // Hash one bounded entry at a time; never serialize the entire cache together.
+            using var hash = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
+            foreach (var entry in accepted.OrderBy(pair => pair.Key, StringComparer.Ordinal))
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                var entryHash = Explanations.ExplanationContract.Hash(new { SymbolId = entry.Key, Explanation = entry.Value });
+                hash.AppendData(Convert.FromHexString(entryHash));
+            }
+            viewToken += ":ai:" + Convert.ToHexString(hash.GetHashAndReset());
+        }
         return PurposeSearch.Search(symbols, facts, query, mode, kind, request,
-            snapshot.Index.IndexId, language, cancellationToken);
+            viewToken, language, cancellationToken, accepted);
     }
 
     public static async Task<QueryPage<StructuralFact>> GetFactsAsync(LoadedSnapshot snapshot, string id,

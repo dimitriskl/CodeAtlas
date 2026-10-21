@@ -1,5 +1,7 @@
 # Roadmap execution and release evidence
 
+On 21 October 2026 the user narrowed development to searchable generated class/type and method descriptions, with AI enabled only by configured credentials. The broader release roadmap and ranking/performance qualification are deferred; retained results are historical evidence. The current workflow is index → optionally describe → search → verify source. No version 1 publication is part of this change.
+
 ## Authorized work
 
 On 17 October 2026 the user authorized an orchestrator with fresh agents to implement every milestone in [ROADMAP.md](ROADMAP.md), committing each completed milestone separately, toward CodeAtlas version `1.00.00` and publication for live testing. Major-version publication is now authorized; readiness still requires acceptance evidence. Milestones stay on development versions until release qualification is complete.

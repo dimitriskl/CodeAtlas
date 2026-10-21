@@ -3,13 +3,14 @@ using System.Text.Json;
 namespace CodeAtlas.Explanations;
 
 /// <summary>
-/// Optional, explicit derived state. Nothing here is called by indexing, XML/fact/search queries,
-/// or the M4 publisher. A caller loads one snapshot before constructing this service.
+/// Optional derived state, read by assisted search without invoking a provider.
+/// A caller loads one snapshot before constructing this service.
 /// </summary>
 public sealed class ExplanationService
 {
     private readonly LoadedSnapshot snapshot;
     private readonly IReadOnlyList<DocumentedSymbol> symbols;
+    private readonly HashSet<string> symbolIds;
     private readonly string home;
     internal const int MaximumRequestBytes = 524_288;
 
@@ -17,6 +18,7 @@ public sealed class ExplanationService
     {
         this.snapshot = snapshot;
         this.symbols = symbols;
+        symbolIds = symbols.Select(symbol => symbol.Id).ToHashSet(StringComparer.Ordinal);
         var root = Path.GetDirectoryName(snapshot.Index.Solution)!;
         var solutionKey = Path.GetFileName(Path.GetDirectoryName(IndexStore.DefaultPath(snapshot.Index.Solution)))!;
         home = ExplanationFiles.InsideRoot(root, ".codeatlas/explanations/" + solutionKey);
@@ -162,12 +164,7 @@ public sealed class ExplanationService
         }
         try
         {
-            var entry = await ExplanationFiles.ReadCheckedAsync<AcceptedExplanation>(EntryPath(requestId), 524_288, cancellationToken);
-            if (entry.RequestId != requestId || entry.IndexId != snapshot.Index.IndexId
-                || entry.ContextFingerprint != request.ContextFingerprint || entry.Origin != "ai-interpretation"
-                || entry.ProvenanceTrust != "responder-reported-not-authenticated")
-                throw ExplanationContract.Invalid("Explanation cache identity mismatch.");
-            ValidateResponse(request, entry.Response);
+            var entry = await LoadAcceptedAsync(request, cancellationToken);
             return new("current-for-observed-inputs", requestId, snapshot.Index.IndexId, null, entry, freshness);
         }
         catch (FileNotFoundException) { return View("missing", "Request exists but no response has been accepted."); }
@@ -176,6 +173,62 @@ public sealed class ExplanationService
 
         ExplanationView View(string state, string reason) => new(state, requestId, snapshot.Index.IndexId,
             reason, null, freshness);
+    }
+
+    /// <summary>Read only current, checked accepted descriptions. Missing or damaged derived
+    /// entries are omitted; this operation never generates explanations or invokes a provider.</summary>
+    public async Task<IReadOnlyDictionary<string, AcceptedExplanation>> GetSearchableAsync(
+        CancellationToken cancellationToken = default)
+    {
+        await IndexStore.RequireFreshAsync(snapshot.Index, cancellationToken);
+        var result = new Dictionary<string, AcceptedExplanation>(StringComparer.Ordinal);
+        var verifiedFiles = new Dictionary<string, (int Length, string Hash)>(
+            OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal);
+        var dependencyFingerprint = ExplanationRequestBuilder.DependencyFingerprint(snapshot.Index);
+        var directory = Path.Combine(home, "symbols");
+        string[] pointers;
+        try { pointers = Directory.GetFiles(directory, "*.json", SearchOption.TopDirectoryOnly); }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        {
+            pointers = []; // Optional local derived storage cannot disable ordinary search.
+        }
+        foreach (var path in pointers.Order(StringComparer.Ordinal))
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            try
+            {
+                var pointer = await ExplanationFiles.ReadCheckedAsync<SymbolPointer>(path, 4096, cancellationToken);
+                if (pointer is null || !symbolIds.Contains(pointer.SymbolId)
+                    || Path.GetFileName(path) != Path.GetFileName(SymbolPointerPath(pointer.SymbolId)))
+                    throw ExplanationContract.Invalid("Explanation symbol pointer mismatch.");
+                ExplanationContract.RequireId(pointer.RequestId);
+                var request = await LoadRequestAsync(pointer.RequestId, cancellationToken);
+                if (request.Selection.SymbolId != pointer.SymbolId)
+                    throw ExplanationContract.Invalid("Registered request belongs to another symbol.");
+                if (request.Selection.LocalName is not null) continue; // Local-only context is not a whole-symbol description.
+                await ExplanationRequestBuilder.VerifyContextInputsAsync(snapshot, request, cancellationToken,
+                    verifiedFiles, dependencyFingerprint);
+                result.Add(pointer.SymbolId, await LoadAcceptedAsync(request, cancellationToken));
+            }
+            catch (Exception exception) when (CacheFailure(exception))
+            {
+                // Stale, missing, or corrupt explanations are never search evidence.
+                // A changed semantic input is still rejected by the final full freshness check.
+            }
+        }
+        await IndexStore.RequireFreshAsync(snapshot.Index, cancellationToken);
+        return result;
+    }
+
+    private async Task<AcceptedExplanation> LoadAcceptedAsync(ExplanationRequest request, CancellationToken token)
+    {
+        var entry = await ExplanationFiles.ReadCheckedAsync<AcceptedExplanation>(EntryPath(request.RequestId), 524_288, token);
+        if (entry is null || entry.RequestId != request.RequestId || entry.IndexId != snapshot.Index.IndexId
+            || entry.ContextFingerprint != request.ContextFingerprint || entry.Origin != "ai-interpretation"
+            || entry.ProvenanceTrust != "responder-reported-not-authenticated")
+            throw ExplanationContract.Invalid("Explanation cache identity mismatch.");
+        ValidateResponse(request, entry.Response);
+        return entry;
     }
 
     private static bool CacheFailure(Exception e) => e is IOException or UnauthorizedAccessException
@@ -187,7 +240,7 @@ public sealed class ExplanationService
         ValidateRequest(request, requestId);
         if (request.IndexId != snapshot.Index.IndexId)
             throw new QueryException("snapshot_mismatch", "Request belongs to another index generation; export again.");
-        if (!symbols.Any(s => s.Id == request.Selection.SymbolId))
+        if (!symbolIds.Contains(request.Selection.SymbolId))
             throw ExplanationContract.Invalid("Request symbol is not in this generation.");
         return request;
     }

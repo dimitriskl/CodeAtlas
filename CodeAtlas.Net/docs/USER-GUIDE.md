@@ -52,6 +52,22 @@ Stdout contains the JSON outcome. Stderr contains progress and, on failure, erro
 
 ## Search by purpose and read structural facts
 
+To add AI descriptions, set provider credentials locally and run `describe` explicitly:
+
+```powershell
+$env:CODEATLAS_AI_API_KEY = '<your API key>'
+$env:CODEATLAS_AI_MODEL = '<your provider model>'
+# Optional: full chat-completions URL for another compatible provider.
+# $env:CODEATLAS_AI_ENDPOINT = 'https://your-provider.example/v1/chat/completions'
+
+dotnet run --project src/CodeAtlas.Cli --no-build -- describe --index $manifest --limit 10
+dotnet run --project src/CodeAtlas.Cli --no-build -- search-symbols --index $manifest --query 'what you need' --kind all
+```
+
+`describe` sends selected source excerpts to the configured provider and saves generated descriptions locally. Without an API key it reports AI disabled and makes no provider calls. Use `--symbol <id>` for one class/type or method, or omit `--limit` to process all missing descriptions. The limit counts successful generations; skipped large or unsupported declarations do not block later work. Repeating the command skips current descriptions, so bounded batches can be resumed. Skips are recorded in the warning file returned in the outcome. A provider failure stops the command; descriptions already saved remain available.
+
+Assisted search includes current saved AI descriptions automatically, including descriptions imported through the local request/response workflow. Results label AI text and its provider/model separately from authored documentation and retain source identities. Search itself never calls a provider and works without credentials. `--mode names` excludes descriptions. Continue search pages with the returned `pagination.snapshotId`; generating or changing descriptions invalidates the old continuation, so restart at offset zero. After a new index generation, regenerate descriptions; old-generation descriptions are excluded. Provider settings are separate from semantic build inputs, so configuring or rotating credentials does not stale the code map. Do not use CodeAtlas's reserved `CODEATLAS_AI_*` settings as application build inputs.
+
 `search-symbols --query "claim dispatch ownership" --mode assisted` ranks methods using names, signatures, authored documentation, and one-hop relationships. `--mode names` ignores documentation. The result explains each score. An abstention means the words were too weak or absent, not that the behavior is missing.
 
 `get-facts --index $manifest --symbol <id>` lists Roslyn facts such as interfaces and resolved calls. A resolved call is a relationship in source. It is not proof of what runs.

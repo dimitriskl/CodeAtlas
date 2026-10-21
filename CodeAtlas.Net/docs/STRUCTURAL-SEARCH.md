@@ -1,5 +1,7 @@
 # Structural facts and purpose search
 
+Current assisted search also reads validated, current saved AI descriptions. Generate these with the optional credential-based `describe` command or the existing local import workflow; see [descriptions](EXPLANATIONS.md). Results label generated wording and provenance separately from authored XML. Names mode excludes descriptions, and search never calls a provider. Broader ranking experiments are deferred under the user's narrowed scope.
+
 Milestone 7 adds Roslyn facts and lexical search on top of the documentation catalog. It does not call a model and it does not claim runtime behavior.
 
 ## Facts
