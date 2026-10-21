@@ -1,12 +1,12 @@
 # CodeAtlas .NET
 
-Version: **0.00.22**
+Version: **0.00.23**
 
 See [version history](docs/VERSION.md) for what is implemented and the versioning rules. `Version.props` is the build's version source. Run `dotnet run --project src/CodeAtlas.Cli --no-build -- --version` to check the built CLI.
 
 CodeAtlas is a C# semantic-analysis library and CLI built with Roslyn. The CLI calls our library directly; there is no MCP layer.
 
-CodeAtlas scans all C# projects in a solution, saves a structured index and a readable overview, and answers method/reference queries from that index. Refresh can reuse references after verified method-body edits and safely rebuilds when reuse cannot be established. Graph traversal, impact analysis, and Angular support are future work.
+CodeAtlas scans all C# projects in a solution, saves a structured index and a readable overview, and answers method/reference queries from that index. Refresh can reuse references after verified method-body edits and safely rebuilds when reuse cannot be established. Bounded caller traversal and duplicate candidates are available with explicit static-analysis limits. Angular/TypeScript analysis remains outside the initial C# scope.
 
 Start with the [user guide](docs/USER-GUIDE.md) for the solution-to-query workflow, warning reports, refresh, coding-agent usage and recovery.
 
@@ -57,7 +57,7 @@ dotnet run --project src/CodeAtlas.Cli --no-build -- index --solution CodeAtlas.
 Outputs commit as one immutable generation under `.codeatlas/solutions/<solution-file>-<absolute-path-hash>/`. The index command returns `index`, the stable `current.json` manifest to pass to queries, and immutable `snapshotIndex`, `overview`, `warningsFile`, and `timings` paths. Each solution has its own pointer even when solutions share a directory.
 
 - `index.json`: versioned projects, files, types, methods, references, warnings, fingerprints and input-coverage evidence.
-- `catalog.json`: symbol documentation, structural facts and duplicate candidates. Method and reference queries do not read it.
+- `catalog.json`: symbol documentation, structural facts and bounded semantic duplicate evidence. Method and reference queries do not read it. A sibling `generation.json` mirror lets an immutable generation retain its verified identity after `current.json` advances.
 - `overview.md`: a compact project/type map with generation identity and query instructions.
 - `warnings.txt`: the complete warning report, including an explicit zero-warning report.
 - `timings.json`: measured indexing stages, bound to the same generation. Measurements include index, overview and warning staging; timing staging, final input validation, manifest commit and console output are excluded. `elapsedSeconds` includes publication.

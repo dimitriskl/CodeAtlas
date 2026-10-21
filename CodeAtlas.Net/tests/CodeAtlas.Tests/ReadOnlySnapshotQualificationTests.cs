@@ -22,7 +22,7 @@ public sealed class ReadOnlySnapshotQualificationTests(IndexedSolution fixture) 
     private async Task VerifyDeniedSourceReadAtCommit()
     {
         // Arrange
-        var attemptedIndex = fixture.Index with { IndexId = Guid.NewGuid().ToString("N") };
+        var attemptedIndex = SnapshotTestIdentity.NewGeneration(fixture.Index);
         var pointerBefore = await File.ReadAllBytesAsync(fixture.IndexPath);
         var source = new FileInfo(Path.Combine(fixture.Root, "Library", "Calculator.cs"));
         var original = source.GetAccessControl(AccessControlSections.Access);
@@ -88,7 +88,7 @@ public sealed class ReadOnlySnapshotQualificationTests(IndexedSolution fixture) 
         var denied = FileSystemRights.Write | FileSystemRights.Delete | FileSystemRights.DeleteSubdirectoriesAndFiles;
         var security = new List<(FileSystemInfo Item, FileSystemSecurity Original)>();
         var symbol = fixture.Index.Methods.First(method => method.Name == "Calculate").Id;
-        var attemptedIndex = fixture.Index with { IndexId = Guid.NewGuid().ToString("N") };
+        var attemptedIndex = SnapshotTestIdentity.NewGeneration(fixture.Index);
         try
         {
             // Explicit denies on every item avoid relying on inheritance or file attributes.

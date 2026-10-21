@@ -91,6 +91,15 @@ internal sealed class GenerationStore(
         var temporary = Path.Combine(home, "current-" + Guid.NewGuid().ToString("N") + ".tmp");
         try
         {
+            // Retained snapshot paths must never depend on the mutable current pointer.
+            // This mirror is complete and flushed before the sole publication commit.
+            await using (var retained = new FileStream(Path.Combine(directory, "generation.json"), FileMode.CreateNew,
+                FileAccess.Write, FileShare.None, 4096, FileOptions.Asynchronous))
+            {
+                await JsonSerializer.SerializeAsync(retained, manifest, JsonOptions, cancellationToken);
+                await retained.FlushAsync(cancellationToken);
+                retained.Flush(flushToDisk: true);
+            }
             await using (var file = new FileStream(temporary, FileMode.CreateNew, FileAccess.Write, FileShare.None,
                 4096, FileOptions.Asynchronous))
             {
@@ -146,7 +155,11 @@ internal sealed class GenerationStore(
             || !names.All(name => manifest.Artifacts.TryGetValue(name, out var item) && item is not null
                 && item.Length >= 0 && item.Sha256 is { Length: 64 } && item.Sha256.All(Uri.IsHexDigit)))
             throw Invalid("Invalid snapshot manifest contents.");
-        var directory = Path.Combine(Path.GetDirectoryName(manifestPath)!, "generations", manifest.IndexId);
+        var retainedManifest = Path.GetFileName(manifestPath).Equals("generation.json", StringComparison.OrdinalIgnoreCase);
+        var directory = retainedManifest ? Path.GetDirectoryName(manifestPath)!
+            : Path.Combine(Path.GetDirectoryName(manifestPath)!, "generations", manifest.IndexId);
+        // Retained generations may be copied for qualification. Identity comes from
+        // the manifest/index/catalog and digests, not the chosen retention directory.
         foreach (var name in names)
         {
             var info = new FileInfo(Path.Combine(directory, name));

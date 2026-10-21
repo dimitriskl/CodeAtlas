@@ -5,8 +5,8 @@ namespace CodeAtlas;
 // Deterministic lexical retrieval. No embeddings, model calls, labels, or synonym lists.
 public static class PurposeSearch
 {
-    public const string RankingVersion = "lexical-distinct-tfidf-v2";
-    public const string EvidencePolicy = "distinct-query-terms-v2: a rare name or containing-type token is sufficient; otherwise >=2 terms including one in <=max(1,floor(N/5)) documents. Test projects sort after production unless the query says test.";
+    public const string RankingVersion = "lexical-distinct-tfidf-v3";
+    public const string EvidencePolicy = "distinct-query-terms-v3: a rare symbol-name, signature, containing-type or resolved-call-name token is sufficient; otherwise >=2 terms including one in <=max(1,floor(N/5)) documents. Own names outrank type context. Test projects sort after production unless the query says test.";
     public const int MaximumQueryCharacters = 4096;
     private static readonly Regex AcronymBoundary = new(@"(\p{Lu})(\p{Lu}\p{Ll})", RegexOptions.CultureInvariant);
     private static readonly Regex WordBoundary = new(@"(\p{Ll}|\p{Nd})(\p{Lu})", RegexOptions.CultureInvariant);
@@ -49,9 +49,14 @@ public static class PurposeSearch
             throw new QueryException("rebuild_required", "Rebuild with the supported structural-fact model.");
         var byId = symbols.ToDictionary(s => s.Id, StringComparer.Ordinal);
         var byOwner = catalog.Facts.ToLookup(f => f.OwnerId, StringComparer.Ordinal);
-        var queryTokens = Tokenize(query);
-        if (queryTokens.Any(token => token is "angular" or "typescript"))
-            return Abstain(request, snapshotId, catalog, queryTokens, "abstained-outside-supported-language", 0,
+        var queryTokens = SearchTokens(query);
+        // Identifier splitting turns "TypeScript" into "type" + "script".
+        // Check explicit language words before that normalization as well.
+        var outsideLanguage = Words.Matches(query).Any(word =>
+            word.Value.Equals("angular", StringComparison.OrdinalIgnoreCase)
+            || word.Value.Equals("typescript", StringComparison.OrdinalIgnoreCase));
+        if (outsideLanguage || queryTokens.Any(token => token is "angular" or "typescript"))
+            return Abstain(request, snapshotId, catalog, mode, queryTokens, "abstained-outside-supported-language", 0,
                 "Only C# source is indexed. Angular and TypeScript are not these symbols.");
         // Calculate IDF over the whole selected-kind corpus, independently of page/filter.
         // Exact project/type filters cannot change a symbol's relevance score in this generation.
@@ -85,9 +90,9 @@ public static class PurposeSearch
             if (reasons.Count == 0) continue;
             // Fixed before any held-out evaluation. Shared identically by both retrieval modes.
             var rare = reasons.Any(r => documentFrequency[r.MatchedTokens[0]] <= rareDocumentLimit);
-            var rareName = reasons.Any(r => r.Field == "name-signature" && documentFrequency[r.MatchedTokens[0]] <= rareDocumentLimit);
+            var rareName = reasons.Any(r => IsIdentityField(r.Field) && documentFrequency[r.MatchedTokens[0]] <= rareDocumentLimit);
             var sufficient = queryTokens.Length == 1
-                ? rare && reasons.Any(r => r.Field == "name-signature")
+                ? rareName
                 : rareName || (rare && reasons.Count >= 2);
             if (!sufficient) { weakMatches++; continue; }
             var grouped = reasons.GroupBy(r => (r.Field, r.SourceSymbolId, r.Location,
@@ -112,7 +117,7 @@ public static class PurposeSearch
                 : weakMatches != 0 ? "abstained-insufficient-evidence" : "abstained-no-token-overlap", weakMatches,
             ["Scores indicate lexical evidence, not confidence or verified purpose.",
              "Partial lexical matches remain visible; unmatched query terms can change the intended meaning.",
-             "No stemming, translation, synonym expansion, negation reasoning, runtime effects or cross-language analysis.",
+             "English suffix normalization is lexical only; no translation, synonym expansion, negation reasoning, runtime effects or cross-language analysis.",
              "Empty matches do not establish absence outside the supported loaded C# snapshot."]);
     }
 
@@ -120,14 +125,20 @@ public static class PurposeSearch
         Dictionary<string, DocumentedSymbol> byId, ILookup<string, StructuralFact> byOwner, string mode)
     {
         var point = new DocumentationRange(symbol.Location, symbol.Location);
-        yield return Field("name-signature", 4, symbol.Name + " " + symbol.ContainingType + " " + symbol.Signature,
+        yield return Field("symbol-name", 6, symbol.Name, symbol.Id, point);
+        yield return Field("name-signature", 2, symbol.Signature,
             symbol.Id, point);
+        yield return Field("containing-type-name", 2, symbol.ContainingType ?? "", symbol.Id, point);
         if (mode == "names") yield break;
         foreach (var section in symbol.Documentation.Sections)
             yield return DocField("developer-documentation", 3, section, null);
         foreach (var fact in byOwner[symbol.Id])
         {
-            yield return Field("structural-target-name", 1, fact.Target.Name + " " + fact.Target.Signature,
+            // Callee parameter/return types are not words in the caller's own signature.
+            // Keep their semantic relationship visible without allowing a large external
+            // signature to dominate the method's authored description.
+            yield return Field(fact.Kind == "resolved-invocation" ? "resolved-call-name" : "structural-target-name",
+                fact.Kind == "resolved-invocation" ? 3 : 1, fact.Target.Name,
                 symbol.Id, fact.Evidence.Location, fact.Kind, relationship: fact.Evidence);
             // Exact semantic one-hop links only. Do not turn a class summary into a member summary.
             if (fact.Kind is not ("containing-type" or "implements-member" or "overrides-member" or "resolved-invocation")) continue;
@@ -144,15 +155,46 @@ public static class PurposeSearch
             && !token.EndsWith("ss") && !token.EndsWith("es") && !token.EndsWith("us") && !token.EndsWith("is")
             ? token[..^1] : token;
 
+    private static string[] SearchTokens(string text) => Tokenize(text).Select(FoldInflection)
+        .Where(token => !StopWords.Contains(token)).Distinct(StringComparer.Ordinal).Order(StringComparer.Ordinal).ToArray();
+
+    // General English suffix rules shared by queries, identifiers and authored XML.
+    // They are intentionally independent of domain vocabulary and expected symbols.
+    private static string FoldInflection(string token)
+    {
+        if (token.Length > 5 && token.EndsWith("ization", StringComparison.Ordinal)) token = token[..^7] + "ize";
+        if (token.Length > 4 && (token.EndsWith("ies", StringComparison.Ordinal) || token.EndsWith("ied", StringComparison.Ordinal)))
+            token = token[..^3] + "y";
+        else if (token.Length > 4 && (token.EndsWith("ches", StringComparison.Ordinal)
+            || token.EndsWith("shes", StringComparison.Ordinal) || token.EndsWith("xes", StringComparison.Ordinal)
+            || token.EndsWith("zes", StringComparison.Ordinal) || token.EndsWith("sses", StringComparison.Ordinal)))
+            token = token[..^2];
+        else if (token.Length > 4 && token.EndsWith('s') && !token.EndsWith("ss", StringComparison.Ordinal)
+            && !token.EndsWith("us", StringComparison.Ordinal) && !token.EndsWith("is", StringComparison.Ordinal))
+            token = token[..^1];
+        var inflected = false;
+        if (token.Length > 5 && token.EndsWith("ing", StringComparison.Ordinal)) { token = token[..^3]; inflected = true; }
+        else if (token.Length > 4 && token.EndsWith("ed", StringComparison.Ordinal)) { token = token[..^2]; inflected = true; }
+        if (inflected && token.Length > 3 && token[^1] == token[^2] && token[^1] is not ('s' or 'l' or 'z'))
+            token = token[..^1];
+        // Dropping a terminal e on both sides equates e.g. schedule/scheduled,
+        // delete/deleted and authorize/authorized without a domain synonym map.
+        if (token.Length > 3 && token.EndsWith('e')) token = token[..^1];
+        return token;
+    }
+
+    private static bool IsIdentityField(string field) =>
+        field is "symbol-name" or "name-signature" or "containing-type-name" or "resolved-call-name";
+
     private static bool IsTestProject(string project) =>
         project.Contains(".Tests", StringComparison.OrdinalIgnoreCase)
         || project.Contains("/Tests/", StringComparison.OrdinalIgnoreCase)
         || project.StartsWith("tests/", StringComparison.OrdinalIgnoreCase);
 
-    private static SearchResult Abstain(QueryRequest request, string? snapshotId, StructuralCatalog catalog,
+    private static SearchResult Abstain(QueryRequest request, string? snapshotId, StructuralCatalog catalog, string mode,
         string[] queryTokens, string decision, int withheld, string limitation) =>
         new(new([], new(request.Offset, request.Limit, 0, 0, false, null, snapshotId, snapshotId is not null)),
-            RankingVersion, "assisted", "C#", catalog.Coverage, queryTokens, queryTokens, EvidencePolicy,
+            RankingVersion, mode, "C#", catalog.Coverage, queryTokens, queryTokens, EvidencePolicy,
             decision, withheld, [limitation, "Empty matches do not establish absence outside the supported loaded C# snapshot."]);
 
     private static SearchField DocField(string name, double weight, DocumentationSection section, StructuralFact? fact) =>
@@ -162,7 +204,7 @@ public static class PurposeSearch
     private static SearchField Field(string name, double weight, string text, string source,
         DocumentationRange location, string? factKind = null, DocumentationEvidence? documentation = null,
         StructuralEvidence? relationship = null) =>
-        new(name, weight, Tokenize(text).ToHashSet(StringComparer.Ordinal), source, location, factKind, documentation, relationship);
+        new(name, weight, SearchTokens(text).ToHashSet(StringComparer.Ordinal), source, location, factKind, documentation, relationship);
 
     private sealed record SearchField(string Name, double Weight, HashSet<string> Tokens,
         string SourceSymbolId, DocumentationRange Location, string? FactKind,

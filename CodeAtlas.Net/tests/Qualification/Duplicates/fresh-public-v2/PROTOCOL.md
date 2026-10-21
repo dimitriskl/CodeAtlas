@@ -1,0 +1,7 @@
+# Fresh public M10 cases, v2
+
+Authored after the engine implementation and before any detector execution on these cases. No private application source or M7 labels were inspected. This is a new author-labeled set, not independently reviewed or a statistically representative held-out evaluation.
+
+Sixteen methods produce exactly 120 unordered pairs. Two useful structural positives cover an exact arithmetic loop and renamed string joining. Four domain-review pairs preserve path backslashes, bound Console member identities, business fee literals and overflow contexts; they must never be called exact/renamed structural duplicates. A misleading same-documentation pair differs materially in authorization rules. Two trivial forwarders should be short-body filtered. Every cross-family pair is explicitly labeled negative.
+
+Use the root-accepted metrics and unchanged detector limits in ../ACCEPTED-METRICS.md. Report every pair, all false positives/negatives, exclusions, trace events and changed-token evidence. Useful domain-review candidates are reported separately and do not improve useful duplicate precision or recall. Candidate output is never a proof of equivalence or a merge recommendation. Freeze source, labels and protocol before execution; retain failed runs and never revise labels in response to detector output. Independent source review and real-solution resource/usefulness qualification remain separate requirements.

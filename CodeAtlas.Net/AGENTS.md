@@ -33,3 +33,7 @@ dotnet run --project src/CodeAtlas.Cli --no-build -- index --solution CodeAtlas.
 Read the immutable `overview` path returned by the index command for orientation. Keep its generation together with the returned `warningsFile` and `timings` paths. Use `find-symbol --index <solution-current.json> --name <method>` and `find-references --index <solution-current.json> --symbol <id>` through the same CLI to inspect relevant relationships. Read the source before editing; static references are not a complete runtime call graph.
 
 After source changes, run `dotnet run --project src/CodeAtlas.Cli --no-build -- refresh --solution CodeAtlas.slnx` before querying again. Refresh safely falls back to full analysis when reuse cannot be established; `index` always requests full analysis. Use the new snapshot ID for continuation requests. Keep `.codeatlas/` outputs out of Git. Validate changes with the documented build and test commands.
+
+## Approved qualification exception
+
+On 21 October 2026 the user explicitly approved creating/updating `C:\Code\CodeAtlas\.github\workflows\qualification.yml`, pushing the qualification branch, and running its GitHub Windows/Linux checks. The reviewed template is `build/qualification.yml`; hosted build jobs work in CodeAtlas.Net and separate install jobs use the prepared public package/fixture. This exception covers that workflow and its qualification execution. Other development follows the required local directory rule above.

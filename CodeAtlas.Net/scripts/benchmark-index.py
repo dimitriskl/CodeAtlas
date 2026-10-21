@@ -18,6 +18,7 @@ import json
 import os
 from pathlib import Path
 import platform
+import re
 import shutil
 import subprocess
 import time
@@ -29,6 +30,50 @@ class ProcessMemoryCounters(ctypes.Structure):
             "PeakWorkingSetSize", "WorkingSetSize", "QuotaPeakPagedPoolUsage",
             "QuotaPagedPoolUsage", "QuotaPeakNonPagedPoolUsage", "QuotaNonPagedPoolUsage",
             "PagefileUsage", "PeakPagefileUsage")]
+
+
+def retain_index(result, output):
+    """Retain one complete immutable generation, never a split index without its catalog."""
+    snapshot = Path(result.get("snapshotIndex", result["index"]))
+    mirror = snapshot.parent / "generation.json"
+    manifest_path = mirror if mirror.exists() else Path(result["index"])
+    manifest_bytes = manifest_path.read_bytes()
+    manifest = json.loads(manifest_bytes.decode("utf-8-sig"))
+    if not isinstance(manifest, dict) or "manifestVersion" not in manifest:
+        # Pre-generation CLI versions produced complete inline indexes.
+        index = json.loads(snapshot.read_text(encoding="utf-8-sig"))
+        if (not isinstance(index, dict) or index.get("schemaVersion") not in (1, 2, 3)
+                or index.get("schemaVersion") >= 2 and index.get("symbols") is None):
+            raise ValueError("Cannot retain an incomplete raw split index without its generation manifest")
+        destination = output / "index.json"
+        shutil.copyfile(snapshot, destination)
+        return {"index": str(destination), "snapshotIndex": str(destination)}
+    identifier = manifest.get("indexId")
+    artifacts = manifest.get("artifacts")
+    expected = {"index.json", "overview.md", "warnings.txt", "timings.json"}
+    if isinstance(artifacts, dict) and "catalog.json" in artifacts:
+        expected.add("catalog.json")
+    if (manifest.get("manifestVersion") != 1 or not isinstance(identifier, str)
+            or re.fullmatch(r"[0-9a-fA-F]{32}", identifier) is None
+            or result.get("indexId", identifier) != identifier
+            or not isinstance(artifacts, dict) or set(artifacts) != expected):
+        raise ValueError("Benchmark result and retained generation manifest disagree")
+    source = snapshot.parent if snapshot.name == "index.json" else manifest_path.parent / "generations" / identifier
+    destination = output / "generations" / identifier
+    destination.mkdir(parents=True, exist_ok=False)
+    for name in sorted(expected):
+        digest = artifacts[name]
+        target = destination / name
+        shutil.copyfile(source / name, target)
+        with target.open("rb") as stream:
+            checksum = hashlib.file_digest(stream, "sha256").hexdigest()
+        if (not isinstance(digest, dict) or target.stat().st_size != digest.get("length")
+                or checksum.lower() != str(digest.get("sha256")).lower()):
+            raise ValueError("Retained snapshot artifact checksum/length mismatch: " + name)
+    # All copies use the captured immutable manifest, even if the active pointer moves.
+    for target in (destination / "generation.json", output / "current.json", output / "manifest.json"):
+        target.write_bytes(manifest_bytes)
+    return {"index": str(output / "current.json"), "snapshotIndex": str(destination / "index.json")}
 
 
 def main():
@@ -120,10 +165,7 @@ def main():
         if result.get("timings"):
             shutil.copyfile(result["timings"], output / "timings.json")
         if args.retain_index:
-            snapshot_index = result.get("snapshotIndex", result["index"])
-            shutil.copyfile(snapshot_index, output / "index.json")
-            if snapshot_index != result["index"]:
-                shutil.copyfile(result["index"], output / "manifest.json")
+            metadata["retainedSnapshot"] = retain_index(result, output)
     (output / "memory-samples.json").write_text(json.dumps(samples, indent=2), encoding="utf-8")
     (output / "benchmark.json").write_text(json.dumps(metadata, indent=2), encoding="utf-8")
     print(json.dumps({"report": str(output / "benchmark.json"), "exitCode": process.returncode,

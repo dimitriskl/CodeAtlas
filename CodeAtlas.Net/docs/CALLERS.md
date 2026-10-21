@@ -1,7 +1,11 @@
 # Caller navigation
 
-Milestone 11 walks resolved invocation facts from `get-facts`. `find-callers --index <manifest> --symbol <id> --depth <1-5>` returns the methods whose bodies bind to that symbol, then their callers, up to the depth and a limit of 100 edges. A repeated method is recorded as a cycle and is not expanded again.
+`find-callers --index <manifest> --symbol <method-id> --depth <1-5> --limit <1-1000>` walks resolved invocation facts toward calling methods. Default depth is one and default result limit is 100. Every returned edge retains its source evidence. Read the caller source before deciding whether a change affects it.
 
-These edges are source bindings. They describe potentially affected code. They do not prove runtime dispatch or that a change will break a caller. Method groups, local functions, and unresolved calls stay out because they are not resolved invocation facts.
+Traversal reports real graph cycles; a shared ancestor in an acyclic diamond or repeated call sites do not by themselves imply a cycle. Results are deterministic within a snapshot. This traversal does not support `--offset` or `--snapshot` pagination; those flags are rejected. Narrow the method or depth and inspect truncation metadata.
 
-One test covers direct callers, a cycle, and the edge limit.
+The command scans at most 1,000,000 structural facts and examines at most 100,000 traversal edges. `depthLimited`, `workLimited`, `truncated`, `hasMore`, counters and limits describe the bounded work. `hasMore` requires an observed additional eligible result; a scan cap can mean completeness is unknown without proving an extra result exists. `cyclesComplete` is false for truncated traversal.
+
+These are static source bindings and potentially affected code, not guaranteed runtime dispatch or breakage. Method groups, documentation references, local functions and unresolved calls are outside this invocation graph. Interface and virtual call evidence preserves the resolved target; it does not enumerate every runtime implementation. Freshness and coverage follow the same saved-query contract as other commands.
+
+Regression coverage includes direct callers, cycles, acyclic diamonds, repeated sites, result/depth/work bounds, unknown symbols, unsupported pagination, partial coverage and stale-source refusal. Qualification results belong to their recorded build and fixture scope.

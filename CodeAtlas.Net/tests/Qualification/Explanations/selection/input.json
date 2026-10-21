@@ -1,0 +1,15 @@
+{
+  "protocol": "m09-selection-public-v1",
+  "instructions": "Choose exactly one candidate ID, or abstain if no supplied candidate establishes the requested behavior. Use only your condition's candidate packet. Do not open source, gold, generated files from the other condition, or other selectors' answers. Return taskId, selectedSymbolId (null when abstaining), and a short evidence-based reason. Uncertainty is permitted.",
+  "candidateOrder": ["C4", "C3", "C8", "C2", "C5", "C7", "C6", "C1"],
+  "tasks": [
+    { "taskId": "S1", "question": "Which Alpha method accepts an integer, adds seven to it in a local named adjusted, and returns that value?" },
+    { "taskId": "S2", "question": "Which method removes surrounding whitespace and returns invariant uppercase text?" },
+    { "taskId": "S3", "question": "Which candidate establishes durable payment persistence within an atomic database transaction?" },
+    { "taskId": "S4", "question": "Which method returns a callback targeting Ping without calling Ping during the method body?" },
+    { "taskId": "S5", "question": "Which candidate establishes successful network transmission and a delivery acknowledgement?" },
+    { "taskId": "S6", "question": "Select the Process(int) method compiled into Beta/Beta.csproj, from the shared Identity source file." },
+    { "taskId": "S7", "question": "Which selected method is an empty void stub with no statements in its body?" },
+    { "taskId": "S8", "question": "Select the Process(int) method compiled into Alpha/Alpha.csproj, from the shared Identity source file." }
+  ]
+}

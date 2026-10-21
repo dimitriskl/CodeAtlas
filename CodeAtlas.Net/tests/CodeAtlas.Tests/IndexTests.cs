@@ -48,7 +48,7 @@ public sealed class IndexedSolution : IAsyncLifetime
 
     public async Task RestorePublicationAsync()
     {
-        Index = Index with { IndexId = Guid.NewGuid().ToString("N") };
+        Index = SnapshotTestIdentity.NewGeneration(Index);
         await IndexStore.SaveAsync(Index);
     }
 
@@ -363,7 +363,7 @@ public sealed class IndexTests(IndexedSolution fixture) : IClassFixture<IndexedS
         try
         {
             await File.WriteAllTextAsync(added, "// changed while indexing");
-            await Assert.ThrowsAsync<StaleIndexException>(() => IndexStore.SaveAsync(fixture.Index with { IndexId = Guid.NewGuid().ToString("N") }));
+            await Assert.ThrowsAsync<StaleIndexException>(() => IndexStore.SaveAsync(SnapshotTestIdentity.NewGeneration(fixture.Index)));
             Assert.Equal(previous, await File.ReadAllTextAsync(fixture.IndexPath));
             Assert.Equal(overview, await File.ReadAllTextAsync(overviewPath));
             Assert.Empty(Directory.GetFiles(Path.GetDirectoryName(fixture.IndexPath)!, "*.tmp"));

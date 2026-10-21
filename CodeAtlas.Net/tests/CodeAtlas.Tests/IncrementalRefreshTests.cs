@@ -159,7 +159,7 @@ public sealed class IncrementalRefreshTests
     {
         // Arrange
         var fixture = await PhysicalRefreshFixture.CreateAsync();
-        var legacy = fixture.Baseline with { IndexId = Guid.NewGuid().ToString("N"), IncrementalState = null };
+        var legacy = SnapshotTestIdentity.NewGeneration(fixture.Baseline) with { IncrementalState = null, Duplicates = null };
         await IndexStore.SaveAsync(legacy);
 
         // Act

@@ -4,6 +4,24 @@ CodeAtlas creates a local semantic index of a trusted C# solution. Use it to fin
 
 This guide covers the current development CLI. Installable packages and the remaining discovery features are being qualified through the [roadmap](ROADMAP.md). See the [README](../README.md) for source-build prerequisites and the current version.
 
+## Install or build
+
+There is no production release yet. Use the [README source-build commands](../README.md#build-and-test), or an explicitly identified local qualification package. The intended public distribution is a GitHub Release containing `CodeAtlas.Tool.<version>.nupkg`; NuGet.org is not the selected feed.
+
+For an available downloaded package, put it in a local package folder and install to a tool directory:
+
+```powershell
+# Replace the example version with the normalized version of your package.
+dotnet tool install CodeAtlas.Tool --tool-path C:\Tools\CodeAtlas --add-source C:\Downloads\CodeAtlas --version <package-version>
+C:\Tools\CodeAtlas\codeatlas.exe --version
+# Upgrade an existing installation using the same folder and explicit version:
+dotnet tool update CodeAtlas.Tool --tool-path C:\Tools\CodeAtlas --add-source C:\Downloads\CodeAtlas --version <new-package-version>
+```
+
+Product `x.xx.xx` versions normalize to `x.x.x` in NuGet package names. The installed command prints the padded product version. Keep an SDK compatible with the target solution installed; the framework-dependent tool does not bundle an SDK. Run `dotnet --list-sdks` and check the target's `global.json`. Installing a runtime alone is insufficient for semantic solution loading. The current source checkout pins SDK 10.0.402. Supported clean-host/platform qualification is recorded in [PACKAGING.md](PACKAGING.md); do not infer it from a package build.
+
+In the commands below, replace `dotnet run --project src/CodeAtlas.Cli --no-build --` with the installed executable when using the package. Keep that launcher consistent between indexing and queries. After upgrading CodeAtlas, regenerate the index before relying on newly added catalogs or contracts. Old inline indexes remain explicitly unverified; rebuilding creates the current verified generation.
+
 ## Start with a solution
 
 Run these PowerShell commands from the CodeAtlas.Net source checkout after building CodeAtlas. Keep the same launcher and explicit environment throughout the workflow.
@@ -72,6 +90,18 @@ $page.references
 
 A reference's `kind` distinguishes invocations from other uses such as method groups. Inspect its `definitionId` as well: related interface/override definitions can appear in results. Static references do not establish complete runtime behavior, reflection targets, dependency-injection resolution or every virtual-dispatch target.
 
+## Inspect callers, duplication and optional explanations
+
+```powershell
+dotnet run --project src/CodeAtlas.Cli --no-build -- find-callers --index $manifest --symbol $symbolId --depth 2 --limit 100
+dotnet run --project src/CodeAtlas.Cli --no-build -- find-duplicates --index $manifest --mode bodies --symbol $symbolId --limit 20
+dotnet run --project src/CodeAtlas.Cli --no-build -- find-duplicates --index $manifest --mode purpose --symbol $symbolId --limit 20
+```
+
+Caller traversal is bounded and has no offset pagination; inspect truncation, work and cycle-completeness fields. Duplicate responses show both locations and semantic differences. Similar structure or purpose is a review lead, not proof that methods can be merged. Read [caller limits](CALLERS.md) and [duplicate coverage](DUPLICATES.md).
+
+For a selected symbol, [optional local explanations](EXPLANATIONS.md) describes `explain-request`, the exact response JSON, `explain-import` and `get-explanation`. Keep request/response files under `.codeatlas/agent-exchange` so generated JSON does not appear as new source-tree configuration. No provider is called automatically. Review context before sharing it, then verify generated claims against cited source. Authored documentation, facts and AI interpretations remain distinct.
+
 ## Refresh after changes
 
 After editing and testing your application:
@@ -100,11 +130,11 @@ Keep the same query filters. A refresh or replacement invalidates an older conti
 
 ## Understand snapshot state and storage
 
-Use the returned `index` path, the stable solution-scoped `current.json` manifest. It selects one immutable generation containing `index.json`, `overview.md`, `warnings.txt` and `timings.json`. Keep those reports together. Each solution has its own pointer, including solutions sharing a directory.
+Use the returned `index` path, the stable solution-scoped `current.json` manifest. It selects one immutable generation containing `index.json`, `catalog.json`, `generation.json`, `overview.md`, `warnings.txt` and `timings.json`. Keep those reports together. Each solution has its own pointer, including solutions sharing a directory.
 
 The manifest changes only after artifacts are staged, flushed and checked. Readers verify the selected generation. Failure or cancellation before publication preserves the previous active snapshot, which can correctly be stale after source edits. A failed first publication leaves no active snapshot. Do not edit generated hashes or schemas to bypass errors.
 
-Freshness checks hash tracked inputs and compare the captured environment. `stale` means tracked inputs changed. `unknown` can mean partial input coverage or verification diagnostics; inspect both. When diagnostics are empty, `isStale: false` with partial coverage means tracked inputs match, not that every possible build input or runtime behavior is covered. Verification diagnostics can instead mean inputs could not be checked. Generated-code and multi-target coverage retain their stated limits.
+Freshness checks hash tracked inputs and compare the captured environment. `stale` means tracked inputs changed. `unknown` can mean partial input coverage or verification diagnostics; inspect both. When diagnostics are empty, `isStale: false` with partial coverage means tracked inputs match, not that every possible build input or runtime behavior is covered. Verification diagnostics can instead mean inputs could not be checked. Generated-code and multi-target coverage retain their stated limits. Method IDs do not identify a target framework; when several contexts are loaded for one project path, references union their observed bindings. Duplicate extraction omits those ambiguous project contexts explicitly instead of treating one context as authoritative.
 
 Use a consistent environment and launcher between commands. Switching between `dotnet run`, a direct DLL invocation and an installed tool can change the captured environment. Automation hosts may also inject changing per-call variables. If you deliberately establish a stable child-process environment, use it for indexing, refresh and queries; the product still fingerprints the entire environment it actually receives. Never print secret environment values to diagnose a mismatch.
 
@@ -142,4 +172,4 @@ Exit codes: 0 for a successful operation, including empty results or a stale-sta
 
 CodeAtlas's current analysis is local and does not automatically upload source or call an AI provider. Restore, repository tasks and your external coding agent have their own behavior. Artifacts and logs contain paths, symbol information, relationships, diagnostics and fingerprints; treat them as repository-sensitive data. Git-ignore does not control backups, copying or agent uploads. Environment values are represented by a digest, not stored as raw values.
 
-The current method-query surface covers ordinary and explicit-interface C# source methods in loaded projects. Constructors, accessors, local functions and metadata-only methods are excluded. The index also contains a source type inventory. Additional discovery features remain on the roadmap until implemented and qualified. Consult the linked validation reports for measured performance and platform boundaries; historical measurements are not latency guarantees.
+The current method-query surface covers ordinary and explicit-interface C# source methods in loaded projects. Constructors, accessors, local functions and metadata-only methods are excluded. The index also contains a source type inventory. Purpose search, authored documentation, static facts, duplicate candidates and bounded callers have their own coverage and qualification reports. Optional explanations are derived interpretations with separately checked context freshness. Consult the linked validation reports for measured performance and platform boundaries; historical measurements are not latency guarantees.

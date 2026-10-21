@@ -1,0 +1,4 @@
+# Preserve the byte hashes in each frozen corpus on every checkout platform.
+known-public-v1/** -text -whitespace
+fresh-public-v2/** -text -whitespace
+PURPOSE-PROTOCOL.md -text -whitespace

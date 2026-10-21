@@ -1,0 +1,7 @@
+# Frozen qualification inputs are byte-hashed across Windows and Linux checkouts.
+fixture/** -text -whitespace
+generation-cases.json -text -whitespace
+selection/input.json -text -whitespace
+review-only/gold.json -text -whitespace
+PROTOCOL.md -text -whitespace
+FREEZE.json -text -whitespace

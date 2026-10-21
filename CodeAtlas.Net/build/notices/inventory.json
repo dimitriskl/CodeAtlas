@@ -1,0 +1,246 @@
+{
+  "formatVersion": 1,
+  "scope": "Runtime NuGet packages selected by restored tool assets, including the Roslyn BuildHost payload container; nested payload bytes are also checked against that container package.",
+  "qualification": "Upstream metadata and notice preservation; not legal certification.",
+  "licenseText": {
+    "file": "MIT-LICENSE.txt",
+    "sha256": "508a77d2e7b51d98adeed32648ad124b7b30241a8e70b2e72c99f92d8e5874d1"
+  },
+  "packages": [
+    {
+      "id": "Humanizer.Core",
+      "version": "2.14.1",
+      "license": "MIT",
+      "copyright": "Copyright (c) .NET Foundation and Contributors",
+      "notices": []
+    },
+    {
+      "id": "Microsoft.Build.Locator",
+      "version": "1.11.2",
+      "license": "MIT",
+      "copyright": "© Microsoft Corporation. All rights reserved.",
+      "notices": []
+    },
+    {
+      "id": "Microsoft.CodeAnalysis.Common",
+      "version": "5.9.0",
+      "license": "MIT",
+      "copyright": "© Microsoft Corporation. All rights reserved.",
+      "notices": [
+        {
+          "source": "ThirdPartyNotices.rtf",
+          "file": "upstream/microsoft.codeanalysis.common/5.9.0/ThirdPartyNotices.rtf",
+          "sha256": "ef4678850e7e3aaf9297f07e5c4060d477854e545ccf8e2ef8452d65a7b2efaf"
+        }
+      ]
+    },
+    {
+      "id": "Microsoft.CodeAnalysis.CSharp.Workspaces",
+      "version": "5.9.0",
+      "license": "MIT",
+      "copyright": "© Microsoft Corporation. All rights reserved.",
+      "notices": [
+        {
+          "source": "ThirdPartyNotices.rtf",
+          "file": "upstream/microsoft.codeanalysis.csharp.workspaces/5.9.0/ThirdPartyNotices.rtf",
+          "sha256": "ef4678850e7e3aaf9297f07e5c4060d477854e545ccf8e2ef8452d65a7b2efaf"
+        }
+      ]
+    },
+    {
+      "id": "Microsoft.CodeAnalysis.CSharp",
+      "version": "5.9.0",
+      "license": "MIT",
+      "copyright": "© Microsoft Corporation. All rights reserved.",
+      "notices": [
+        {
+          "source": "ThirdPartyNotices.rtf",
+          "file": "upstream/microsoft.codeanalysis.csharp/5.9.0/ThirdPartyNotices.rtf",
+          "sha256": "ef4678850e7e3aaf9297f07e5c4060d477854e545ccf8e2ef8452d65a7b2efaf"
+        }
+      ]
+    },
+    {
+      "id": "Microsoft.CodeAnalysis.Workspaces.Common",
+      "version": "5.9.0",
+      "license": "MIT",
+      "copyright": "© Microsoft Corporation. All rights reserved.",
+      "notices": [
+        {
+          "source": "ThirdPartyNotices.rtf",
+          "file": "upstream/microsoft.codeanalysis.workspaces.common/5.9.0/ThirdPartyNotices.rtf",
+          "sha256": "ef4678850e7e3aaf9297f07e5c4060d477854e545ccf8e2ef8452d65a7b2efaf"
+        }
+      ]
+    },
+    {
+      "id": "Microsoft.CodeAnalysis.Workspaces.MSBuild",
+      "version": "5.9.0",
+      "license": "MIT",
+      "copyright": "© Microsoft Corporation. All rights reserved.",
+      "notices": [
+        {
+          "source": "ThirdPartyNotices.rtf",
+          "file": "upstream/microsoft.codeanalysis.workspaces.msbuild/5.9.0/ThirdPartyNotices.rtf",
+          "sha256": "ef4678850e7e3aaf9297f07e5c4060d477854e545ccf8e2ef8452d65a7b2efaf"
+        }
+      ]
+    },
+    {
+      "id": "Microsoft.Extensions.DependencyInjection.Abstractions",
+      "version": "10.0.1",
+      "license": "MIT",
+      "copyright": "© Microsoft Corporation. All rights reserved.",
+      "notices": [
+        {
+          "source": "THIRD-PARTY-NOTICES.TXT",
+          "file": "upstream/microsoft.extensions.dependencyinjection.abstractions/10.0.1/THIRD-PARTY-NOTICES.TXT",
+          "sha256": "6d15e10a101c6bfff2ab4429ed061bf76c456fc4b23ad6b03e0d0f8377148a21"
+        }
+      ]
+    },
+    {
+      "id": "Microsoft.Extensions.DependencyInjection",
+      "version": "10.0.1",
+      "license": "MIT",
+      "copyright": "© Microsoft Corporation. All rights reserved.",
+      "notices": [
+        {
+          "source": "THIRD-PARTY-NOTICES.TXT",
+          "file": "upstream/microsoft.extensions.dependencyinjection/10.0.1/THIRD-PARTY-NOTICES.TXT",
+          "sha256": "6d15e10a101c6bfff2ab4429ed061bf76c456fc4b23ad6b03e0d0f8377148a21"
+        }
+      ]
+    },
+    {
+      "id": "Microsoft.Extensions.Logging.Abstractions",
+      "version": "10.0.1",
+      "license": "MIT",
+      "copyright": "© Microsoft Corporation. All rights reserved.",
+      "notices": [
+        {
+          "source": "THIRD-PARTY-NOTICES.TXT",
+          "file": "upstream/microsoft.extensions.logging.abstractions/10.0.1/THIRD-PARTY-NOTICES.TXT",
+          "sha256": "6d15e10a101c6bfff2ab4429ed061bf76c456fc4b23ad6b03e0d0f8377148a21"
+        }
+      ]
+    },
+    {
+      "id": "Microsoft.Extensions.Logging",
+      "version": "10.0.1",
+      "license": "MIT",
+      "copyright": "© Microsoft Corporation. All rights reserved.",
+      "notices": [
+        {
+          "source": "THIRD-PARTY-NOTICES.TXT",
+          "file": "upstream/microsoft.extensions.logging/10.0.1/THIRD-PARTY-NOTICES.TXT",
+          "sha256": "6d15e10a101c6bfff2ab4429ed061bf76c456fc4b23ad6b03e0d0f8377148a21"
+        }
+      ]
+    },
+    {
+      "id": "Microsoft.Extensions.Options",
+      "version": "10.0.1",
+      "license": "MIT",
+      "copyright": "© Microsoft Corporation. All rights reserved.",
+      "notices": [
+        {
+          "source": "THIRD-PARTY-NOTICES.TXT",
+          "file": "upstream/microsoft.extensions.options/10.0.1/THIRD-PARTY-NOTICES.TXT",
+          "sha256": "6d15e10a101c6bfff2ab4429ed061bf76c456fc4b23ad6b03e0d0f8377148a21"
+        }
+      ]
+    },
+    {
+      "id": "Microsoft.Extensions.Primitives",
+      "version": "10.0.1",
+      "license": "MIT",
+      "copyright": "© Microsoft Corporation. All rights reserved.",
+      "notices": [
+        {
+          "source": "THIRD-PARTY-NOTICES.TXT",
+          "file": "upstream/microsoft.extensions.primitives/10.0.1/THIRD-PARTY-NOTICES.TXT",
+          "sha256": "6d15e10a101c6bfff2ab4429ed061bf76c456fc4b23ad6b03e0d0f8377148a21"
+        }
+      ]
+    },
+    {
+      "id": "Microsoft.VisualStudio.SolutionPersistence",
+      "version": "1.0.52",
+      "license": "MIT",
+      "copyright": "© Microsoft Corporation. All rights reserved.",
+      "notices": [
+        {
+          "source": "NOTICE",
+          "file": "upstream/microsoft.visualstudio.solutionpersistence/1.0.52/NOTICE",
+          "sha256": "2d56342544395b1cc4bb98192a439031362265125a68b8062942383b8df4309a"
+        }
+      ]
+    },
+    {
+      "id": "System.Composition.AttributedModel",
+      "version": "10.0.1",
+      "license": "MIT",
+      "copyright": "© Microsoft Corporation. All rights reserved.",
+      "notices": [
+        {
+          "source": "THIRD-PARTY-NOTICES.TXT",
+          "file": "upstream/system.composition.attributedmodel/10.0.1/THIRD-PARTY-NOTICES.TXT",
+          "sha256": "6d15e10a101c6bfff2ab4429ed061bf76c456fc4b23ad6b03e0d0f8377148a21"
+        }
+      ]
+    },
+    {
+      "id": "System.Composition.Convention",
+      "version": "10.0.1",
+      "license": "MIT",
+      "copyright": "© Microsoft Corporation. All rights reserved.",
+      "notices": [
+        {
+          "source": "THIRD-PARTY-NOTICES.TXT",
+          "file": "upstream/system.composition.convention/10.0.1/THIRD-PARTY-NOTICES.TXT",
+          "sha256": "6d15e10a101c6bfff2ab4429ed061bf76c456fc4b23ad6b03e0d0f8377148a21"
+        }
+      ]
+    },
+    {
+      "id": "System.Composition.Hosting",
+      "version": "10.0.1",
+      "license": "MIT",
+      "copyright": "© Microsoft Corporation. All rights reserved.",
+      "notices": [
+        {
+          "source": "THIRD-PARTY-NOTICES.TXT",
+          "file": "upstream/system.composition.hosting/10.0.1/THIRD-PARTY-NOTICES.TXT",
+          "sha256": "6d15e10a101c6bfff2ab4429ed061bf76c456fc4b23ad6b03e0d0f8377148a21"
+        }
+      ]
+    },
+    {
+      "id": "System.Composition.Runtime",
+      "version": "10.0.1",
+      "license": "MIT",
+      "copyright": "© Microsoft Corporation. All rights reserved.",
+      "notices": [
+        {
+          "source": "THIRD-PARTY-NOTICES.TXT",
+          "file": "upstream/system.composition.runtime/10.0.1/THIRD-PARTY-NOTICES.TXT",
+          "sha256": "6d15e10a101c6bfff2ab4429ed061bf76c456fc4b23ad6b03e0d0f8377148a21"
+        }
+      ]
+    },
+    {
+      "id": "System.Composition.TypedParts",
+      "version": "10.0.1",
+      "license": "MIT",
+      "copyright": "© Microsoft Corporation. All rights reserved.",
+      "notices": [
+        {
+          "source": "THIRD-PARTY-NOTICES.TXT",
+          "file": "upstream/system.composition.typedparts/10.0.1/THIRD-PARTY-NOTICES.TXT",
+          "sha256": "6d15e10a101c6bfff2ab4429ed061bf76c456fc4b23ad6b03e0d0f8377148a21"
+        }
+      ]
+    }
+  ]
+}

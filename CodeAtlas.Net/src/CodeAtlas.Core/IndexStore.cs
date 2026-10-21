@@ -16,29 +16,40 @@ public static class IndexStore
     public static Task<LoadedSnapshot> LoadSnapshotAsync(string path, CancellationToken cancellationToken = default) =>
         LoadSnapshotAsync(path, includeCatalog: true, cancellationToken);
 
-    public static async Task<LoadedSnapshot> LoadSnapshotAsync(string path, bool includeCatalog, CancellationToken cancellationToken = default)
+    public static Task<LoadedSnapshot> LoadSnapshotAsync(string path, bool includeCatalog, CancellationToken cancellationToken = default) =>
+        LoadSnapshotCoreAsync(path, includeCatalog, allowUnverifiedRaw: false, cancellationToken);
+
+    /// <summary>Explicit forensic inspection of legacy split artifacts without a retained generation manifest.
+    /// A sibling catalog is paired by identity when available, but its bytes have no manifest integrity guarantee.</summary>
+    public static Task<LoadedSnapshot> LoadUnverifiedSnapshotAsync(string path, bool includeCatalog = true,
+        CancellationToken cancellationToken = default) =>
+        LoadSnapshotCoreAsync(path, includeCatalog, allowUnverifiedRaw: true, cancellationToken);
+
+    private static async Task<LoadedSnapshot> LoadSnapshotCoreAsync(string path, bool includeCatalog, bool allowUnverifiedRaw,
+        CancellationToken cancellationToken)
     {
         try
         {
             path = Path.GetFullPath(path);
             ResolvedGeneration? generation = null;
             CodebaseIndex? index;
-            if (Path.GetFileName(path).Equals("current.json", StringComparison.OrdinalIgnoreCase))
+            var isCurrent = Path.GetFileName(path).Equals("current.json", StringComparison.OrdinalIgnoreCase);
+            var retainedManifest = Path.Combine(Path.GetDirectoryName(path)!, "generation.json");
+            var isRetained = Path.GetFileName(path).Equals("index.json", StringComparison.OrdinalIgnoreCase)
+                && File.Exists(retainedManifest);
+            if (isCurrent || isRetained)
             {
-                generation = await GenerationStore.ResolveAsync(path, cancellationToken, includeCatalog);
+                // The catalog, like the index, is authenticated during its single deserialization.
+                generation = await GenerationStore.ResolveAsync(isCurrent ? path : retainedManifest, cancellationToken, verifyCatalog: false);
                 index = await GenerationStore.ReadVerifiedAsync(generation, "index.json",
                     async (stream, token) => await JsonSerializer.DeserializeAsync<CodebaseIndex>(stream, JsonOptions, token), cancellationToken);
+                if (index is null)
+                    throw new IndexFormatException("invalid_index", "Empty index contents. Rebuild the index.");
                 if (includeCatalog && generation.Manifest.Artifacts.ContainsKey("catalog.json"))
                 {
                     var catalog = await GenerationStore.ReadVerifiedAsync(generation, "catalog.json",
                         async (stream, token) => await JsonSerializer.DeserializeAsync<SymbolCatalogFile>(stream, JsonOptions, token), cancellationToken);
-                    index = index! with
-                    {
-                        Symbols = catalog?.Symbols,
-                        DocumentationCoverage = catalog?.DocumentationCoverage,
-                        StructuralCatalog = catalog?.StructuralCatalog,
-                        Duplicates = catalog?.Duplicates
-                    };
+                    index = AttachCatalog(index, catalog);
                 }
             }
             else
@@ -46,8 +57,21 @@ public static class IndexStore
                 await using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read | FileShare.Delete,
                     64 * 1024, FileOptions.Asynchronous | FileOptions.SequentialScan);
                 index = await JsonSerializer.DeserializeAsync<CodebaseIndex>(stream, JsonOptions, cancellationToken);
+                var catalogPath = Path.Combine(Path.GetDirectoryName(path)!, "catalog.json");
+                if (index is { SchemaVersion: >= 2, Symbols: null } && File.Exists(catalogPath))
+                {
+                    if (!allowUnverifiedRaw)
+                        throw new IndexFormatException("invalid_index", "This split snapshot has no retained generation manifest. "
+                            + "Load its current.json manifest, rebuild it, or explicitly use LoadUnverifiedSnapshotAsync for raw legacy inspection.");
+                    if (includeCatalog)
+                    {
+                        await using var catalogStream = new FileStream(catalogPath, FileMode.Open, FileAccess.Read,
+                            FileShare.Read | FileShare.Delete, 64 * 1024, FileOptions.Asynchronous | FileOptions.SequentialScan);
+                        index = AttachCatalog(index, await JsonSerializer.DeserializeAsync<SymbolCatalogFile>(catalogStream, JsonOptions, cancellationToken));
+                    }
+                }
             }
-            Validate(index, requireCatalogs: generation is null || includeCatalog);
+            Validate(index, requireCatalogs: includeCatalog);
             if (generation is not null)
                 GenerationStore.RequireIdentity(generation, index!.IndexId, index.Solution);
             return new(index!, path, generation?.Directory, generation is not null);
@@ -64,6 +88,21 @@ public static class IndexStore
         {
             throw new IndexFormatException("snapshot_io_failed", "Cannot read the snapshot. Check its path and permissions, or rebuild it.", [exception.Message]);
         }
+    }
+
+    private static CodebaseIndex AttachCatalog(CodebaseIndex index, SymbolCatalogFile? catalog)
+    {
+        if (catalog is null)
+            throw new IndexFormatException("invalid_index", "Empty symbol catalog. Rebuild the index.");
+        if (catalog.HasIdentityHeader)
+        {
+            var comparer = OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal;
+            if (catalog.IndexId != index.IndexId || catalog.Solution is null || !Path.IsPathFullyQualified(catalog.Solution)
+                || !Path.IsPathFullyQualified(index.Solution) || !comparer.Equals(Path.GetFullPath(catalog.Solution), Path.GetFullPath(index.Solution)))
+                throw new IndexFormatException("invalid_index", "Snapshot and symbol-catalog identities disagree. Rebuild the index.");
+        }
+        return index with { Symbols = catalog.Symbols, DocumentationCoverage = catalog.DocumentationCoverage,
+            StructuralCatalog = catalog.StructuralCatalog, Duplicates = catalog.Duplicates };
     }
 
     private static void Validate(CodebaseIndex? index, bool requireCatalogs)
@@ -94,10 +133,12 @@ public static class IndexStore
             throw new IndexFormatException("invalid_index", "Invalid index contents. Rebuild the index.");
         if (requireCatalogs && index.SchemaVersion >= 2 && index.Symbols is null)
             throw new IndexFormatException("invalid_index", "The documentation catalog is missing. Rebuild the index.");
-        if (index.SchemaVersion is 2 or SchemaVersion && index.Symbols is not null)
+        if (requireCatalogs && index.SchemaVersion >= 2)
             DocumentationValidation.Validate(index);
-        if (index.SchemaVersion == SchemaVersion && index.StructuralCatalog is not null)
+        if (requireCatalogs && index.SchemaVersion == SchemaVersion)
             StructuralValidation.Validate(index);
+        if (requireCatalogs && index.Duplicates is not null)
+            DuplicateValidation.Validate(index, index.Duplicates);
     }
 
     public static Task<IndexFreshness> CheckFreshnessAsync(CodebaseIndex index, CancellationToken cancellationToken = default) =>
@@ -131,12 +172,15 @@ public static class IndexStore
         Func<Stream, CancellationToken, Task>? writeTimings = null, CancellationToken cancellationToken = default)
     {
         Validate(index, requireCatalogs: true);
+        if (index.Duplicates is { } duplicates && duplicates.Version != DuplicateCatalog.CurrentVersion)
+            throw new IndexFormatException("invalid_index", "Publication requires the current duplicate catalog. Rebuild the analysis instead of republishing legacy candidates.");
         try
         {
             // Validation also runs at the commit boundary; this early check gives a stale rebuild a precise error.
             await RequireFreshAsync(index, cancellationToken);
             var queryIndex = index with { Symbols = null, DocumentationCoverage = null, StructuralCatalog = null, Duplicates = null };
-            var catalog = new SymbolCatalogFile(index.Symbols, index.DocumentationCoverage, index.StructuralCatalog, index.Duplicates);
+            var catalog = new SymbolCatalogFile(index.Symbols, index.DocumentationCoverage, index.StructuralCatalog, index.Duplicates)
+                { IndexId = index.IndexId, Solution = index.Solution };
             var generation = await new GenerationStore().PublishAsync(index.Solution, index.IndexId,
             [
                 new("index.json", (stream, token) => JsonSerializer.SerializeAsync(stream, queryIndex, JsonOptions, token)),
@@ -222,10 +266,18 @@ public static class IndexStore
 
 
 
-/// <summary>A command resolves this handle once; artifact paths remain bound to that generation.</summary>
+/// <summary>Companion catalogs. Identity headers bind new files; older manifests still authenticate headerless files.</summary>
 public sealed record SymbolCatalogFile(DocumentedSymbol[]? Symbols, DocumentationCoverage? DocumentationCoverage,
-    StructuralCatalog? StructuralCatalog, DuplicateCatalog? Duplicates);
+    StructuralCatalog? StructuralCatalog, DuplicateCatalog? Duplicates)
+{
+    private string? indexId;
+    private string? solution;
+    internal bool HasIdentityHeader { get; private set; }
+    public string? IndexId { get => indexId; init { indexId = value; HasIdentityHeader = true; } }
+    public string? Solution { get => solution; init { solution = value; HasIdentityHeader = true; } }
+}
 
+/// <summary>A command resolves this handle once; artifact paths remain bound to that generation.</summary>
 public sealed record LoadedSnapshot(CodebaseIndex Index, string Path, string? GenerationDirectory, bool VerifiedGeneration)
 {
     public string? OverviewPath => GenerationDirectory is null ? null : System.IO.Path.Combine(GenerationDirectory, "overview.md");

@@ -258,7 +258,7 @@ public sealed class QueryContractTests(IndexedSolution fixture) : IClassFixture<
     {
         // Arrange
         const string warning = "Contract fixture warning with diagnostic details";
-        await IndexStore.SaveAsync(fixture.Index with { Warnings = [warning], IndexId = Guid.NewGuid().ToString("N") });
+        await IndexStore.SaveAsync(SnapshotTestIdentity.NewGeneration(fixture.Index) with { Warnings = [warning] });
         try
         {
             // Act

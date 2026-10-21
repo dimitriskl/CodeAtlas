@@ -75,7 +75,7 @@ Acceptance: documentation is returned with the correct symbol and overload, miss
 
 ### 7. Add structural facts and discovery by purpose
 
-Status: second measurement recorded in 0.00.22. [Search evidence](STRUCTURAL-SEARCH.md). Assisted search now hits D1–D4, H1, H2 and H4. N1 and N2 abstain. H3 and H5 still fail, so the retrieval gate is not closed.
+Status: 0.00.22 repeated the original question set and left H3/H5 failing. [Historical search evidence](STRUCTURAL-SEARCH.md). The audit repair adds general lexical normalization and provenance-aware weighting. A fresh eleven-case source-backed set was explicitly accepted by the user on 21 October 2026; final frozen-binary measurement is pending. Earlier questions are development data, not fresh held-out evidence.
 
 Expose supported Roslyn-derived facts such as implemented interfaces and resolved dependencies, with locations and coverage boundaries. Add text search across names, signatures, and documentation, followed by ranked purpose-oriented retrieval where evaluation justifies it. Return why a result matched and evidence that lets an agent inspect the source.
 
@@ -93,7 +93,7 @@ Acceptance: milestones 1–7 have recorded evidence; a clean supported machine c
 
 ### 9. Add optional AI-generated explanations
 
-Status: local request/response files implemented in 0.00.17. [Explanation evidence](EXPLANATIONS.md). No model is called. Accuracy on reviewed examples is not measured.
+Status: the audit repair replaces the 0.00.17 file contract with registered bounded source evidence, exact citations and input/dependency freshness. [Explanation workflow](EXPLANATIONS.md). Actual CLI/workflow regressions pass before final versioned validation. A frozen public generated-quality/selection pilot is prepared; results are pending. No provider is called by CodeAtlas.
 
 Generate missing or requested explanations on demand for selected symbols and their relevant context. Keep developer documentation, structural facts, and AI interpretations in separate fields. Store source evidence, model/provider and generation-version provenance, and the content/dependency fingerprints used to produce each explanation.
 
@@ -103,7 +103,7 @@ Acceptance: cached explanations have verified freshness and traceable evidence; 
 
 ### 10. Detect duplicate and overlapping implementations
 
-Status: exact and near body candidates implemented in 0.00.18. [Duplicate evidence](DUPLICATES.md). No labeled false-positive study yet.
+Status: the audit repair replaces unsafe lexical grouping with bounded semantic structural candidates and selected-symbol purpose overlap. [Duplicate contract](DUPLICATES.md). Small public pair-label measurements and an independent source review are retained; final-binary, application usefulness and resource qualification remain pending.
 
 Start with exact and near-duplicate code structure, accounting for renamed identifiers while retaining important semantic differences. Then evaluate similar-purpose candidates using documentation and, optionally, generated descriptions. Report both locations, the reason for similarity, and differences requiring review.
 
@@ -111,7 +111,7 @@ Acceptance: a labeled set measures useful findings and false positives, includin
 
 ### 11. Add caller navigation and bounded impact traversal
 
-Status: implemented in 0.00.19. [Caller evidence](CALLERS.md).
+Status: implemented in 0.00.19 and repaired after audit for real cycle detection, strict arguments, freshness and explicit traversal/work caps. [Caller contract and test scope](CALLERS.md).
 
 Associate supported call sites with enclosing callers, then traverse relationships with depth/result limits, cycle handling, and per-edge evidence. Distinguish invocations from method groups and documentation references; represent interface/virtual relationships and unresolved runtime behavior explicitly.
 
@@ -140,4 +140,4 @@ An agent should follow purpose → candidate symbols → source and references �
 
 For each completed change, record the relevant acceptance evidence here or in a linked validation report, run the required checks, and increment the version once with `scripts/bump-version.py`. Regenerate CodeAtlas's own index after the versioned change. Run target-solution benchmarks when the change affects analysis/performance; routine roadmap edits do not require repeating the long eConnector run.
 
-Immediate next step: the milestone 7 retrieval gate is still open. Assisted search improved several accepted questions, and the ambiguous and unsupported-scope questions failed. Duplicate groups include false matches among short methods. Version 1 is not published. Semantic descriptions and discovery are accepted roadmap scope; AI-generated explanations, duplicate detection, and graph traversal have their own acceptance gates and do not delay the initial core production gate.
+Immediate next step: finish the 0.00.23 audit-repair qualification. The user accepted eleven fresh source-backed retrieval cases on 21 October; measure them only after freezing the candidate. The original twelve questions are now development data. The replacement duplicate detector, bounded explanation workflow and caller fixes have focused regression evidence; their separate quality, resource and package gates remain recorded in [REPAIR-VALIDATION.md](REPAIR-VALIDATION.md). Version 1 is not published. Semantic descriptions and discovery are accepted roadmap scope; AI-generated explanations, duplicate detection, and graph traversal have their own acceptance gates and do not delay the initial core production gate.

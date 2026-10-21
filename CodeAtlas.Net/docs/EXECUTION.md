@@ -38,3 +38,13 @@ The roadmap setup was committed as `7d6d0cc` (`0.00.08`). Each implementation mi
 ## Evidence rules
 
 Keep complete machine-local benchmark inputs and outputs in ignored `.codeatlas/` directories. Commit reproducible tools, fixtures, and concise reports, not proprietary target source or full target indexes. Record comparison failures and environmental limitations. Canonical equality compares full supported analysis contents while excluding snapshot metadata and insignificant ordering. Passing unit tests, small source samples, or a package build do not substitute for the roadmap's separate semantic, performance, installation, and retrieval-quality checks.
+
+## Audit repair continuation — 21 October 2026
+
+The user requested completion of all audit findings. The integrated repair candidate is 0.00.23, pending final validation and commit. [Repair evidence](REPAIR-VALIDATION.md) separates verified contract regressions from quality/performance/release gates. A fresh independent review of split-generation and explanation storage found one additional source-race error classification issue, now corrected with regression coverage. No other concrete correctness defect was reported within that review's stated scope; this does not qualify unreviewed behavior.
+
+The user explicitly accepted the new eleven-case eConnector retrieval questions and criteria on 21 October. The exact proposal and acceptance hashes are retained in `.codeatlas/repair-v23/m07-fresh-review/HUMAN-APPROVAL.json`. Retrieval is unmeasured at acceptance; keep these labels out of further ranking development. Original questions are now tune-exposed development cases.
+
+MIT, GitHub Release destination and eventual version 1 publication remain authorized. Hosted clean-environment execution and writing a workflow at the Git-root `.github/` path still require the separate directory/machine approval required by AGENTS.md. The proposed workflow is prepared inside the approved development directory at `build/qualification.yml`; it must be locally validated before activation is requested.
+
+On 21 October 2026 the user explicitly approved the Git-root workflow location, qualification-branch push and hosted Windows/Linux checks. The exact acceptance and workflow hash are retained in `.codeatlas/repair-v23/HOSTED-APPROVAL.json`. The reviewed workflow is now activated at `.github/workflows/qualification.yml`; local isolated install and upgrade both pass. Hosted results remain pending until actual run completion.

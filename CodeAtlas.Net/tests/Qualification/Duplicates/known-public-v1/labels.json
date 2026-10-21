@@ -1,0 +1,470 @@
+{
+  "protocol": "m10-public-v1",
+  "labeler": "fixture-author; no independent review yet",
+  "methodCount": 12,
+  "pairCount": 66,
+  "pairs": [
+    {
+      "left": "ExactA",
+      "right": "ExactB",
+      "structural": "exact",
+      "usefulness": "review",
+      "rationale": "Identical supported nontrivial body and signature."
+    },
+    {
+      "left": "ExactA",
+      "right": "RenamedA",
+      "structural": "different",
+      "usefulness": "no",
+      "rationale": "Cross-family bodies use different operations or signatures; no useful duplicate finding in authored scope."
+    },
+    {
+      "left": "ExactA",
+      "right": "RenamedB",
+      "structural": "different",
+      "usefulness": "no",
+      "rationale": "Cross-family bodies use different operations or signatures; no useful duplicate finding in authored scope."
+    },
+    {
+      "left": "ExactA",
+      "right": "BusinessA",
+      "structural": "different",
+      "usefulness": "no",
+      "rationale": "Cross-family bodies use different operations or signatures; no useful duplicate finding in authored scope."
+    },
+    {
+      "left": "ExactA",
+      "right": "BusinessB",
+      "structural": "different",
+      "usefulness": "no",
+      "rationale": "Cross-family bodies use different operations or signatures; no useful duplicate finding in authored scope."
+    },
+    {
+      "left": "ExactA",
+      "right": "CanDebitA",
+      "structural": "different",
+      "usefulness": "no",
+      "rationale": "Cross-family bodies use different operations or signatures; no useful duplicate finding in authored scope."
+    },
+    {
+      "left": "ExactA",
+      "right": "CanDebitB",
+      "structural": "different",
+      "usefulness": "no",
+      "rationale": "Cross-family bodies use different operations or signatures; no useful duplicate finding in authored scope."
+    },
+    {
+      "left": "ExactA",
+      "right": "BoilerplateA",
+      "structural": "different",
+      "usefulness": "no",
+      "rationale": "Cross-family bodies use different operations or signatures; no useful duplicate finding in authored scope."
+    },
+    {
+      "left": "ExactA",
+      "right": "BoilerplateB",
+      "structural": "different",
+      "usefulness": "no",
+      "rationale": "Cross-family bodies use different operations or signatures; no useful duplicate finding in authored scope."
+    },
+    {
+      "left": "ExactA",
+      "right": "UnrelatedA",
+      "structural": "different",
+      "usefulness": "no",
+      "rationale": "Cross-family bodies use different operations or signatures; no useful duplicate finding in authored scope."
+    },
+    {
+      "left": "ExactA",
+      "right": "UnrelatedB",
+      "structural": "different",
+      "usefulness": "no",
+      "rationale": "Cross-family bodies use different operations or signatures; no useful duplicate finding in authored scope."
+    },
+    {
+      "left": "ExactB",
+      "right": "RenamedA",
+      "structural": "different",
+      "usefulness": "no",
+      "rationale": "Cross-family bodies use different operations or signatures; no useful duplicate finding in authored scope."
+    },
+    {
+      "left": "ExactB",
+      "right": "RenamedB",
+      "structural": "different",
+      "usefulness": "no",
+      "rationale": "Cross-family bodies use different operations or signatures; no useful duplicate finding in authored scope."
+    },
+    {
+      "left": "ExactB",
+      "right": "BusinessA",
+      "structural": "different",
+      "usefulness": "no",
+      "rationale": "Cross-family bodies use different operations or signatures; no useful duplicate finding in authored scope."
+    },
+    {
+      "left": "ExactB",
+      "right": "BusinessB",
+      "structural": "different",
+      "usefulness": "no",
+      "rationale": "Cross-family bodies use different operations or signatures; no useful duplicate finding in authored scope."
+    },
+    {
+      "left": "ExactB",
+      "right": "CanDebitA",
+      "structural": "different",
+      "usefulness": "no",
+      "rationale": "Cross-family bodies use different operations or signatures; no useful duplicate finding in authored scope."
+    },
+    {
+      "left": "ExactB",
+      "right": "CanDebitB",
+      "structural": "different",
+      "usefulness": "no",
+      "rationale": "Cross-family bodies use different operations or signatures; no useful duplicate finding in authored scope."
+    },
+    {
+      "left": "ExactB",
+      "right": "BoilerplateA",
+      "structural": "different",
+      "usefulness": "no",
+      "rationale": "Cross-family bodies use different operations or signatures; no useful duplicate finding in authored scope."
+    },
+    {
+      "left": "ExactB",
+      "right": "BoilerplateB",
+      "structural": "different",
+      "usefulness": "no",
+      "rationale": "Cross-family bodies use different operations or signatures; no useful duplicate finding in authored scope."
+    },
+    {
+      "left": "ExactB",
+      "right": "UnrelatedA",
+      "structural": "different",
+      "usefulness": "no",
+      "rationale": "Cross-family bodies use different operations or signatures; no useful duplicate finding in authored scope."
+    },
+    {
+      "left": "ExactB",
+      "right": "UnrelatedB",
+      "structural": "different",
+      "usefulness": "no",
+      "rationale": "Cross-family bodies use different operations or signatures; no useful duplicate finding in authored scope."
+    },
+    {
+      "left": "RenamedA",
+      "right": "RenamedB",
+      "structural": "renamed-near",
+      "usefulness": "review",
+      "rationale": "Parameter and local names differ; bindings and operations match."
+    },
+    {
+      "left": "RenamedA",
+      "right": "BusinessA",
+      "structural": "different",
+      "usefulness": "no",
+      "rationale": "Cross-family bodies use different operations or signatures; no useful duplicate finding in authored scope."
+    },
+    {
+      "left": "RenamedA",
+      "right": "BusinessB",
+      "structural": "different",
+      "usefulness": "no",
+      "rationale": "Cross-family bodies use different operations or signatures; no useful duplicate finding in authored scope."
+    },
+    {
+      "left": "RenamedA",
+      "right": "CanDebitA",
+      "structural": "different",
+      "usefulness": "no",
+      "rationale": "Cross-family bodies use different operations or signatures; no useful duplicate finding in authored scope."
+    },
+    {
+      "left": "RenamedA",
+      "right": "CanDebitB",
+      "structural": "different",
+      "usefulness": "no",
+      "rationale": "Cross-family bodies use different operations or signatures; no useful duplicate finding in authored scope."
+    },
+    {
+      "left": "RenamedA",
+      "right": "BoilerplateA",
+      "structural": "different",
+      "usefulness": "no",
+      "rationale": "Cross-family bodies use different operations or signatures; no useful duplicate finding in authored scope."
+    },
+    {
+      "left": "RenamedA",
+      "right": "BoilerplateB",
+      "structural": "different",
+      "usefulness": "no",
+      "rationale": "Cross-family bodies use different operations or signatures; no useful duplicate finding in authored scope."
+    },
+    {
+      "left": "RenamedA",
+      "right": "UnrelatedA",
+      "structural": "different",
+      "usefulness": "no",
+      "rationale": "Cross-family bodies use different operations or signatures; no useful duplicate finding in authored scope."
+    },
+    {
+      "left": "RenamedA",
+      "right": "UnrelatedB",
+      "structural": "different",
+      "usefulness": "no",
+      "rationale": "Cross-family bodies use different operations or signatures; no useful duplicate finding in authored scope."
+    },
+    {
+      "left": "RenamedB",
+      "right": "BusinessA",
+      "structural": "different",
+      "usefulness": "no",
+      "rationale": "Cross-family bodies use different operations or signatures; no useful duplicate finding in authored scope."
+    },
+    {
+      "left": "RenamedB",
+      "right": "BusinessB",
+      "structural": "different",
+      "usefulness": "no",
+      "rationale": "Cross-family bodies use different operations or signatures; no useful duplicate finding in authored scope."
+    },
+    {
+      "left": "RenamedB",
+      "right": "CanDebitA",
+      "structural": "different",
+      "usefulness": "no",
+      "rationale": "Cross-family bodies use different operations or signatures; no useful duplicate finding in authored scope."
+    },
+    {
+      "left": "RenamedB",
+      "right": "CanDebitB",
+      "structural": "different",
+      "usefulness": "no",
+      "rationale": "Cross-family bodies use different operations or signatures; no useful duplicate finding in authored scope."
+    },
+    {
+      "left": "RenamedB",
+      "right": "BoilerplateA",
+      "structural": "different",
+      "usefulness": "no",
+      "rationale": "Cross-family bodies use different operations or signatures; no useful duplicate finding in authored scope."
+    },
+    {
+      "left": "RenamedB",
+      "right": "BoilerplateB",
+      "structural": "different",
+      "usefulness": "no",
+      "rationale": "Cross-family bodies use different operations or signatures; no useful duplicate finding in authored scope."
+    },
+    {
+      "left": "RenamedB",
+      "right": "UnrelatedA",
+      "structural": "different",
+      "usefulness": "no",
+      "rationale": "Cross-family bodies use different operations or signatures; no useful duplicate finding in authored scope."
+    },
+    {
+      "left": "RenamedB",
+      "right": "UnrelatedB",
+      "structural": "different",
+      "usefulness": "no",
+      "rationale": "Cross-family bodies use different operations or signatures; no useful duplicate finding in authored scope."
+    },
+    {
+      "left": "BusinessA",
+      "right": "BusinessB",
+      "structural": "near-with-rule-differences",
+      "usefulness": "domain-review",
+      "rationale": "Quantity cutoff 5/10 and discount .95/.90 differ; review rules before any consolidation."
+    },
+    {
+      "left": "BusinessA",
+      "right": "CanDebitA",
+      "structural": "different",
+      "usefulness": "no",
+      "rationale": "Cross-family bodies use different operations or signatures; no useful duplicate finding in authored scope."
+    },
+    {
+      "left": "BusinessA",
+      "right": "CanDebitB",
+      "structural": "different",
+      "usefulness": "no",
+      "rationale": "Cross-family bodies use different operations or signatures; no useful duplicate finding in authored scope."
+    },
+    {
+      "left": "BusinessA",
+      "right": "BoilerplateA",
+      "structural": "different",
+      "usefulness": "no",
+      "rationale": "Cross-family bodies use different operations or signatures; no useful duplicate finding in authored scope."
+    },
+    {
+      "left": "BusinessA",
+      "right": "BoilerplateB",
+      "structural": "different",
+      "usefulness": "no",
+      "rationale": "Cross-family bodies use different operations or signatures; no useful duplicate finding in authored scope."
+    },
+    {
+      "left": "BusinessA",
+      "right": "UnrelatedA",
+      "structural": "different",
+      "usefulness": "no",
+      "rationale": "Cross-family bodies use different operations or signatures; no useful duplicate finding in authored scope."
+    },
+    {
+      "left": "BusinessA",
+      "right": "UnrelatedB",
+      "structural": "different",
+      "usefulness": "no",
+      "rationale": "Cross-family bodies use different operations or signatures; no useful duplicate finding in authored scope."
+    },
+    {
+      "left": "BusinessB",
+      "right": "CanDebitA",
+      "structural": "different",
+      "usefulness": "no",
+      "rationale": "Cross-family bodies use different operations or signatures; no useful duplicate finding in authored scope."
+    },
+    {
+      "left": "BusinessB",
+      "right": "CanDebitB",
+      "structural": "different",
+      "usefulness": "no",
+      "rationale": "Cross-family bodies use different operations or signatures; no useful duplicate finding in authored scope."
+    },
+    {
+      "left": "BusinessB",
+      "right": "BoilerplateA",
+      "structural": "different",
+      "usefulness": "no",
+      "rationale": "Cross-family bodies use different operations or signatures; no useful duplicate finding in authored scope."
+    },
+    {
+      "left": "BusinessB",
+      "right": "BoilerplateB",
+      "structural": "different",
+      "usefulness": "no",
+      "rationale": "Cross-family bodies use different operations or signatures; no useful duplicate finding in authored scope."
+    },
+    {
+      "left": "BusinessB",
+      "right": "UnrelatedA",
+      "structural": "different",
+      "usefulness": "no",
+      "rationale": "Cross-family bodies use different operations or signatures; no useful duplicate finding in authored scope."
+    },
+    {
+      "left": "BusinessB",
+      "right": "UnrelatedB",
+      "structural": "different",
+      "usefulness": "no",
+      "rationale": "Cross-family bodies use different operations or signatures; no useful duplicate finding in authored scope."
+    },
+    {
+      "left": "CanDebitA",
+      "right": "CanDebitB",
+      "structural": "different",
+      "usefulness": "no",
+      "rationale": "Identical summary and similar name conceal different boolean conditions."
+    },
+    {
+      "left": "CanDebitA",
+      "right": "BoilerplateA",
+      "structural": "different",
+      "usefulness": "no",
+      "rationale": "Cross-family bodies use different operations or signatures; no useful duplicate finding in authored scope."
+    },
+    {
+      "left": "CanDebitA",
+      "right": "BoilerplateB",
+      "structural": "different",
+      "usefulness": "no",
+      "rationale": "Cross-family bodies use different operations or signatures; no useful duplicate finding in authored scope."
+    },
+    {
+      "left": "CanDebitA",
+      "right": "UnrelatedA",
+      "structural": "different",
+      "usefulness": "no",
+      "rationale": "Cross-family bodies use different operations or signatures; no useful duplicate finding in authored scope."
+    },
+    {
+      "left": "CanDebitA",
+      "right": "UnrelatedB",
+      "structural": "different",
+      "usefulness": "no",
+      "rationale": "Cross-family bodies use different operations or signatures; no useful duplicate finding in authored scope."
+    },
+    {
+      "left": "CanDebitB",
+      "right": "BoilerplateA",
+      "structural": "different",
+      "usefulness": "no",
+      "rationale": "Cross-family bodies use different operations or signatures; no useful duplicate finding in authored scope."
+    },
+    {
+      "left": "CanDebitB",
+      "right": "BoilerplateB",
+      "structural": "different",
+      "usefulness": "no",
+      "rationale": "Cross-family bodies use different operations or signatures; no useful duplicate finding in authored scope."
+    },
+    {
+      "left": "CanDebitB",
+      "right": "UnrelatedA",
+      "structural": "different",
+      "usefulness": "no",
+      "rationale": "Cross-family bodies use different operations or signatures; no useful duplicate finding in authored scope."
+    },
+    {
+      "left": "CanDebitB",
+      "right": "UnrelatedB",
+      "structural": "different",
+      "usefulness": "no",
+      "rationale": "Cross-family bodies use different operations or signatures; no useful duplicate finding in authored scope."
+    },
+    {
+      "left": "BoilerplateA",
+      "right": "BoilerplateB",
+      "structural": "boilerplate",
+      "usefulness": "no",
+      "rationale": "Identical single-return wrappers intentionally excluded by default scope."
+    },
+    {
+      "left": "BoilerplateA",
+      "right": "UnrelatedA",
+      "structural": "different",
+      "usefulness": "no",
+      "rationale": "Cross-family bodies use different operations or signatures; no useful duplicate finding in authored scope."
+    },
+    {
+      "left": "BoilerplateA",
+      "right": "UnrelatedB",
+      "structural": "different",
+      "usefulness": "no",
+      "rationale": "Cross-family bodies use different operations or signatures; no useful duplicate finding in authored scope."
+    },
+    {
+      "left": "BoilerplateB",
+      "right": "UnrelatedA",
+      "structural": "different",
+      "usefulness": "no",
+      "rationale": "Cross-family bodies use different operations or signatures; no useful duplicate finding in authored scope."
+    },
+    {
+      "left": "BoilerplateB",
+      "right": "UnrelatedB",
+      "structural": "different",
+      "usefulness": "no",
+      "rationale": "Cross-family bodies use different operations or signatures; no useful duplicate finding in authored scope."
+    },
+    {
+      "left": "UnrelatedA",
+      "right": "UnrelatedB",
+      "structural": "different",
+      "usefulness": "no",
+      "rationale": "Parsing integer and concatenating strings serve different operations."
+    }
+  ]
+}

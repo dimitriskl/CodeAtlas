@@ -1,5 +1,6 @@
 using System.Text.Json;
 using CodeAtlas;
+using CodeAtlas.Explanations;
 using CodeAtlas.Cli;
 
 var managedEntryUtc = DateTimeOffset.UtcNow;
@@ -18,13 +19,14 @@ Usage: codeatlas index --solution <path.sln|path.slnx> [--reference-workers <1-8
        codeatlas get-facts --index <path-to-index.json> --symbol <id>
        codeatlas explain-request --index <path-to-index.json> --symbol <id> --output <request.json>
        codeatlas explain-import --index <path-to-index.json> --response <response.json>
-       codeatlas get-explanation --index <path-to-index.json> --symbol <id>
-       codeatlas find-duplicates --index <path-to-index.json>
-       codeatlas find-callers --index <path-to-index.json> --symbol <id> [--depth <1-5>]
+       codeatlas get-explanation --index <path-to-index.json> (--symbol <id> | --request <requestId>)
+       codeatlas find-duplicates --index <path-to-index.json> [--mode bodies|purpose] [--symbol <id>]
+       codeatlas find-callers --index <path-to-index.json> --symbol <id> [--depth <1-5>] [--limit <1-1000>]
        codeatlas coverage --index <path-to-index.json>
 
 Query options: --project <relative-project-path> --limit <1-1000> --offset <nonnegative> --snapshot <indexId> --profile
 Default limit is 100. Indexed continuations require --snapshot; live queries support only the first page.
+find-callers reports bounded traversal and does not support --offset or --snapshot.
 All JSON commands accept --contract-version 1. Projects and declaring types match exactly (case-sensitive).
 Warnings are saved in the solution-scoped generation. Results include a notice with the file path.
 Indexing progress and elapsed time go to stderr; stdout contains the final JSON result.
@@ -34,7 +36,8 @@ Default/explicit method discovery returns MethodInfo. Other kinds/all return com
 get-documentation returns full developer XML, resolved sections and provenance; missing documentation remains missing.
 search-symbols ranks lexical evidence in names, signatures, authored documentation, and one-hop structural facts.
 It does not call a model. get-facts returns Roslyn facts for one saved symbol. A resolved call is a relationship, not a runtime effect.
-explain-request writes a local file for an external agent. explain-import stores that agent's reply only when the symbol hash still matches.
+explain-request exports selected source evidence locally; optional --local, --context, --reference-limit and byte limits bound that context.
+explain-import requires registered request identity, evidence citations, provenance and unchanged observed inputs. No provider is called.
 """;
 if (args.Length == 1 && args[0] == "--version")
 {
@@ -88,6 +91,20 @@ try
     async Task<T> TimedAsync<T>(string phase, Func<Task<T>> action) =>
         profile is null ? await action() : await profile.MeasureAsync(phase, action);
     T Timed<T>(string phase, Func<T> action) => profile is null ? action() : profile.Measure(phase, action);
+    int Integer(string key, int fallback) => !options.TryGetValue(key, out var raw) ? fallback
+        : int.TryParse(raw, out var number) ? number : throw new ArgumentException($"{key} must be an integer.");
+    QueryRequest Request() => new(options.GetValueOrDefault("--project"), options.GetValueOrDefault("--type"),
+        Integer("--limit", 100), Integer("--offset", 0), options.GetValueOrDefault("--snapshot"));
+    async Task<CodebaseIndex> LoadFreshIndexAsync(string path, bool includeCatalog = true)
+    {
+        loadedSnapshot = await TimedAsync("jsonLoading", () => IndexStore.LoadSnapshotAsync(path, includeCatalog, cancellation.Token));
+        var index = loadedIndex = loadedSnapshot.Index;
+        coverageAvailable = true;
+        var status = await TimedAsync("freshnessHashing", () => IndexStore.CheckFreshnessAsync(index, cancellation.Token));
+        freshness = ResponseContract.Freshness(status);
+        if (status.IsStale) throw new StaleIndexException(status.ChangedFiles);
+        return index;
+    }
 
     object result;
     if (command is "index" or "refresh")
@@ -137,76 +154,108 @@ try
     {
         if (options.Count != 1 || !options.TryGetValue("--index", out var coverageIndex))
             throw new ArgumentException("coverage requires only --index.");
-        loadedSnapshot = await TimedAsync("jsonLoading", () => IndexStore.LoadSnapshotAsync(coverageIndex, cancellation.Token));
-        var index = loadedIndex = loadedSnapshot.Index;
-        coverageAvailable = true;
+        var index = await LoadFreshIndexAsync(coverageIndex);
         result = new { source = "index", index.Solution, index.IndexId, supportedLanguages = LanguageBoundary.Supported,
             documentation = index.DocumentationCoverage, structural = index.StructuralCatalog?.Coverage,
             warningCount = index.Warnings.Length, warnings = index.Warnings };
     }
     else if (command == "find-callers")
     {
-        if (!options.TryGetValue("--index", out var callerIndex) || !options.TryGetValue("--symbol", out var callerSymbol))
-            throw new ArgumentException("find-callers requires --index and --symbol.");
-        var depth = 1;
-        if (options.TryGetValue("--depth", out var rawDepth) && !int.TryParse(rawDepth, out depth))
-            throw new ArgumentException("--depth must be an integer.");
-        loadedSnapshot = await TimedAsync("jsonLoading", () => IndexStore.LoadSnapshotAsync(callerIndex, cancellation.Token));
-        var index = loadedIndex = loadedSnapshot.Index;
-        coverageAvailable = true;
+        if (!options.TryGetValue("--index", out var callerIndex) || !options.TryGetValue("--symbol", out var callerSymbol)
+            || options.Keys.Any(key => key is not ("--index" or "--symbol" or "--depth" or "--limit")))
+            throw new ArgumentException("find-callers accepts --index, --symbol, --depth and --limit; --offset and --snapshot are not supported.");
+        var depth = Integer("--depth", 1);
+        var limit = Integer("--limit", 100);
+        if (depth is < 1 or > 5) throw new ArgumentException("--depth must be from 1 to 5.");
+        if (limit is < 1 or > 1000) throw new ArgumentException("--limit must be between 1 and 1000.");
+        var index = await LoadFreshIndexAsync(callerIndex);
+        if (!index.Methods.Any(method => method.Id == callerSymbol))
+            throw index.Symbols?.Any(symbol => symbol.Id == callerSymbol) == true
+                ? new QueryException("unsupported_symbol_kind", "Caller traversal supports indexed source methods only.")
+                : new QueryException("symbol_not_found", "Source method ID was not found in this snapshot.");
         var facts = index.StructuralCatalog ?? throw new QueryException("rebuild_required", "Rebuild to extract structural facts.");
-        var traversal = Callers.Traverse(facts, callerSymbol, depth, 100);
+        var traversal = Timed("lookup", () => Callers.Traverse(facts, callerSymbol, depth, limit, cancellation.Token));
         result = new { source = "index", index.Solution, index.IndexId, traversal, warningCount = index.Warnings.Length, warnings = index.Warnings };
     }
     else if (command == "find-duplicates")
     {
-        if (options.Count != 1 || !options.TryGetValue("--index", out var duplicateIndex))
-            throw new ArgumentException("find-duplicates requires only --index.");
-        loadedSnapshot = await TimedAsync("jsonLoading", () => IndexStore.LoadSnapshotAsync(duplicateIndex, cancellation.Token));
-        var index = loadedIndex = loadedSnapshot.Index;
-        coverageAvailable = true;
+        if (!options.TryGetValue("--index", out var duplicateIndex)
+            || options.Keys.Any(key => key is not ("--index" or "--mode" or "--symbol" or "--project" or "--limit" or "--offset" or "--snapshot")))
+            throw new ArgumentException("find-duplicates accepts --index, --mode bodies|purpose, --symbol, --project and paging options.");
+        var mode = options.GetValueOrDefault("--mode") ?? "bodies";
+        var symbolId = options.GetValueOrDefault("--symbol");
+        if (mode is not ("bodies" or "purpose") || mode == "purpose" && symbolId is null)
+            throw new ArgumentException("--mode must be bodies or purpose; purpose requires --symbol.");
+        var request = Request();
+        request.ValidateOptions(supportsType: false, indexed: true);
+        var index = await LoadFreshIndexAsync(duplicateIndex);
+        request.Validate(index.IndexId, supportsType: false);
+        if (symbolId is not null && !index.Methods.Any(method => method.Id == symbolId))
+            throw index.Symbols?.Any(symbol => symbol.Id == symbolId) == true
+                ? new QueryException("unsupported_symbol_kind", "Duplicate candidates support indexed source methods only.")
+                : new QueryException("symbol_not_found", "Source method ID was not found in this snapshot.");
         var duplicates = index.Duplicates ?? throw new QueryException("rebuild_required", "Rebuild to extract duplicate candidates.");
-        result = new { source = "index", index.Solution, index.IndexId, duplicates, warningCount = index.Warnings.Length, warnings = index.Warnings };
-    }
-    else if (command is "explain-request" or "explain-import" or "get-explanation")
-    {
-        if (!options.TryGetValue("--index", out var explainIndex) || options.ContainsKey("--solution"))
-            throw new ArgumentException("Explanation commands read a saved index and do not load a solution.");
-        loadedSnapshot = await TimedAsync("jsonLoading", () => IndexStore.LoadSnapshotAsync(explainIndex, cancellation.Token));
-        var index = loadedIndex = loadedSnapshot.Index;
-        coverageAvailable = index.SchemaVersion >= 2;
-        var symbols = index.Symbols ?? throw new QueryException("rebuild_required", "Rebuild to extract symbol documentation.");
-        if (command == "explain-import")
+        if (mode == "bodies")
         {
-            if (!options.TryGetValue("--response", out var responsePath))
-                throw new ArgumentException(usage);
-            var response = JsonSerializer.Deserialize<ExplanationResponse>(await File.ReadAllTextAsync(responsePath, cancellation.Token), jsonOptions)
-                ?? throw new ArgumentException("The explanation response is empty.");
-            var symbol = symbols.SingleOrDefault(item => item.Id == response.SymbolId)
-                ?? throw new QueryException("symbol_not_found", "Source symbol ID was not found in this snapshot.");
-            var stored = await Explanations.ImportAsync(Path.GetDirectoryName(index.Solution)!, symbol, index.IndexId, response, cancellation.Token);
-            result = new { source = "index", index.Solution, index.IndexId, explanation = stored, warningCount = index.Warnings.Length, warnings = index.Warnings };
+            var matches = Timed("lookup", () => DuplicateSnapshotQueries.FindGroups(duplicates, index.IndexId, request, symbolId));
+            result = new { source = "index", index.Solution, index.IndexId, mode, symbol = symbolId,
+                duplicates = matches.Page.Items, matches.Page.Pagination, matches.Work, duplicateCoverage = matches.Coverage,
+                matches.DetectorVersion, matches.Limits, matches.OmittedMethodCount, matches.Selection, matches.Limitations,
+                warningCount = index.Warnings.Length, warnings = index.Warnings };
         }
         else
         {
-            if (!options.TryGetValue("--symbol", out var explainSymbol))
-                throw new ArgumentException(usage);
-            var symbol = symbols.SingleOrDefault(item => item.Id == explainSymbol)
-                ?? throw new QueryException("symbol_not_found", "Source symbol ID was not found in this snapshot.");
-            if (command == "explain-request")
-            {
-                if (!options.TryGetValue("--output", out var outputPath))
-                    throw new ArgumentException(usage);
-                var request = Explanations.CreateRequest(symbol, index.IndexId, CodeAtlasVersion.Current);
-                await Explanations.WriteRequestAsync(outputPath, request, cancellation.Token);
-                result = new { source = "index", index.Solution, index.IndexId, request, output = Path.GetFullPath(outputPath),
-                    warningCount = index.Warnings.Length, warnings = index.Warnings };
-            }
-            else
-            {
-                var stored = await Explanations.ReadAsync(Path.GetDirectoryName(index.Solution)!, symbol, index.IndexId, cancellation.Token);
-                result = new { source = "index", index.Solution, index.IndexId, explanation = stored, warningCount = index.Warnings.Length, warnings = index.Warnings };
-            }
+            var symbols = index.Symbols ?? throw new QueryException("rebuild_required", "Rebuild to extract symbol documentation.");
+            var facts = index.StructuralCatalog ?? throw new QueryException("rebuild_required", "Rebuild to extract structural facts.");
+            var matches = Timed("lookup", () => PurposeOverlap.Build(symbols, facts, duplicates, index.IndexId, symbolId!, request, cancellation.Token));
+            result = new { source = "index", index.Solution, index.IndexId, mode, symbol = symbolId,
+                candidates = matches.Page.Items, matches.Page.Pagination, matches.Query, matches.QueryTruncated,
+                matches.SelectedDocumentationEvidence, matches.RankingVersion, matches.CandidatePoolLimit,
+                matches.CandidatePoolTruncated, matches.StructuralWork, matches.BodyCoverage, matches.FactCoverage, matches.Limitations,
+                warningCount = index.Warnings.Length, warnings = index.Warnings };
+        }
+    }
+    else if (command is "explain-request" or "explain-import" or "get-explanation")
+    {
+        var allowed = command == "explain-import" ? new[] { "--index", "--response" }
+            : command == "explain-request" ? new[] { "--index", "--symbol", "--output", "--local", "--context", "--reference-limit", "--max-files", "--max-context-bytes", "--max-request-bytes", "--max-response-bytes", "--max-source-bytes", "--max-estimated-tokens" }
+            : new[] { "--index", "--symbol", "--request" };
+        if (!options.TryGetValue("--index", out var explainIndex) || options.Keys.Any(key => !allowed.Contains(key))
+            || (command == "explain-import" && !options.ContainsKey("--response"))
+            || (command == "explain-request" && (!options.ContainsKey("--symbol") || !options.ContainsKey("--output")))
+            || (command == "get-explanation" && options.ContainsKey("--symbol") == options.ContainsKey("--request")))
+            throw new ArgumentException("Explanation commands require a saved index and the documented selection/output options.");
+        var limits = new ExplanationLimits(Integer("--max-files", 6), Integer("--max-context-bytes", 65_536),
+            Integer("--max-request-bytes", 131_072), Integer("--max-response-bytes", 65_536),
+            Integer("--max-source-bytes", 1_048_576), Integer("--max-estimated-tokens", 32_768));
+        limits.Validate();
+        var referenceLimit = Integer("--reference-limit", 2);
+        if (referenceLimit is < 0 or > 8) throw new ArgumentException("--reference-limit must be from 0 to 8.");
+        if (options.TryGetValue("--request", out var identity) && !Guid.TryParseExact(identity, "N", out _))
+            throw new ArgumentException("--request must be the requestId returned by explain-request.");
+        var index = await LoadFreshIndexAsync(explainIndex);
+        var service = ExplanationSnapshotAdapter.ForSnapshot(loadedSnapshot!);
+        if (command == "explain-import")
+        {
+            var accepted = await TimedAsync("lookup", () => service.AcceptAsync(options["--response"], cancellation.Token));
+            result = new { source = "index", index.Solution, index.IndexId, explanation = accepted,
+                warningCount = index.Warnings.Length, warnings = index.Warnings };
+        }
+        else if (command == "explain-request")
+        {
+            var request = await TimedAsync("lookup", () => service.ExportAsync(options["--symbol"], options["--output"],
+                limits, options.TryGetValue("--context", out var context) ? [context] : null,
+                options.GetValueOrDefault("--local"), referenceLimit, cancellation.Token));
+            result = new { source = "index", index.Solution, index.IndexId, request,
+                output = Path.GetFullPath(options["--output"]), warningCount = index.Warnings.Length, warnings = index.Warnings };
+        }
+        else
+        {
+            var view = await TimedAsync("lookup", () => options.TryGetValue("--request", out var requestId)
+                ? service.GetAsync(requestId, cancellation.Token)
+                : service.GetForSymbolAsync(options["--symbol"], cancellation.Token));
+            result = new { source = "index", index.Solution, index.IndexId, explanation = view,
+                warningCount = index.Warnings.Length, warnings = index.Warnings };
         }
     }
     else if (command is "search-symbols" or "get-facts")
@@ -219,24 +268,15 @@ try
         var mode = options.GetValueOrDefault("--mode") ?? "assisted";
         var kind = options.GetValueOrDefault("--kind") ?? "method";
         var language = options.GetValueOrDefault("--language") ?? "csharp";
-        static int Integer(Dictionary<string, string> values, string key, int fallback) =>
-            !values.TryGetValue(key, out var raw) ? fallback : int.TryParse(raw, out var number)
-                ? number : throw new ArgumentException($"{key} must be an integer.");
-        var request = new QueryRequest(options.GetValueOrDefault("--project"), options.GetValueOrDefault("--type"),
-            Integer(options, "--limit", 100), Integer(options, "--offset", 0), options.GetValueOrDefault("--snapshot"));
+        var request = Request();
+        request.ValidateOptions(supportsType: command == "search-symbols", indexed: options.ContainsKey("--index"));
         if (options.TryGetValue("--index", out var factIndex))
         {
-            loadedSnapshot = await TimedAsync("jsonLoading", () => IndexStore.LoadSnapshotAsync(factIndex, cancellation.Token));
-            var index = loadedIndex = loadedSnapshot.Index;
-            coverageAvailable = true;
-            var status = await TimedAsync("freshnessHashing", () => IndexStore.CheckFreshnessAsync(index, cancellation.Token));
-            freshness = ResponseContract.Freshness(status);
-            if (status.IsStale)
-                throw new StaleIndexException(status.ChangedFiles);
+            var index = await LoadFreshIndexAsync(factIndex);
             if (command == "get-facts")
             {
                 var page = await TimedAsync("lookup", () => PurposeSnapshotQueries.GetFactsAsync(
-                    loadedSnapshot, options["--symbol"], request, cancellation.Token));
+                    loadedSnapshot!, options["--symbol"], request, cancellation.Token));
                 result = new { source = "index", index.Solution, index.IndexId, index.CreatedAtUtc, index.ToolVersion,
                     symbol = options["--symbol"], facts = page.Items, page.Pagination,
                     warningCount = index.Warnings.Length, warnings = index.Warnings };
@@ -244,7 +284,7 @@ try
             else
             {
                 var search = await TimedAsync("lookup", () => PurposeSnapshotQueries.SearchAsync(
-                    loadedSnapshot, options["--query"], mode, kind, request, language, cancellation.Token));
+                    loadedSnapshot!, options["--query"], mode, kind, request, language, cancellation.Token));
                 result = new { source = "index", index.Solution, index.IndexId, index.CreatedAtUtc, index.ToolVersion,
                     symbols = search.Page.Items, pagination = search.Page.Pagination, search.RankingVersion, search.Mode,
                     search.Language, search.QueryTokens, search.UnmatchedQueryTokens, search.EvidencePolicy, search.Decision,
@@ -281,23 +321,18 @@ try
             throw new ArgumentException("--kind is supported only by find-symbol.");
         var kind = options.GetValueOrDefault("--kind") ?? "method";
         DocumentationQueries.ValidateKind(kind);
-        static int Integer(Dictionary<string, string> values, string key, int fallback) =>
-            !values.TryGetValue(key, out var raw) ? fallback : int.TryParse(raw, out var number)
-                ? number : throw new ArgumentException($"{key} must be an integer.");
-        var request = new QueryRequest(options.GetValueOrDefault("--project"), options.GetValueOrDefault("--type"),
-            Integer(options, "--limit", 100), Integer(options, "--offset", 0), options.GetValueOrDefault("--snapshot"));
+        var request = Request();
         // Validate request bounds before any expensive IO. Identity is checked after loading and freshness verification.
         request.ValidateOptions(supportsType: command == "find-symbol" || singleton, indexed: options.ContainsKey("--index"));
         if (options.TryGetValue("--index", out var indexPath))
         {
-            loadedSnapshot = await TimedAsync("jsonLoading", () => IndexStore.LoadSnapshotAsync(
-                indexPath, includeCatalog: singleton || kind != "method", cancellation.Token));
-            var index = loadedIndex = loadedSnapshot.Index;
-            coverageAvailable = true;
-            var status = await TimedAsync("freshnessHashing", () => IndexStore.CheckFreshnessAsync(index, cancellation.Token));
-            freshness = ResponseContract.Freshness(status);
-            if (status.IsStale)
-                throw new StaleIndexException(status.ChangedFiles);
+            // Documentation IDs carry their declaration kind after the project separator.
+            // Known method lookups keep their catalog-free fast path and resolve the generation once.
+            var declaration = value.LastIndexOf("::", StringComparison.Ordinal) + 2;
+            var nonMethodReference = command == "find-references" && declaration >= 2
+                && declaration + 1 < value.Length && value[declaration + 1] == ':'
+                && value[declaration] is 'T' or 'P' or 'F' or 'E' or 'N';
+            var index = await LoadFreshIndexAsync(indexPath, singleton || kind != "method" || nonMethodReference);
             request.Validate(index.IndexId, command == "find-symbol" || singleton);
             if (singleton)
             {

@@ -67,6 +67,7 @@ internal static class ResponseContract
         StaleIndexException => ("stale_index", 3),
         QueryException { Code: "snapshot_mismatch" } => ("snapshot_mismatch", 3),
         QueryException { Code: "unsupported_contract" } => ("unsupported_contract", 2),
+        QueryException { Code: "invalid_arguments" } => ("invalid_arguments", 2),
         QueryException query => (query.Code, 1),
         IndexFormatException format => (format.Code, 1),
         ArgumentException => ("invalid_arguments", 2),

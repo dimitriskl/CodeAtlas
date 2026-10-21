@@ -57,6 +57,8 @@ public sealed class PurposeSearchTests
         var page = PurposeSearch.Search(symbols, Catalog(), "recover archives", "assisted", "method", request, "current");
         var next = PurposeSearch.Search(symbols, Catalog(), "recover archives", "assisted", "method",
             request with { Offset = 1, Snapshot = "current" }, "current");
+        var replaced = Record.Exception(() => PurposeSearch.Search(symbols, Catalog(), "recover archives", "assisted", "method",
+            request with { Snapshot = "replaced" }, "current"));
 
         // Assert
         Assert.Equal("a", Assert.Single(page.Page.Items).Symbol.Id);
@@ -64,8 +66,7 @@ public sealed class PurposeSearchTests
         Assert.Equal(page.Page.Items[0].Score, next.Page.Items[0].Score);
         Assert.Equal(2, page.Page.Pagination.Total);
         Assert.False(next.Page.Pagination.HasMore);
-        Assert.Throws<QueryException>(() => PurposeSearch.Search(symbols, Catalog(), "recover archives", "assisted", "method",
-            request with { Snapshot = "replaced" }, "current"));
+        Assert.Equal("snapshot_mismatch", Assert.IsType<QueryException>(replaced).Code);
     }
 
     [Fact]
@@ -107,6 +108,24 @@ public sealed class PurposeSearchTests
         Assert.Empty(angular.Page.Items);
     }
 
+    [Theory]
+    [InlineData("names")]
+    [InlineData("assisted")]
+    public void LanguageAbstentionPreservesRequestedRetrievalMode(string mode)
+    {
+        // Arrange
+        var symbols = Fill(Symbol("production", "FindToken", "method", null));
+
+        // Act
+        var result = PurposeSearch.Search(symbols, Catalog(), "TypeScript browser interceptor", mode,
+            "method", new(Limit: 5), "snapshot");
+
+        // Assert
+        Assert.Equal(mode, result.Mode);
+        Assert.Equal("abstained-outside-supported-language", result.Decision);
+        Assert.Empty(result.Page.Items);
+    }
+
     [Fact]
     public void RelatedInterfaceDocumentationRetainsItsSourceAndDoesNotTraverseUnrelatedCalls()
     {
@@ -125,6 +144,63 @@ public sealed class PurposeSearchTests
         Assert.All(candidate.Reasons, r => Assert.Equal("implements-member", r.FactKind));
         Assert.All(candidate.Reasons, r => Assert.Equal(contract.Id, r.SourceSymbolId));
         Assert.DoesNotContain(result.Page.Items, s => s.Symbol.Id == unrelated.Id);
+    }
+
+    [Fact]
+    public void InflectedVerbsAndPluralsMatchWithoutDomainSynonyms()
+    {
+        // Arrange
+        var candidate = Symbol("candidate", "Execute", "method", "Checks component permissions and schedules retry batches.");
+        var symbols = Fill(candidate);
+
+        // Act
+        var result = PurposeSearch.Search(symbols, Catalog(), "checked component permission scheduled retry batch", "assisted", "method", new(), "snapshot");
+
+        // Assert
+        var match = Assert.Single(result.Page.Items);
+        Assert.Equal(candidate.Id, match.Symbol.Id);
+        Assert.Empty(match.UnmatchedQueryTokens);
+        Assert.All(match.Reasons, reason => Assert.NotNull(reason.DocumentationEvidence));
+    }
+
+    [Fact]
+    public void OwnMethodNameOutranksAnUnrelatedMethodInAMatchingContainingType()
+    {
+        // Arrange
+        var candidate = Symbol("z-candidate", "ApplyCleanup", "method", null);
+        var decoy = Symbol("a-decoy", "GetOptions", "method", null) with { ContainingType = "Tests.CleanupService" };
+        var symbols = Fill(candidate, decoy);
+
+        // Act
+        var result = PurposeSearch.Search(symbols, Catalog(), "cleanup", "names", "method", new(), "snapshot");
+
+        // Assert
+        Assert.Equal(candidate.Id, result.Page.Items[0].Symbol.Id);
+        Assert.Contains(result.Page.Items, item => item.Symbol.Id == decoy.Id);
+    }
+
+    [Fact]
+    public void ResolvedCallNameSuppliesEvidenceWithoutPretendingToDescribeCallerEffects()
+    {
+        // Arrange
+        var candidate = Symbol("candidate", "Execute", "method", null);
+        var target = Symbol("target", "ApplyCleanup", "method", null);
+        var decoy = Symbol("decoy", "ReadOptions", "method", null) with { ContainingType = "Tests.CleanupOptions" };
+        var fact = Containment(candidate, target) with { Kind = "resolved-invocation" };
+        var symbols = Fill(candidate, target, decoy);
+
+        // Act
+        var baseline = PurposeSearch.Search(symbols, Catalog(fact), "cleanup", "names", "method", new(), "snapshot");
+        var assisted = PurposeSearch.Search(symbols, Catalog(fact), "cleanup", "assisted", "method", new(), "snapshot");
+
+        // Assert
+        Assert.DoesNotContain(baseline.Page.Items, item => item.Symbol.Id == candidate.Id);
+        var match = Assert.Single(assisted.Page.Items, item => item.Symbol.Id == candidate.Id);
+        var reason = Assert.Single(match.Reasons);
+        Assert.Equal("resolved-invocation", reason.FactKind);
+        Assert.Equal(fact.Evidence, reason.RelationshipEvidence);
+        Assert.Null(reason.DocumentationEvidence);
+        Assert.True(match.Score > assisted.Page.Items.Single(item => item.Symbol.Id == decoy.Id).Score);
     }
 
     private static DocumentedSymbol Symbol(string id, string name, string kind, string? text)
