@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Globalization;
 using System.Text.Json;
 
 namespace CodeAtlas.Tests;
@@ -6,12 +7,12 @@ namespace CodeAtlas.Tests;
 /// <summary>Tracks the actual publishing testhost, rather than only its vstest wrapper.</summary>
 internal static class PublicationChildProcess
 {
-    private sealed record Checkpoint(int ProcessId, long ProcessStartTimeUtcTicks, string IndexId, string KillPoint);
+    private sealed record Checkpoint(int ProcessId, string ProcessIdentity, string IndexId, string KillPoint);
 
     public static async Task WriteCheckpointAsync(string path, string indexId, string killPoint)
     {
         using var current = Process.GetCurrentProcess();
-        var checkpoint = new Checkpoint(current.Id, current.StartTime.ToUniversalTime().Ticks, indexId, killPoint);
+        var checkpoint = new Checkpoint(current.Id, ReadProcessIdentity(current), indexId, killPoint);
         var temporary = path + ".tmp";
         await File.WriteAllTextAsync(temporary, JsonSerializer.Serialize(checkpoint));
         File.Move(temporary, path);
@@ -30,12 +31,37 @@ internal static class PublicationChildProcess
         if (checkpoint is null || checkpoint.ProcessId <= 0 || checkpoint.IndexId != indexId || checkpoint.KillPoint != killPoint)
             throw new InvalidOperationException("Publication checkpoint does not identify the expected writer and generation.");
         var writer = Process.GetProcessById(checkpoint.ProcessId);
-        if (writer.HasExited || writer.StartTime.ToUniversalTime().Ticks != checkpoint.ProcessStartTimeUtcTicks)
+        if (writer.HasExited || ReadProcessIdentity(writer) != checkpoint.ProcessIdentity)
         {
             writer.Dispose();
             throw new InvalidOperationException("Publication checkpoint writer has exited or its process identity has changed.");
         }
         return writer;
+    }
+
+    private static string ReadProcessIdentity(Process process)
+    {
+        if (OperatingSystem.IsLinux())
+        {
+            // Process.StartTime adds a boot-to-UTC estimate cached per process.
+            // Compare the kernel's original start counter across the two processes.
+            var stat = File.ReadAllText($"/proc/{process.Id}/stat");
+            return "linux-start:" + ParseLinuxStartCounter(stat).ToString(CultureInfo.InvariantCulture);
+        }
+        return "start-utc:" + process.StartTime.ToUniversalTime().Ticks.ToString(CultureInfo.InvariantCulture);
+    }
+
+    internal static ulong ParseLinuxStartCounter(string stat)
+    {
+        // Field 2 (comm) may contain spaces or parentheses. Fields after its
+        // final ')' start at field 3; starttime is field 22, hence offset 19.
+        var end = stat.LastIndexOf(')');
+        if (end < 0) throw new InvalidDataException("Linux process stat has no command terminator.");
+        var fields = stat[(end + 1)..].Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        if (fields.Length <= 19 || !ulong.TryParse(fields[19], NumberStyles.None,
+                CultureInfo.InvariantCulture, out var start))
+            throw new InvalidDataException("Linux process stat has no valid start counter.");
+        return start;
     }
 
     public static async Task KillAndWaitAsync(Process wrapper, Process? writer, CancellationToken cancellationToken)

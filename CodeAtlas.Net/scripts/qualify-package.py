@@ -62,6 +62,11 @@ def main():
     run("sdk-info", ["dotnet", "--info"])
     run("restore", ["dotnet", "restore", "CodeAtlas.slnx", "--locked-mode"])
     run("build", ["dotnet", "build", "CodeAtlas.slnx", "-c", "Release", "--no-restore"])
+    run("writer-process-tests", ["dotnet", "test", "tests/CodeAtlas.Tests/CodeAtlas.Tests.csproj",
+                 "-c", "Release", "--no-build", "--no-restore", "--filter",
+                 "FullyQualifiedName~PublicationChildProcessTests|FullyQualifiedName~AbruptWriterProcessTerminationLeavesAnEntireCommittedGeneration|FullyQualifiedName~ActualProcessTerminationWithARefreshPayloadHasOnlyOldOrNewOutcomes|FullyQualifiedName~SecondWriterReportsBusy|FullyQualifiedName~WriterLockPathObstruction",
+                 "--logger", "trx", "--logger", "console;verbosity=normal",
+                 "--results-directory", output / "test-results", "--", "xUnit.MaxParallelThreads=1"])
     run("test", ["dotnet", "test", "CodeAtlas.slnx", "-c", "Release", "--no-build",
                  "--no-restore", "--logger", "trx", "--logger", "console;verbosity=normal",
                  "--results-directory", output / "test-results", "--", "xUnit.MaxParallelThreads=1"])
