@@ -9,6 +9,30 @@ namespace CodeAtlas.Tests;
 public sealed class ExplanationGeneratorTests
 {
     [Fact]
+    public async Task ProviderSelectsEvidenceIdsAndLocalCodeConstructsTraceableAnchors()
+    {
+        // Arrange
+        var request = Request();
+        using var client = Client((_, _) => Task.FromResult(Envelope(
+            "{\"claims\":[{\"text\":\"The method doubles its argument.\",\"evidenceIds\":[\"e1\"]}],\"limitations\":[\"Dependencies omitted.\"]}",
+            "stop", null)));
+        var generator = new ExplanationGenerator(client, new("synthetic-key", "test-model"));
+
+        // Act
+        var response = await generator.GenerateAsync(request);
+
+        // Assert
+        var citation = Assert.Single(Assert.Single(response.Claims).Evidence);
+        Assert.Equal("e1", citation.EvidenceId);
+        Assert.Equal(0, citation.Offset);
+        Assert.Equal(request.Evidence[0].Text, citation.Quote);
+        Assert.Equal(citation.Quote.Length, citation.Length);
+        Assert.Equal("provider-description/v2", response.Provenance.GenerationVersion);
+        Assert.Equal("Dependencies omitted.", Assert.Single(response.Limitations));
+        ExplanationService.ValidateResponse(request, response);
+    }
+
+    [Fact]
     public void MissingKeyDisablesAiBeforeReadingOtherConfiguration()
     {
         // Arrange
@@ -100,11 +124,64 @@ public sealed class ExplanationGeneratorTests
         Assert.Equal(request.IndexId, response.IndexId);
         Assert.Equal(request.Selection.SymbolId, response.SymbolId);
         Assert.Equal("actual-provider-model", response.Provenance.Model);
+        Assert.Equal("provider-description/v2", response.Provenance.GenerationVersion);
+        Assert.Equal("openai-compatible:127.0.0.1", response.Provenance.Provider);
+        Assert.NotEqual(default, response.Provenance.GeneratedAtUtc);
         var claim = Assert.Single(response.Claims);
         var citation = Assert.Single(claim.Evidence);
         Assert.Equal("interpretation", claim.Category);
-        Assert.Equal(3, citation.Offset); // emoji occupies two UTF-16 code units, followed by a space.
-        Assert.Equal(4, citation.Length);
+        Assert.Equal(0, citation.Offset);
+        Assert.Equal(request.Evidence[0].Text.Length, citation.Length);
+        Assert.Equal(request.Evidence[0].Text, citation.Quote);
+        Assert.Contains("evidenceIds", messages[0].GetProperty("content").GetString());
+        Assert.Contains("Do not return quotes or offsets", messages[0].GetProperty("content").GetString());
+        ExplanationService.ValidateResponse(request, response);
+    }
+
+    [Theory]
+    [InlineData(510, 512)]
+    [InlineData(511, 511)]
+    [InlineData(512, 512)]
+    public async Task LocalCitationAnchorIsBoundedWithoutSplittingASurrogatePair(int prefixLength, int expectedLength)
+    {
+        // Arrange
+        var request = Request();
+        var text = new string('a', prefixLength) + "😀" + new string('b', 100);
+        request = request with { Evidence = [request.Evidence[0] with { Text = text }] };
+        request = request with { ContextFingerprint = ExplanationContract.ContextHash(request) };
+        using var client = Client((_, _) => Task.FromResult(Success()));
+        var generator = new ExplanationGenerator(client, new("synthetic-key", "test-model"));
+
+        // Act
+        var response = await generator.GenerateAsync(request);
+
+        // Assert
+        var citation = Assert.Single(Assert.Single(response.Claims).Evidence);
+        Assert.Equal(0, citation.Offset);
+        Assert.Equal(expectedLength, citation.Length);
+        Assert.Equal(text[..expectedLength], citation.Quote);
+        Assert.False(char.IsHighSurrogate(citation.Quote[^1]));
+        ExplanationService.ValidateResponse(request, response);
+    }
+
+    [Fact]
+    public async Task AnyProvidedEvidenceIdCanBeSelectedWithoutChangingTheCanonicalContext()
+    {
+        // Arrange
+        var request = Request();
+        request = request with { Evidence = [request.Evidence[0], request.Evidence[0] with { Id = "e2", Text = "related supplied context" }] };
+        request = request with { ContextFingerprint = ExplanationContract.ContextHash(request) };
+        using var client = Client((_, _) => Task.FromResult(Success("e2")));
+        var generator = new ExplanationGenerator(client, new("synthetic-key", "test-model"));
+
+        // Act
+        var response = await generator.GenerateAsync(request);
+
+        // Assert
+        var citation = Assert.Single(Assert.Single(response.Claims).Evidence);
+        Assert.Equal("e2", citation.EvidenceId);
+        Assert.Equal(request.Evidence[1].Text, citation.Quote);
+        Assert.Equal(request.ContextFingerprint, response.ContextFingerprint);
         ExplanationService.ValidateResponse(request, response);
     }
 
@@ -135,6 +212,10 @@ public sealed class ExplanationGeneratorTests
     [InlineData("{}", "stop", null)]
     [InlineData("null", "stop", null)]
     [InlineData("{\"claims\":[],\"limitations\":[]}", "stop", null)]
+    [InlineData("{\"claims\":[{\"text\":\"x\",\"evidenceIds\":[]}],\"limitations\":[]}", "stop", null)]
+    [InlineData("{\"claims\":[{\"text\":\"x\",\"evidenceIds\":null}],\"limitations\":[]}", "stop", null)]
+    [InlineData("{\"claims\":[{\"text\":\"x\",\"evidenceIds\":[1]}],\"limitations\":[]}", "stop", null)]
+    [InlineData("{\"claims\":[{\"text\":\"x\",\"evidence\":[{\"evidenceId\":\"e1\",\"quote\":\"invented quote\"}]}],\"limitations\":[]}", "stop", null)]
     [InlineData("{}", "length", null)]
     [InlineData("{}", "stop", "refused")]
     public async Task IncompleteRefusedOrMalformedResponsesAreExplicitFailures(string content, string finish, string? refusal)
@@ -150,11 +231,15 @@ public sealed class ExplanationGeneratorTests
         Assert.Equal("ai_provider_failed", Assert.IsType<QueryException>(error).Code);
     }
 
-    [Fact]
-    public async Task UnmatchedQuoteIsRejectedInsteadOfInventingEvidence()
+    [Theory]
+    [InlineData("missing evidence")]
+    [InlineData("")]
+    [InlineData(" ")]
+    [InlineData(null)]
+    public async Task UnknownNullOrEmptyEvidenceIdIsRejectedInsteadOfInventingEvidence(string? evidenceId)
     {
         // Arrange
-        using var client = Client((_, _) => Task.FromResult(Success("missing source quote")));
+        using var client = Client((_, _) => Task.FromResult(Success(evidenceId)));
         var generator = new ExplanationGenerator(client, new("synthetic-key", "test-model"));
 
         // Act
@@ -162,7 +247,34 @@ public sealed class ExplanationGeneratorTests
 
         // Assert
         Assert.Equal("invalid_explanation", Assert.IsType<QueryException>(error).Code);
-        Assert.DoesNotContain("missing source quote", error.Message);
+        Assert.DoesNotContain("missing evidence", error.Message);
+    }
+
+    [Fact]
+    public async Task ProviderClaimCitationAndLimitationBoundsArePreserved()
+    {
+        // Arrange
+        var validClaim = new { text = "An interpretation.", evidenceIds = new[] { "e1" } };
+        var contents = new[]
+        {
+            JsonSerializer.Serialize(new { claims = Enumerable.Repeat(validClaim, 33), limitations = Array.Empty<string>() }),
+            JsonSerializer.Serialize(new { claims = new[] { new { text = "x", evidenceIds = Enumerable.Repeat("e1", 17) } }, limitations = Array.Empty<string>() }),
+            JsonSerializer.Serialize(new { claims = new[] { new { text = new string('x', 4097), evidenceIds = new[] { "e1" } } }, limitations = Array.Empty<string>() }),
+            JsonSerializer.Serialize(new { claims = new[] { validClaim }, limitations = Enumerable.Repeat("uncertain", 17) }),
+            JsonSerializer.Serialize(new { claims = new[] { validClaim }, limitations = new[] { new string('x', 2049) } })
+        };
+        var request = Request();
+        var pending = new Queue<string>(contents);
+        using var client = Client((_, _) => Task.FromResult(Envelope(pending.Dequeue(), "stop", null)));
+        var generator = new ExplanationGenerator(client, new("synthetic-key", "test-model"));
+        var errors = new List<Exception?>();
+
+        // Act
+        for (var i = 0; i < contents.Length; i++)
+            errors.Add(await Record.ExceptionAsync(() => generator.GenerateAsync(request)));
+
+        // Assert
+        Assert.All(errors, error => Assert.IsType<QueryException>(error));
     }
 
     [Fact]
@@ -230,9 +342,9 @@ public sealed class ExplanationGeneratorTests
         return request with { ContextFingerprint = ExplanationContract.ContextHash(request) };
     }
 
-    private static HttpResponseMessage Success(string quote = "int ") => Envelope(JsonSerializer.Serialize(new
+    private static HttpResponseMessage Success(string? evidenceId = "e1") => Envelope(JsonSerializer.Serialize(new
     {
-        claims = new[] { new { text = "The selected method doubles its argument.", evidence = new[] { new { evidenceId = "e1", quote } } } },
+        claims = new[] { new { text = "The selected method doubles its argument.", evidenceIds = new[] { evidenceId } } },
         limitations = Array.Empty<string>()
     }), "stop", null);
 

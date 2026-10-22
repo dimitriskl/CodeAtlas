@@ -2,15 +2,19 @@
 
 CodeAtlas stores generated descriptions separately from authored documentation and semantic snapshots. With no credentials, AI is disabled. Configure `CODEATLAS_AI_API_KEY` and `CODEATLAS_AI_MODEL` and explicitly run `describe --index <manifest>` to generate missing class/type and method descriptions. `--limit 10` generates a small batch; `--symbol <id>` selects one symbol. The optional `CODEATLAS_AI_ENDPOINT` is a full OpenAI-compatible chat-completions URL; the default is OpenAI. The adapter follows the [official Chat Completions API](https://developers.openai.com/api/reference/resources/chat/subresources/completions/methods/create).
 
-Only `describe` calls the provider and sends selected bounded source evidence. Model output supplies descriptions and exact source quotations; CodeAtlas computes citation offsets and validates the existing explanation contract locally. Credentials stay in the process environment and are not written into indexes, requests or descriptions. Configured provider calls can incur usage charges. Search, indexing and refresh never invoke a provider.
+Only `describe` calls the provider and sends selected bounded source evidence. Model output supplies descriptions and selects evidence IDs. CodeAtlas constructs exact source anchors locally and validates the existing explanation contract. Anchors identify the supplied source context; they do not prove the generated prose follows logically from it. Unknown IDs are rejected. Credentials stay in the process environment and are not written into indexes, requests or descriptions. Configured provider calls can incur usage charges. Search, indexing and refresh never invoke a provider.
 
 `search-symbols --mode assisted` includes current saved generated claims, with explicit AI provenance and source citations. `--mode names` excludes them. Stale, corrupt or old-generation cache entries are excluded from search. Missing descriptions fall back to the existing name/documentation/fact search. Searchable generated wording is an interpretation, not a verified fact.
 
 The local coding-agent request/response workflow below remains available without provider credentials. Read the exported request before sharing it with an agent.
 
+To reuse an OpenAI key already configured for another local application, set `$env:CODEATLAS_AI_API_KEY = $env:OPENAI_API_KEY` in the terminal running CodeAtlas. Select the model with `CODEATLAS_AI_MODEL`; this does not copy the key into a repository file or change the other application's settings.
+
 ## Request, respond, import
 
-The 0.00.26 implementation passed 416 .NET tests and 39 Python tests on Windows. A local test provider exercised the actual CLI path: no-key disablement, generation, validated storage, resumed batches and later search without credentials. Focused regressions cover class/method discovery, stale/corrupt cache exclusion, citation validation and description-aware pagination. These checks do not claim a live provider run or measure generated-description accuracy on eConnector.
+Version 0.00.27 passed all 429 .NET tests and 39 Python tests on Windows: 116 description-focused tests and 313 remaining tests. An initial stalled test run was stopped; the diagnostic rerun and remaining suite passed. A local test provider exercised the actual CLI path: no-key disablement, generation, validated storage, resumed batches and later search without credentials. Focused regressions cover class/method discovery, stale/corrupt cache exclusion, citation validation, Unicode anchor boundaries and description-aware pagination.
+
+One approved live OpenAI call using an existing environment key reached response validation, but its evidence ID or source quote was invalid; nothing was accepted or saved. The automatic adapter now requests evidence IDs and constructs anchors locally. This revision has local contract/integration validation only; a further live call has not been made. These checks do not measure generated-description accuracy on eConnector.
 
 Use a fresh verified manifest and copy the symbol ID from `find-symbol`. With the source checkout launcher:
 

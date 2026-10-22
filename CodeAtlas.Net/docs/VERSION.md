@@ -1,6 +1,6 @@
 # CodeAtlas version history
 
-Version: **0.00.26**
+Version: **0.00.27**
 
 Status: unpublished development version. Version history starts at `0.00.01`; earlier work did not have assigned version numbers.
 
@@ -31,6 +31,10 @@ python scripts/bump-version.py --major-release --summary "Publish the qualified 
 This flag synchronizes the same files; it does not publish a package, create a tag, or waive release checks. Routine increments never change the major component automatically.
 
 ## History
+
+### 0.00.27
+
+- Construct AI description source anchors locally from model-selected evidence IDs and document reuse of an existing OpenAI key
 
 ### 0.00.26
 

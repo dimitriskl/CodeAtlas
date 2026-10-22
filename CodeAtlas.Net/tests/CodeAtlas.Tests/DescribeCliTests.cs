@@ -110,13 +110,10 @@ public sealed class DescribeCliTests(ExplanationCliContractFixture fixture)
         using var request = JsonDocument.Parse(payload);
         using var evidence = JsonDocument.Parse(request.RootElement.GetProperty("messages")[1].GetProperty("content").GetString()!);
         var excerpt = evidence.RootElement.GetProperty("evidence").EnumerateArray().First(item => item.GetProperty("role").GetString() == "selected-declaration");
-        var excerptText = excerpt.GetProperty("text").GetString()!;
-        var quote = excerptText.Contains("value * 2", StringComparison.Ordinal) ? "value * 2"
-            : excerptText[..Math.Min(80, excerptText.Length)];
         var content = JsonSerializer.Serialize(new
         {
-            claims = new[] { new { text = "Scales an integer arithmetically by a factor of two.", evidence = new[] {
-                new { evidenceId = excerpt.GetProperty("id").GetString(), quote } } } },
+            claims = new[] { new { text = "Scales an integer arithmetically by a factor of two.",
+                evidenceIds = new[] { excerpt.GetProperty("id").GetString() } } },
             limitations = Array.Empty<string>()
         });
         var body = JsonSerializer.SerializeToUtf8Bytes(new

@@ -56,6 +56,8 @@ To add AI descriptions, set provider credentials locally and run `describe` expl
 
 ```powershell
 $env:CODEATLAS_AI_API_KEY = '<your API key>'
+# Or reuse a key already available in this terminal:
+# $env:CODEATLAS_AI_API_KEY = $env:OPENAI_API_KEY
 $env:CODEATLAS_AI_MODEL = '<your provider model>'
 # Optional: full chat-completions URL for another compatible provider.
 # $env:CODEATLAS_AI_ENDPOINT = 'https://your-provider.example/v1/chat/completions'
@@ -64,7 +66,7 @@ dotnet run --project src/CodeAtlas.Cli --no-build -- describe --index $manifest 
 dotnet run --project src/CodeAtlas.Cli --no-build -- search-symbols --index $manifest --query 'what you need' --kind all
 ```
 
-`describe` sends selected source excerpts to the configured provider and saves generated descriptions locally. Without an API key it reports AI disabled and makes no provider calls. Use `--symbol <id>` for one class/type or method, or omit `--limit` to process all missing descriptions. The limit counts successful generations; skipped large or unsupported declarations do not block later work. Repeating the command skips current descriptions, so bounded batches can be resumed. Skips are recorded in the warning file returned in the outcome. A provider failure stops the command; descriptions already saved remain available.
+`describe` sends selected source excerpts to the configured provider and saves generated descriptions locally. The model selects source-evidence IDs; CodeAtlas constructs exact source anchors locally. Those anchors show the supplied context, not proof that the generated interpretation is correct. Without an API key it reports AI disabled and makes no provider calls. Use `--symbol <id>` for one class/type or method, or omit `--limit` to process all missing descriptions. The limit counts successful generations; skipped large or unsupported declarations do not block later work. Repeating the command skips current descriptions, so bounded batches can be resumed. Skips are recorded in the warning file returned in the outcome. A provider failure stops the command; descriptions already saved remain available.
 
 Assisted search includes current saved AI descriptions automatically, including descriptions imported through the local request/response workflow. Results label AI text and its provider/model separately from authored documentation and retain source identities. Search itself never calls a provider and works without credentials. `--mode names` excludes descriptions. Continue search pages with the returned `pagination.snapshotId`; generating or changing descriptions invalidates the old continuation, so restart at offset zero. After a new index generation, regenerate descriptions; old-generation descriptions are excluded. Provider settings are separate from semantic build inputs, so configuring or rotating credentials does not stale the code map. Do not use CodeAtlas's reserved `CODEATLAS_AI_*` settings as application build inputs.
 
