@@ -20,7 +20,10 @@ Usage: codeatlas index --solution <path.sln|path.slnx> [--reference-workers <1-8
        codeatlas explain-request --index <path-to-index.json> --symbol <id> --output <request.json>
        codeatlas explain-import --index <path-to-index.json> --response <response.json>
        codeatlas get-explanation --index <path-to-index.json> (--symbol <id> | --request <requestId>)
+       codeatlas configure-ai --provider <openai|azure|anthropic|kimi|ollama|openrouter> --model <name>
+                  [--effort default|none|minimal|low|medium|high|xhigh|max] [--endpoint <full-url>] [--settings <appsettings.json>]
        codeatlas describe --index <path-to-index.json> [--symbol <id>] [--limit <positive-number>] [--project <path>]
+                  [--provider <name>] [--model <name>] [--effort <level>] [--endpoint <full-url>] [--settings <appsettings.json>]
        codeatlas find-duplicates --index <path-to-index.json> [--mode bodies|purpose] [--symbol <id>]
        codeatlas find-callers --index <path-to-index.json> --symbol <id> [--depth <1-5>] [--limit <1-1000>]
        codeatlas coverage --index <path-to-index.json>
@@ -37,8 +40,10 @@ Default/explicit method discovery returns MethodInfo. Other kinds/all return com
 get-documentation returns full developer XML, resolved sections and provenance; missing documentation remains missing.
 search-symbols ranks names, signatures, authored documentation, saved AI descriptions, and one-hop structural facts.
 It does not call a model. get-facts returns Roslyn facts for one saved symbol. A resolved call is a relationship, not a runtime effect.
-describe generates missing class/type and method descriptions only when CODEATLAS_AI_API_KEY and CODEATLAS_AI_MODEL are configured.
-CODEATLAS_AI_ENDPOINT optionally selects an OpenAI-compatible chat-completions endpoint. No credentials means AI is disabled.
+configure-ai tests the selected model without project source, then saves non-secret options to .codeatlas/appsettings.json.
+Cloud keys are requested without echo only when needed and stored in Windows user environment variables; Ollama needs no key.
+describe uses saved options or legacy CODEATLAS_AI_* settings. Selection overrides test and save the new connection first.
+Without a configured selection or legacy credentials AI stays disabled. Effort support depends on provider and model.
 explain-request exports selected source evidence locally; optional --local, --context, --reference-limit and byte limits bound that context.
 explain-import requires registered request identity, evidence citations, provenance and unchanged observed inputs. No provider is called.
 """;
@@ -65,7 +70,7 @@ var coverageAvailable = false;
 QueryProfile? profile = null;
 try
 {
-    if (args.Length < 3 || command is not ("index" or "refresh" or "index-status" or "find-symbol" or "find-references" or "get-documentation" or "search-symbols" or "get-facts" or "explain-request" or "explain-import" or "get-explanation" or "describe" or "find-duplicates" or "find-callers" or "coverage"))
+    if (args.Length < 3 || command is not ("index" or "refresh" or "index-status" or "find-symbol" or "find-references" or "get-documentation" or "search-symbols" or "get-facts" or "explain-request" or "explain-import" or "get-explanation" or "describe" or "configure-ai" or "find-duplicates" or "find-callers" or "coverage"))
         throw new ArgumentException(usage);
     var options = new Dictionary<string, string>(StringComparer.Ordinal);
     for (var i = 1; i < args.Length; i++)
@@ -107,6 +112,27 @@ try
         freshness = ResponseContract.Freshness(status);
         if (status.IsStale) throw new StaleIndexException(status.ChangedFiles);
         return index;
+    }
+
+    if (command == "configure-ai")
+    {
+        if (options.Keys.Any(key => !AiPreferences.IsSelectionOption(key) && key != "--settings") || profile is not null)
+            throw new ArgumentException("configure-ai accepts --provider, --model, --effort, --endpoint and --settings.");
+        var settingsPath = Path.GetFullPath(options.GetValueOrDefault("--settings") ?? AiSettingsStore.DefaultPath);
+        var selected = AiPreferences.Select(options, AiSettingsStore.Load(settingsPath), AiSetup.ReadEnvironment)
+            ?? throw new ArgumentException("configure-ai requires --model and an optional --provider.");
+        using var http = new HttpClient(new HttpClientHandler { AllowAutoRedirect = false }) { Timeout = TimeSpan.FromMinutes(2) };
+        var configured = await AiSetup.Interactive(http).ConfigureAsync(selected, settingsPath, cancellation.Token);
+        var configurationOutput = JsonSerializer.SerializeToNode(new
+        {
+            ai = "enabled", connection = "tested", configured.Provider, configured.Model, configured.Effort,
+            endpoint = configured.Endpoint.AbsoluteUri, settings = settingsPath,
+            credentialEnvironmentVariable = configured.Provider == "ollama" ? null : selected.KeyVariable,
+            message = "Connection passed and options saved. No project source was sent."
+        }, jsonOptions)!.AsObject();
+        ResponseContract.AddEnvelope(configurationOutput, command, true, jsonOptions, null, false);
+        Console.WriteLine(configurationOutput.ToJsonString(jsonOptions));
+        return 0;
     }
 
     object result;
@@ -221,11 +247,13 @@ try
     else if (command == "describe")
     {
         if (!options.TryGetValue("--index", out var descriptionIndex)
-            || options.Keys.Any(key => key is not ("--index" or "--symbol" or "--limit" or "--project")))
-            throw new ArgumentException("describe requires --index; optional --symbol, --limit and --project select the work.");
+            || options.Keys.Any(key => key is not ("--index" or "--symbol" or "--limit" or "--project" or "--settings") && !AiPreferences.IsSelectionOption(key)))
+            throw new ArgumentException("describe requires --index; selection options include --symbol, --limit, --project, --provider, --model, --effort, --endpoint and --settings.");
         var limit = Integer("--limit", int.MaxValue);
         if (limit < 1) throw new ArgumentException("--limit must be a positive integer.");
-        var configuration = AiConfiguration.FromEnvironment();
+        var settingsPath = Path.GetFullPath(options.GetValueOrDefault("--settings") ?? AiSettingsStore.DefaultPath);
+        var preferences = AiPreferences.Select(options, AiSettingsStore.Load(settingsPath), AiSetup.ReadEnvironment);
+        var configuration = preferences?.Configuration(AiSetup.ReadEnvironment);
         var index = await LoadFreshIndexAsync(descriptionIndex);
         var symbols = DocumentationSnapshotQueries.RequireCoverage(index)
             .Where(symbol => symbol.Kind is "method" or "type")
@@ -234,6 +262,11 @@ try
             .OrderBy(symbol => symbol.Id, StringComparer.Ordinal).ToArray();
         if (options.ContainsKey("--symbol") && symbols.Length == 0)
             throw new QueryException("symbol_not_found", "Select an indexed class/type or method ID.");
+        if (options.Keys.Any(AiPreferences.IsSelectionOption))
+        {
+            using var probe = new HttpClient(new HttpClientHandler { AllowAutoRedirect = false }) { Timeout = TimeSpan.FromMinutes(2) };
+            configuration = await AiSetup.Interactive(probe).ConfigureAsync(preferences!, settingsPath, cancellation.Token);
+        }
         var generated = 0;
         var cached = 0;
         var failed = new List<string>();
@@ -278,7 +311,7 @@ try
         result = new { source = "index", index.Solution, index.IndexId,
             ai = configuration is null ? "disabled" : "enabled", generated, cached,
             remaining = symbols.Length - generated - cached, failed = failed.Count, descriptionWarningsFile = failureFile,
-            message = configuration is null ? "AI disabled. Configure CODEATLAS_AI_API_KEY and CODEATLAS_AI_MODEL to generate descriptions."
+            message = configuration is null ? "AI disabled. Run configure-ai --provider <name> --model <name>, or configure legacy CODEATLAS_AI_API_KEY and CODEATLAS_AI_MODEL."
                 : "Descriptions saved locally and searchable with search-symbols --mode assisted.",
             warningCount = index.Warnings.Length, warnings = index.Warnings };
     }

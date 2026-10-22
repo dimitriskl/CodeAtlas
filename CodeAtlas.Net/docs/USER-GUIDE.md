@@ -52,21 +52,54 @@ Stdout contains the JSON outcome. Stderr contains progress and, on failure, erro
 
 ## Search by purpose and read structural facts
 
-To add AI descriptions, set provider credentials locally and run `describe` explicitly:
+Select a provider and model once, then generate descriptions explicitly. For an installed local Ollama model:
 
 ```powershell
-$env:CODEATLAS_AI_API_KEY = '<your API key>'
-# Or reuse a key already available in this terminal:
-# $env:CODEATLAS_AI_API_KEY = $env:OPENAI_API_KEY
-$env:CODEATLAS_AI_MODEL = '<your provider model>'
-# Optional: full chat-completions URL for another compatible provider.
-# $env:CODEATLAS_AI_ENDPOINT = 'https://your-provider.example/v1/chat/completions'
+ollama list
+# Use a model shown by ollama list. qwen3:8b is installed on this development PC.
+dotnet run --project src/CodeAtlas.Cli --no-build -- configure-ai --provider ollama --model qwen3:8b --effort none
 
 dotnet run --project src/CodeAtlas.Cli --no-build -- describe --index $manifest --limit 10
 dotnet run --project src/CodeAtlas.Cli --no-build -- search-symbols --index $manifest --query 'what you need' --kind all
 ```
 
-`describe` sends selected source excerpts to the configured provider and saves generated descriptions locally. The model selects source-evidence IDs; CodeAtlas constructs exact source anchors locally. Those anchors show the supplied context, not proof that the generated interpretation is correct. Without an API key it reports AI disabled and makes no provider calls. Use `--symbol <id>` for one class/type or method, or omit `--limit` to process all missing descriptions. The limit counts successful generations; skipped large or unsupported declarations do not block later work. Repeating the command skips current descriptions, so bounded batches can be resumed. Skips are recorded in the warning file returned in the outcome. A provider failure stops the command; descriptions already saved remain available.
+For a cloud model, use `configure-ai --provider openai --model <model-name>`, adding `--effort low` only when that model supports it. Setup reuses an existing provider key, or prompts for a missing key without echo in an interactive terminal. It sends a fixed connection-test prompt containing no project source. Only a successful test saves the selection and persists the key in a Windows **user** environment variable named `CODEATLAS_AI_<PROVIDER>_API_KEY`. Keys never go into JSON. Noninteractive setup with a missing key returns an error instead of waiting for input. Persistent cloud-key setup requires Windows; environment-configured descriptions also work on other systems.
+
+| Provider | Existing key accepted | Endpoint/model selection |
+| --- | --- | --- |
+| `openai` | `OPENAI_API_KEY` (legacy `CODEATLAS_AI_API_KEY` also works) | OpenAI chat completions; select a model explicitly |
+| `azure` | `AZURE_OPENAI_API_KEY` or `AZUREAI_API_KEY` | `--endpoint https://<resource>.openai.azure.com/openai/v1/chat/completions`; `--model <deployment-name>` |
+| `anthropic` | `ANTHROPIC_API_KEY` | Native Anthropic Messages API; select a Claude model |
+| `kimi` | `MOONSHOT_API_KEY` | Moonshot chat completions; select a Kimi model |
+| `openrouter` | `OPENROUTER_API_KEY` | OpenRouter chat completions; `--model <provider/model>` |
+| `ollama` (`llama` alias) | No key | Local `http://localhost:11434/v1/chat/completions`; model must already be installed |
+
+The default settings file is `.codeatlas/appsettings.json` relative to the current directory. Use `--settings <path>` on setup and describe to select a different file. Existing unrelated JSON sections are preserved. For example:
+
+```json
+{
+  "ai": {
+    "provider": "ollama",
+    "model": "qwen3:8b",
+    "effort": "none",
+    "endpoint": "http://localhost:11434/v1/chat/completions"
+  }
+}
+```
+
+You can change the selection directly on `describe`:
+
+```powershell
+dotnet run --project src/CodeAtlas.Cli --no-build -- describe --index $manifest --provider ollama --model qwen3:8b --effort none --limit 10
+```
+
+Explicit selection overrides run the connection test and save the new selection before generating. Options resolve in this order: CLI, reserved `CODEATLAS_AI_*` environment settings, saved JSON, then provider-specific model/base-URL environment settings as used by agent-investigator. Switching providers discards the previous provider's saved endpoint and effort. Model selection does not regenerate already-current descriptions; those retain their original provider/model provenance.
+
+Omit effort, or use `--effort default` to clear a saved effort and let the provider use its default. OpenAI/Azure/OpenRouter accept the model-supported subset of `none|minimal|low|medium|high|xhigh|max`; Anthropic accepts `low|medium|high|xhigh|max`. Ollama supports `none|low|medium|high`, subject to model capabilities; `none` disables thinking on supported models. Kimi accepts `low|high|max` for effort-aware models; `none` requests disabled thinking for models supporting that switch. Unsupported combinations fail the connection test without replacing the saved selection. No model is downloaded automatically.
+
+Legacy `CODEATLAS_AI_API_KEY`, `CODEATLAS_AI_MODEL` and optional full `CODEATLAS_AI_ENDPOINT` remain supported for OpenAI-compatible descriptions. A key belonging to another application alone does not enable CodeAtlas; configure a selection first. Without a selection/legacy credentials AI stays disabled. Ollama is an explicit selection that works without credentials.
+
+`describe` sends selected source excerpts to the configured provider and saves generated descriptions locally. The model selects source-evidence IDs; CodeAtlas constructs exact source anchors locally. Those anchors show the supplied context, not proof that the generated interpretation is correct. A cloud selection without a key reports AI disabled; Ollama requires no key. Use `--symbol <id>` for one class/type or method, or omit `--limit` to process all missing descriptions. The limit counts successful generations; skipped large or unsupported declarations do not block later work. Repeating the command skips current descriptions, so bounded batches can be resumed. Skips are recorded in the warning file returned in the outcome. A provider failure stops the command; descriptions already saved remain available.
 
 Assisted search includes current saved AI descriptions automatically, including descriptions imported through the local request/response workflow. Results label AI text and its provider/model separately from authored documentation and retain source identities. Search itself never calls a provider and works without credentials. `--mode names` excludes descriptions. Continue search pages with the returned `pagination.snapshotId`; generating or changing descriptions invalidates the old continuation, so restart at offset zero. After a new index generation, regenerate descriptions; old-generation descriptions are excluded. Provider settings are separate from semantic build inputs, so configuring or rotating credentials does not stale the code map. Do not use CodeAtlas's reserved `CODEATLAS_AI_*` settings as application build inputs.
 
@@ -154,7 +187,7 @@ The manifest changes only after artifacts are staged, flushed and checked. Reade
 
 Freshness checks hash tracked inputs and compare the captured environment. `stale` means tracked inputs changed. `unknown` can mean partial input coverage or verification diagnostics; inspect both. When diagnostics are empty, `isStale: false` with partial coverage means tracked inputs match, not that every possible build input or runtime behavior is covered. Verification diagnostics can instead mean inputs could not be checked. Generated-code and multi-target coverage retain their stated limits. Method IDs do not identify a target framework; when several contexts are loaded for one project path, references union their observed bindings. Duplicate extraction omits those ambiguous project contexts explicitly instead of treating one context as authoritative.
 
-Use a consistent environment and launcher between commands. Switching between `dotnet run`, a direct DLL invocation and an installed tool can change the captured environment. Automation hosts may also inject changing per-call variables. If you deliberately establish a stable child-process environment, use it for indexing, refresh and queries; the product still fingerprints the entire environment it actually receives. Never print secret environment values to diagnose a mismatch.
+Use a consistent environment and launcher between commands. Switching between `dotnet run`, a direct DLL invocation and an installed tool can change the captured environment. Automation hosts may also inject changing per-call variables. If you deliberately establish a stable child-process environment, use it for indexing, refresh and queries; the product fingerprints the build environment it receives, excluding reserved `CODEATLAS_AI_*` settings. Never print secret environment values to diagnose a mismatch.
 
 Old and incomplete generations are retained for diagnosis; automatic pruning is not implemented. Disk use grows with index/refresh cycles. See [snapshot reliability and recovery](SNAPSHOT-RELIABILITY.md) before storage maintenance.
 

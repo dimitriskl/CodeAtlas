@@ -47,9 +47,8 @@ internal static class SnapshotEnvironment
             var environment = Raw();
             // Provider settings belong to derived descriptions, not semantic build inputs.
             // Configuring or rotating a credential must not invalidate a code map.
-            environment.Remove("CODEATLAS_AI_API_KEY");
-            environment.Remove("CODEATLAS_AI_MODEL");
-            environment.Remove("CODEATLAS_AI_ENDPOINT");
+            foreach (var name in environment.Keys.Where(name => name.StartsWith("CODEATLAS_AI_", StringComparison.OrdinalIgnoreCase)).ToArray())
+                environment.Remove(name);
             return environment;
         }
     }

@@ -52,6 +52,7 @@ public sealed class DescribeCliTests(ExplanationCliContractFixture fixture)
     public async Task OptionalProviderDescriptionsAreSavedResumedAndSearchableWithoutCredentials()
     {
         // Arrange
+        await IndexStore.SaveAsync(await SolutionAnalysis.CreateIndexAsync(fixture.Solution));
         using var listener = new TcpListener(IPAddress.Loopback, 0);
         listener.Start();
         var endpoint = $"http://127.0.0.1:{((IPEndPoint)listener.LocalEndpoint).Port}/v1/chat/completions";
@@ -88,7 +89,41 @@ public sealed class DescribeCliTests(ExplanationCliContractFixture fixture)
         Assert.DoesNotContain("fixture-api-secret", described.Output, StringComparison.Ordinal);
     }
 
-    private static async Task<string> ServeOneAsync(TcpListener listener, CancellationToken token)
+    [Fact]
+    public async Task ConfigureOllamaTestsAndSavesSelectionThenDescribeUsesItWithoutCredentials()
+    {
+        // Arrange
+        await IndexStore.SaveAsync(await SolutionAnalysis.CreateIndexAsync(fixture.Solution));
+        using var listener = new TcpListener(IPAddress.Loopback, 0);
+        listener.Start();
+        var endpoint = $"http://127.0.0.1:{((IPEndPoint)listener.LocalEndpoint).Port}/v1/chat/completions";
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(45));
+        var settings = Path.Combine(fixture.Root, ".codeatlas", "appsettings.json");
+        var probe = ServeOneAsync(listener, timeout.Token, connectionTest: true);
+
+        // Act
+        var configured = await RunCoreAsync(null, null, ["configure-ai", "--provider", "ollama", "--model", "selected-local-model",
+            "--effort", "none", "--endpoint", endpoint, "--settings", settings]);
+        var probeAuthorization = await probe;
+        var provider = ServeOneAsync(listener, timeout.Token);
+        var described = await RunCoreAsync(null, null, ["describe", "--index", fixture.IndexPath, "--symbol", SymbolId, "--settings", settings]);
+        var descriptionAuthorization = await provider;
+        var stored = await File.ReadAllTextAsync(settings);
+
+        // Assert
+        Assert.True(configured.Exit == 0, configured.Error);
+        Assert.Equal("tested", configured.Json["connection"]!.GetValue<string>());
+        Assert.Equal("selected-local-model", configured.Json["model"]!.GetValue<string>());
+        Assert.Equal("none", configured.Json["effort"]!.GetValue<string>());
+        Assert.True(described.Exit == 0, described.Error);
+        Assert.Equal(1, described.Json["generated"]!.GetValue<int>());
+        Assert.Equal("", probeAuthorization);
+        Assert.Equal("", descriptionAuthorization);
+        Assert.Contains("selected-local-model", stored);
+        Assert.DoesNotContain("apiKey", stored, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static async Task<string> ServeOneAsync(TcpListener listener, CancellationToken token, bool connectionTest = false)
     {
         using var connection = await listener.AcceptTcpClientAsync(token);
         await using var stream = connection.GetStream();
@@ -108,14 +143,19 @@ public sealed class DescribeCliTests(ExplanationCliContractFixture fixture)
         var payload = new byte[length];
         await stream.ReadExactlyAsync(payload, token);
         using var request = JsonDocument.Parse(payload);
-        using var evidence = JsonDocument.Parse(request.RootElement.GetProperty("messages")[1].GetProperty("content").GetString()!);
-        var excerpt = evidence.RootElement.GetProperty("evidence").EnumerateArray().First(item => item.GetProperty("role").GetString() == "selected-declaration");
-        var content = JsonSerializer.Serialize(new
+        string content;
+        if (connectionTest) content = "{\"ok\":true}";
+        else
         {
-            claims = new[] { new { text = "Scales an integer arithmetically by a factor of two.",
-                evidenceIds = new[] { excerpt.GetProperty("id").GetString() } } },
-            limitations = Array.Empty<string>()
-        });
+            using var evidence = JsonDocument.Parse(request.RootElement.GetProperty("messages")[1].GetProperty("content").GetString()!);
+            var excerpt = evidence.RootElement.GetProperty("evidence").EnumerateArray().First(item => item.GetProperty("role").GetString() == "selected-declaration");
+            content = JsonSerializer.Serialize(new
+            {
+                claims = new[] { new { text = "Scales an integer arithmetically by a factor of two.",
+                    evidenceIds = new[] { excerpt.GetProperty("id").GetString() } } },
+                limitations = Array.Empty<string>()
+            });
+        }
         var body = JsonSerializer.SerializeToUtf8Bytes(new
         {
             model = "fixture-model", choices = new[] { new { finish_reason = "stop", message = new { content } } }
@@ -124,22 +164,33 @@ public sealed class DescribeCliTests(ExplanationCliContractFixture fixture)
         await stream.WriteAsync(responseHeaders, token);
         await stream.WriteAsync(body, token);
         await stream.FlushAsync(token);
-        return lines.Single(line => line.StartsWith("Authorization:", StringComparison.OrdinalIgnoreCase)).Split(':', 2)[1].Trim();
+        return lines.SingleOrDefault(line => line.StartsWith("Authorization:", StringComparison.OrdinalIgnoreCase))?.Split(':', 2)[1].Trim() ?? "";
     }
 
-    private static async Task<Result> RunAsync(string? key, string endpoint, params string[] arguments)
+    private static Task<Result> RunAsync(string? key, string endpoint, params string[] arguments) => RunCoreAsync(key, endpoint, arguments);
+
+    private static async Task<Result> RunCoreAsync(string? key, string? endpoint, string[] arguments)
     {
         var repository = new DirectoryInfo(AppContext.BaseDirectory);
         while (repository is not null && !File.Exists(Path.Combine(repository.FullName, "CodeAtlas.slnx"))) repository = repository.Parent;
         var configuration = new DirectoryInfo(AppContext.BaseDirectory).Parent!.Name;
         var cli = Path.Combine(repository!.FullName, "src", "CodeAtlas.Cli", "bin", configuration, "net10.0", "codeatlas.dll");
         var start = new ProcessStartInfo("dotnet") { RedirectStandardOutput = true, RedirectStandardError = true, CreateNoWindow = true };
-        start.Environment.Remove("CODEATLAS_AI_API_KEY");
+        foreach (var name in start.Environment.Keys.Where(name => name.StartsWith("CODEATLAS_AI_", StringComparison.OrdinalIgnoreCase)).ToArray())
+            start.Environment.Remove(name);
         if (key is not null) start.Environment["CODEATLAS_AI_API_KEY"] = key;
-        start.Environment["CODEATLAS_AI_MODEL"] = "fixture-model";
-        start.Environment["CODEATLAS_AI_ENDPOINT"] = endpoint;
+        if (endpoint is not null)
+        {
+            start.Environment["CODEATLAS_AI_MODEL"] = "fixture-model";
+            start.Environment["CODEATLAS_AI_ENDPOINT"] = endpoint;
+        }
         start.ArgumentList.Add(cli);
         foreach (var argument in arguments) start.ArgumentList.Add(argument);
+        if (arguments[0] == "describe" && !arguments.Contains("--settings"))
+        {
+            start.ArgumentList.Add("--settings");
+            start.ArgumentList.Add(Path.Combine(Path.GetTempPath(), "codeatlas-unconfigured-" + Guid.NewGuid().ToString("N") + ".json"));
+        }
         using var process = Process.Start(start)!;
         var stdout = process.StandardOutput.ReadToEndAsync();
         var stderr = process.StandardError.ReadToEndAsync();

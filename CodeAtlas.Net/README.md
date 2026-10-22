@@ -1,12 +1,12 @@
 # CodeAtlas .NET
 
-Version: **0.00.27**
+Version: **0.00.28**
 
 See [version history](docs/VERSION.md) for what is implemented and the versioning rules. `Version.props` is the build's version source. Run `dotnet run --project src/CodeAtlas.Cli --no-build -- --version` to check the built CLI.
 
 CodeAtlas is a C# semantic-analysis library and CLI built with Roslyn. The CLI calls our library directly; there is no MCP layer.
 
-Current focus: map code, optionally generate descriptions for classes/types and methods, and search those descriptions. Set `CODEATLAS_AI_API_KEY` and `CODEATLAS_AI_MODEL`, then run `describe --index <manifest>`. Without credentials AI is disabled. `search-symbols --index <manifest> --query "what you need" --kind all` includes saved descriptions without calling a provider. See the [user guide](docs/USER-GUIDE.md#search-by-purpose-and-read-structural-facts) for configuration and batching.
+Current focus: map code, optionally generate class/type and method descriptions, and search those saved descriptions. Run `configure-ai --provider ollama --model qwen3:8b --effort none` for a locally installed Ollama model, or select a cloud provider and model. Setup tests the connection, requests a missing cloud key without echo, saves keys in Windows user environment variables and keeps non-secret options in `.codeatlas/appsettings.json`. Then run `describe --index <manifest>`. Assisted search uses saved descriptions without provider calls. See the [user guide](docs/USER-GUIDE.md#search-by-purpose-and-read-structural-facts) for providers, model/effort overrides and batching.
 
 CodeAtlas scans all C# projects in a solution, saves a structured index and a readable overview, and answers method/reference queries from that index. Refresh can reuse references after verified method-body edits and safely rebuilds when reuse cannot be established. Bounded caller traversal and duplicate candidates are available with explicit static-analysis limits. Angular/TypeScript analysis remains outside the initial C# scope.
 
