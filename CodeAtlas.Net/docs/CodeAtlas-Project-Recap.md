@@ -1,6 +1,6 @@
 # CodeAtlas — Project Recap
 
-Version: **0.00.28**
+Version: **0.00.29**
 
 See [VERSION.md](VERSION.md) for implementation history and versioning rules.
 

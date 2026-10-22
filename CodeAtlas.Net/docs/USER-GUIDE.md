@@ -1,5 +1,7 @@
 # Using CodeAtlas
 
+For the step-by-step setup, eConnector walkthrough, model selection and everyday description/search workflow, start with [end-user usage](USAGE.md). This page is the detailed command reference.
+
 CodeAtlas creates a local semantic index of a trusted C# solution. Use it to find methods, distinguish overloads, inspect static references and navigate to source. Coding agents use the same CLI; no MCP setup is needed.
 
 This guide covers the current development CLI. Installable packages and the remaining discovery features are being qualified through the [roadmap](ROADMAP.md). See the [README](../README.md) for source-build prerequisites and the current version.
@@ -11,11 +13,13 @@ There is no production release yet. Use the [README source-build commands](../RE
 For an available downloaded package, put it in a local package folder and install to a tool directory:
 
 ```powershell
-# Replace the example version with the normalized version of your package.
-dotnet tool install CodeAtlas.Tool --tool-path C:\Tools\CodeAtlas --add-source C:\Downloads\CodeAtlas --version <package-version>
+# Replace these values with the normalized versions of your downloaded packages.
+$packageVersion = 'replace-with-package-version'
+dotnet tool install CodeAtlas.Tool --tool-path C:\Tools\CodeAtlas --add-source C:\Downloads\CodeAtlas --version $packageVersion
 C:\Tools\CodeAtlas\codeatlas.exe --version
 # Upgrade an existing installation using the same folder and explicit version:
-dotnet tool update CodeAtlas.Tool --tool-path C:\Tools\CodeAtlas --add-source C:\Downloads\CodeAtlas --version <new-package-version>
+$newPackageVersion = 'replace-with-new-package-version'
+dotnet tool update CodeAtlas.Tool --tool-path C:\Tools\CodeAtlas --add-source C:\Downloads\CodeAtlas --version $newPackageVersion
 ```
 
 Product `x.xx.xx` versions normalize to `x.x.x` in NuGet package names. The installed command prints the padded product version. Keep an SDK compatible with the target solution installed; the framework-dependent tool does not bundle an SDK. Run `dotnet --list-sdks` and check the target's `global.json`. Installing a runtime alone is insufficient for semantic solution loading. The current source checkout pins SDK 10.0.402. Supported clean-host/platform qualification is recorded in [PACKAGING.md](PACKAGING.md); do not infer it from a package build.
@@ -221,6 +225,6 @@ An instruction you can reuse:
 
 Exit codes: 0 for a successful operation, including empty results or a stale-status report; 1 for analysis/index failure; 2 for invalid arguments; 3 for a stale saved query or snapshot mismatch; 130 for cancellation. Consult the [query contract](QUERY-CONTRACT.md) for exact response and error fields.
 
-CodeAtlas's current analysis is local and does not automatically upload source or call an AI provider. Restore, repository tasks and your external coding agent have their own behavior. Artifacts and logs contain paths, symbol information, relationships, diagnostics and fingerprints; treat them as repository-sensitive data. Git-ignore does not control backups, copying or agent uploads. Environment values are represented by a digest, not stored as raw values.
+Indexing, refresh and search run locally without AI provider calls. Explicit AI setup sends a fixed connection-test prompt; `describe` sends selected source evidence to the configured provider. With the default local Ollama endpoint that stays on the local machine; a cloud provider receives those excerpts. Restore, repository tasks and your external coding agent have their own behavior. Artifacts and logs contain paths, symbol information, relationships, diagnostics and fingerprints; treat them as repository-sensitive data. Git-ignore does not control backups, copying or agent uploads. Environment values are represented by a digest, not stored as raw values.
 
 The current method-query surface covers ordinary and explicit-interface C# source methods in loaded projects. Constructors, accessors, local functions and metadata-only methods are excluded. The index also contains a source type inventory. Purpose search, authored documentation, static facts, duplicate candidates and bounded callers have their own coverage and qualification reports. Optional explanations are derived interpretations with separately checked context freshness. Consult the linked validation reports for measured performance and platform boundaries; historical measurements are not latency guarantees.
