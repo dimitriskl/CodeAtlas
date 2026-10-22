@@ -4,7 +4,7 @@ This report distinguishes completed measurements from remaining release gates. I
 
 ## Rebuilt application snapshot
 
-CodeAtlas 0.00.23 indexed eConnector on Windows with SDK 10.0.402 and two reference workers. The restored target source was unchanged. Generation `a67d6b67540448aaaeed1f842fb879bf` contains 30 projects, 3,943 types and 16,979 methods, with 56 warnings in its warning report. Input coverage remains partial/unknown with 62 issues; tracked inputs match and verification diagnostics are empty. This is not complete coverage of arbitrary MSBuild tasks, generators, runtime dispatch or external state.
+CodeAtlas 0.00.23 indexed `<project_name>` on Windows with SDK 10.0.402 and two reference workers. The restored target source was unchanged. Generation `a67d6b67540448aaaeed1f842fb879bf` contains 30 projects, 3,943 types and 16,979 methods, with 56 warnings in its warning report. Input coverage remains partial/unknown with 62 issues; tracked inputs match and verification diagnostics are empty. This is not complete coverage of arbitrary MSBuild tasks, generators, runtime dispatch or external state.
 
 | Measurement | Result |
 | --- | --- |

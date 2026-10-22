@@ -1,14 +1,14 @@
 # Using CodeAtlas
 
-For the step-by-step setup, eConnector walkthrough, model selection and everyday description/search workflow, start with [end-user usage](USAGE.md). This page is the detailed command reference.
+For a quick command list, output locations and the description/search workflow, start with the [quick guide](USAGE.md). This page is the detailed command reference.
 
 CodeAtlas creates a local semantic index of a trusted C# solution. Use it to find methods, distinguish overloads, inspect static references and navigate to source. Coding agents use the same CLI; no MCP setup is needed.
 
-This guide covers the current development CLI. Installable packages and the remaining discovery features are being qualified through the [roadmap](ROADMAP.md). See the [README](../README.md) for source-build prerequisites and the current version.
+This guide covers installation, command options and troubleshooting. See the [README](../README.md) for source-build prerequisites and version information.
 
 ## Install or build
 
-There is no production release yet. Use the [README source-build commands](../README.md#build-and-test), or an explicitly identified local qualification package. The intended public distribution is a GitHub Release containing `CodeAtlas.Tool.<version>.nupkg`; NuGet.org is not the selected feed.
+Build from source using the [README commands](../README.md#build-and-test), or install a downloaded `CodeAtlas.Tool.<version>.nupkg` package as shown below.
 
 For an available downloaded package, put it in a local package folder and install to a tool directory:
 
@@ -22,7 +22,7 @@ $newPackageVersion = 'replace-with-new-package-version'
 dotnet tool update CodeAtlas.Tool --tool-path C:\Tools\CodeAtlas --add-source C:\Downloads\CodeAtlas --version $newPackageVersion
 ```
 
-Product `x.xx.xx` versions normalize to `x.x.x` in NuGet package names. The installed command prints the padded product version. Keep an SDK compatible with the target solution installed; the framework-dependent tool does not bundle an SDK. Run `dotnet --list-sdks` and check the target's `global.json`. Installing a runtime alone is insufficient for semantic solution loading. The current source checkout pins SDK 10.0.402. Supported clean-host/platform qualification is recorded in [PACKAGING.md](PACKAGING.md); do not infer it from a package build.
+Product `x.xx.xx` versions normalize to `x.x.x` in NuGet package names. The installed command prints the padded product version. Keep an SDK compatible with the target solution installed; the framework-dependent tool does not bundle an SDK. Run `dotnet --list-sdks` and check the target's `global.json`. Installing a runtime alone is insufficient for semantic solution loading. The current source checkout pins SDK 10.0.402. See [package instructions](PACKAGING.md) for installation and updates.
 
 In the commands below, replace `dotnet run --project src/CodeAtlas.Cli --no-build --` with the installed executable when using the package. Keep that launcher consistent between indexing and queries. After upgrading CodeAtlas, regenerate the index before relying on newly added catalogs or contracts. Old inline indexes remain explicitly unverified; rebuilding creates the current verified generation.
 
@@ -31,7 +31,7 @@ In the commands below, replace `dotnet run --project src/CodeAtlas.Cli --no-buil
 Run these PowerShell commands from the CodeAtlas.Net source checkout after building CodeAtlas. Keep the same launcher and explicit environment throughout the workflow.
 
 ```powershell
-$solution = 'C:\LocalCode\eConnectorV2Git\eConnectorV2.sln'
+$solution = 'C:\Projects\<project_name>\<project_name>.sln'
 dotnet restore $solution
 if ($LASTEXITCODE -ne 0) { throw 'Restore failed. Resolve the target prerequisites first.' }
 
@@ -60,7 +60,7 @@ Select a provider and model once, then generate descriptions explicitly. For an 
 
 ```powershell
 ollama list
-# Use a model shown by ollama list. qwen3:8b is installed on this development PC.
+# Use an installed model shown by ollama list; qwen3:8b is an example.
 dotnet run --project src/CodeAtlas.Cli --no-build -- configure-ai --provider ollama --model qwen3:8b --effort none
 
 dotnet run --project src/CodeAtlas.Cli --no-build -- describe --index $manifest --limit 10
@@ -97,7 +97,7 @@ You can change the selection directly on `describe`:
 dotnet run --project src/CodeAtlas.Cli --no-build -- describe --index $manifest --provider ollama --model qwen3:8b --effort none --limit 10
 ```
 
-Explicit selection overrides run the connection test and save the new selection before generating. Options resolve in this order: CLI, reserved `CODEATLAS_AI_*` environment settings, saved JSON, then provider-specific model/base-URL environment settings as used by agent-investigator. Switching providers discards the previous provider's saved endpoint and effort. Model selection does not regenerate already-current descriptions; those retain their original provider/model provenance.
+Explicit selection overrides run the connection test and save the new selection before generating. Options resolve in this order: CLI, reserved `CODEATLAS_AI_*` environment settings, saved JSON, then provider-specific model/base-URL environment settings. Switching providers discards the previous provider's saved endpoint and effort. Model selection does not regenerate already-current descriptions; those retain their original provider/model provenance.
 
 Omit effort, or use `--effort default` to clear a saved effort and let the provider use its default. OpenAI/Azure/OpenRouter accept the model-supported subset of `none|minimal|low|medium|high|xhigh|max`; Anthropic accepts `low|medium|high|xhigh|max`. Ollama supports `none|low|medium|high`, subject to model capabilities; `none` disables thinking on supported models. Kimi accepts `low|high|max` for effort-aware models; `none` requests disabled thinking for models supporting that switch. Unsupported combinations fail the connection test without replacing the saved selection. No model is downloaded automatically.
 
@@ -193,7 +193,7 @@ Freshness checks hash tracked inputs and compare the captured environment. `stal
 
 Use a consistent environment and launcher between commands. Switching between `dotnet run`, a direct DLL invocation and an installed tool can change the captured environment. Automation hosts may also inject changing per-call variables. If you deliberately establish a stable child-process environment, use it for indexing, refresh and queries; the product fingerprints the build environment it receives, excluding reserved `CODEATLAS_AI_*` settings. Never print secret environment values to diagnose a mismatch.
 
-Old and incomplete generations are retained for diagnosis; automatic pruning is not implemented. Disk use grows with index/refresh cycles. See [snapshot reliability and recovery](SNAPSHOT-RELIABILITY.md) before storage maintenance.
+Old and incomplete generations are retained for diagnosis. Disk use grows with index/refresh cycles. See [snapshot reliability and recovery](SNAPSHOT-RELIABILITY.md) before storage maintenance.
 
 ## Use with a coding agent
 

@@ -14,7 +14,7 @@ The initial production scope is supported C# solutions in trusted local reposito
 
 - Implemented through 0.00.07: solution loading, overload-aware method discovery, invocation/reference classification, persistent index and overview, freshness checks, full rebuilds, warning files, progress, and stage timings.
 - Windows validation recorded 29 passing .NET tests and 6 passing Python versioning tests. See [WINDOWS-VALIDATION.md](WINDOWS-VALIDATION.md) for commands, evidence, and limitations; these historical results do not certify future changes.
-- eConnector validation covered 30 projects, 3,943 types, 16,979 methods, and 232,687 stored reference entries in an approximately 140 MB index. Five selected methods and 27 references were checked against source.
+- `<project_name>` validation covered 30 projects, 3,943 types, 16,979 methods, and 232,687 stored reference entries in an approximately 140 MB index. Five selected methods and 27 references were checked against source.
 - The user's subsequent 0.00.07 run reported 841.418 seconds total and 785.076 seconds collecting references (93.3%). This is a user-reported observation, not a controlled benchmark. Earlier measured runs and query latency are recorded in the validation report.
 - Full reference equivalence between runs is unresolved. A reference-array hash differed; linked-file references can tie under the current ordering. Retain full comparison data before changing the algorithm.
 - Descriptions, purpose search, incremental updates, duplicate detection, caller/impact traversal, and installable CLI packaging are not implemented by this roadmap change.
@@ -23,7 +23,7 @@ The initial production scope is supported C# solutions in trusted local reposito
 
 ### 1. Establish a complete correctness baseline
 
-Status: completed in 0.00.09. [Acceptance evidence](CORRECTNESS-BASELINE.md) includes semantic regressions, comparator validation, and complete eConnector equivalence; the unavailable historical 0.00.06 snapshot is explicitly distinguished from the retained comparison.
+Status: completed in 0.00.09. [Acceptance evidence](CORRECTNESS-BASELINE.md) includes semantic regressions, comparator validation, and complete `<project_name>` equivalence; the unavailable historical 0.00.06 snapshot is explicitly distinguished from the retained comparison.
 
 Make reference ordering deterministic, including project identity and reference kind as tie breakers. Preserve a complete baseline and compare normalized reference sets rather than only whole-file hashes. Separate stable analysis contents from run metadata such as timestamps and index IDs.
 
@@ -33,15 +33,15 @@ Acceptance: repeated analysis of unchanged inputs yields identical normalized re
 
 ### 2. Reduce reference-indexing time
 
-Status: completed in 0.00.10. [Performance evidence](REFERENCE-PERFORMANCE.md) records complete baseline equality, repeated large/small runs, 22.5% lower median eConnector reference time, and memory within the predeclared budget.
+Status: completed in 0.00.10. [Performance evidence](REFERENCE-PERFORMANCE.md) records complete baseline equality, repeated large/small runs, 22.5% lower median `<project_name>` reference time, and memory within the predeclared budget.
 
-Measure repeated Roslyn searches, symbol resolution, and reusable work. Evaluate batching or bounded concurrency only where supported and beneficial. Preserve related-definition identity and invocation classification. Record wall time, memory, machine conditions, and multiple runs on eConnector and a smaller solution.
+Measure repeated Roslyn searches, symbol resolution, and reusable work. Evaluate batching or bounded concurrency only where supported and beneficial. Preserve related-definition identity and invocation classification. Record wall time, memory, machine conditions, and multiple runs on `<project_name>` and a smaller solution.
 
 Acceptance: the optimized implementation matches milestone 1's complete baseline and demonstrates repeatable improvement without unacceptable memory growth. Agree measurable performance budgets from the baseline before accepting an implementation; no speedup is promised by this plan.
 
 ### 3. Make queries efficient and predictable for agents
 
-Status: completed in 0.00.11 with 72 .NET and 20 Python tests passing after the version increment, matching CLI version, and a fresh regenerated CodeAtlas index. [Query contract](QUERY-CONTRACT.md) and [performance evidence](QUERY-PERFORMANCE.md) cover bounded filters, snapshot-aware pagination, response versioning, complete-record benchmark comparisons, and the decision to retain JSON after profiling. Warmed eConnector query medians are 1.463–1.498 seconds; the first cold observation of 22.933 seconds remains an explicit limitation.
+Status: completed in 0.00.11 with 72 .NET and 20 Python tests passing after the version increment, matching CLI version, and a fresh regenerated CodeAtlas index. [Query contract](QUERY-CONTRACT.md) and [performance evidence](QUERY-PERFORMANCE.md) cover bounded filters, snapshot-aware pagination, response versioning, complete-record benchmark comparisons, and the decision to retain JSON after profiling. Warmed `<project_name>` query medians are 1.463–1.498 seconds; the first cold observation of 22.933 seconds remains an explicit limitation.
 
 Measure process startup, JSON loading, freshness hashing, and lookup independently. Add project/type filters, bounded results, pagination with explicit truncation information, and a versioned JSON response contract. Keep stable error codes and clear freshness/coverage metadata. Choose storage changes only after profiling; SQLite or another format is an option, not a predetermined requirement.
 
@@ -59,15 +59,15 @@ Acceptance: failures leave a usable previous snapshot or a clear recovery path; 
 
 ### 5. Introduce safe incremental refresh
 
-Status: completed in 0.00.13. [Refresh evidence](INCREMENTAL-REFRESH.md) records fixture equality, three eConnector body-edit pairs inside the predeclared time and memory budgets, and the still-open milestone 4 freshness maximum.
+Status: completed in 0.00.13. [Refresh evidence](INCREMENTAL-REFRESH.md) records fixture equality, three `<project_name>` body-edit pairs inside the predeclared time and memory budgets, and the still-open milestone 4 freshness maximum.
 
 Track dependencies so changes invalidate all affected analysis, including references in unchanged files. Cover body/signature changes, additions, deletions, renames, project references, and configuration changes. Fall back to a full rebuild when the affected scope cannot be established safely.
 
-Acceptance: after each supported edit scenario, incremental results equal a clean full rebuild. Repeated edit/query cycles on eConnector meet an agreed refresh budget, and interrupted refresh preserves snapshot guarantees. A file-only update that misses dependent references is not sufficient.
+Acceptance: after each supported edit scenario, incremental results equal a clean full rebuild. Repeated edit/query cycles on `<project_name>` meet an agreed refresh budget, and interrupted refresh preserves snapshot guarantees. A file-only update that misses dependent references is not sufficient.
 
 ### 6. Add symbol descriptions from existing documentation
 
-Status: completed in 0.00.14. [Documentation evidence](SYMBOL-DOCUMENTATION.md) records catalog tests, a 1.419-second eConnector extraction, and unchanged method/reference analysis.
+Status: completed in 0.00.14. [Documentation evidence](SYMBOL-DOCUMENTATION.md) records catalog tests, a 1.419-second `<project_name>` extraction, and unchanged method/reference analysis.
 
 Extend stable identity and query coverage to classes/types, properties, and fields alongside methods. Extract existing XML documentation, including summaries, parameters, returns, and remarks where available. Define how inherited documentation is resolved and mark unresolved documentation explicitly. Associate developer comments only when their ownership can be established; preserve origin and source locations.
 
@@ -81,7 +81,7 @@ Status: the first new eleven-case v3 measurement failed both ambiguous checks de
 
 Expose supported Roslyn-derived facts such as implemented interfaces and resolved dependencies, with locations and coverage boundaries. Add text search across names, signatures, and documentation, followed by ranked purpose-oriented retrieval where evaluation justifies it. Return why a result matched and evidence that lets an agent inspect the source.
 
-Build a human-checked set of real eConnector questions and expected relevant symbols, including ambiguous questions and cases with no good match. Compare names-only retrieval with documentation/fact-assisted retrieval. Reserve held-out questions for evaluating changes.
+Build a human-checked set of real `<project_name>` questions and expected relevant symbols, including ambiguous questions and cases with no good match. Compare names-only retrieval with documentation/fact-assisted retrieval. Reserve held-out questions for evaluating changes.
 
 Acceptance: measured retrieval improves on the baseline for agreed cases without hiding irrelevant matches or coverage gaps. Describe structural facts precisely: a resolved call is evidence of a relationship, not proof of a business purpose or runtime effect. Normal indexing and factual queries remain usable without an AI provider.
 
@@ -140,6 +140,6 @@ An agent should follow purpose → candidate symbols → source and references �
 
 ## Delivery discipline and immediate next step
 
-For each completed change, record the relevant acceptance evidence here or in a linked validation report, run the required checks, and increment the version once with `scripts/bump-version.py`. Regenerate CodeAtlas's own index after the versioned change. Run target-solution benchmarks when the change affects analysis/performance; routine roadmap edits do not require repeating the long eConnector run.
+For each completed change, record the relevant acceptance evidence here or in a linked validation report, run the required checks, and increment the version once with `scripts/bump-version.py`. Regenerate CodeAtlas's own index after the versioned change. Run target-solution benchmarks when the change affects analysis/performance; routine roadmap edits do not require repeating the long `<project_name>` run.
 
 Immediate next step: finish the 0.00.23 audit-repair qualification. The user accepted eleven fresh source-backed retrieval cases on 21 October; measure them only after freezing the candidate. The original twelve questions are now development data. The replacement duplicate detector, bounded explanation workflow and caller fixes have focused regression evidence; their separate quality, resource and package gates remain recorded in [REPAIR-VALIDATION.md](REPAIR-VALIDATION.md). Version 1 is not published. Semantic descriptions and discovery are accepted roadmap scope; AI-generated explanations, duplicate detection, and graph traversal have their own acceptance gates and do not delay the initial core production gate.

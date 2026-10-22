@@ -7,7 +7,7 @@ Milestone 5 is accepted in 0.00.13. The measurements below are the acceptance ev
 After editing a trusted solution, run:
 
 ```powershell
-dotnet run --project src/CodeAtlas.Cli --no-build -- refresh --solution 'C:\LocalCode\eConnectorV2Git\eConnectorV2.sln'
+dotnet run --project src/CodeAtlas.Cli --no-build -- refresh --solution 'C:\Projects\<project_name>\<project_name>.sln'
 ```
 
 Use the returned `index` manifest for saved queries. `refresh` accepts the same `--reference-workers 1..8` option as `index`; the default is two. `index` always performs full reference analysis. Both commands load and validate the current solution and publish one complete new immutable generation. They report warnings in its warning file and progress on stderr, with one final JSON result on stdout.
@@ -36,7 +36,7 @@ Focused fixtures compare complete project, type, method and ordered reference co
 
 The Debug build of this version passed **169 .NET tests** and **21 Python tests**. `dotnet test` is limited to two parallel test threads (`xUnit.MaxParallelThreads=2` in the README). An unlimited run stopped making progress after 117 passes and was aborted by the hang collector; the capped run is the accepted result. The built CLI reports `0.00.13`.
 
-The eConnector application source was not edited. Git status before and after the runs showed only the authorized untracked `.codeatlas/` directory. Large cycles use the virtual overlay on `SyncJobSqlSessionLease.cs`, replacing the single statement `command.CommandTimeout = 0;` with `command.CommandTimeout = 0 + 0;`. That edit is inside one ordinary method body. It does not add or remove call sites, so the canonical project/type/method/reference payload stays the milestone 4 hash `f45cbd5e318898a06b70363b4d07fd117c7c1606241571679f9d9edd040d15fd`. Each incremental result was compared with its paired full analysis of the same overlay and was equivalent.
+The `<project_name>` application source was not edited. Git status before and after the runs showed only the authorized untracked `.codeatlas/` directory. Large cycles use the virtual overlay on `SyncJobSqlSessionLease.cs`, replacing the single statement `command.CommandTimeout = 0;` with `command.CommandTimeout = 0 + 0;`. That edit is inside one ordinary method body. It does not add or remove call sites, so the canonical project/type/method/reference payload stays the milestone 4 hash `f45cbd5e318898a06b70363b4d07fd117c7c1606241571679f9d9edd040d15fd`. Each incremental result was compared with its paired full analysis of the same overlay and was equivalent.
 
 | Run | Mode | Elapsed seconds | Reference seconds | Peak working set |
 | --- | --- | --- | --- | --- |
@@ -51,9 +51,9 @@ Each refresh changed one document context out of 2,461, reused 232,515 reference
 
 The same binaries ran three small-fixture pairs that add a second `Calculate(1)` call. Each incremental result matched its paired full analysis. Elapsed times stayed within 0.3 seconds of the paired full run (about 5.1–5.3 seconds), so the small-fixture regression rule (both 10% and one second) is not tripped. Core assembly SHA-256 for every accepted run is `6984F374338B5A070FB03F0B543B70355CA7A2B4ED1A975D86F035DAC4A7A5C5`.
 
-These runs measure fresh-process loading, reuse, search, and the isolated artifact transaction. They do not measure publication into the real eConnector `.codeatlas` directory. Overlay equality is not a claim about physically edited MSBuild or generator behavior. Milestone 4's failed large freshness maximum remains open.
+These runs measure fresh-process loading, reuse, search, and the isolated artifact transaction. They do not measure publication into the real `<project_name>` `.codeatlas` directory. Overlay equality is not a claim about physically edited MSBuild or generator behavior. Milestone 4's failed large freshness maximum remains open.
 
-The real eConnector application source must remain unchanged. Large edit cycles therefore use explicitly virtual in-memory Roslyn overlays, applied to every linked context, with fresh-process full and incremental analysis of the same edited snapshot. Virtual results are rejected by ordinary index loading/publication and are retained only in isolated benchmark artifacts. Physical copied fixtures prove the production CLI's disk freshness and publication behavior. Overlay equality is not proof of physically edited eConnector MSBuild/generator behavior.
+The real `<project_name>` application source must remain unchanged. Large edit cycles therefore use explicitly virtual in-memory Roslyn overlays, applied to every linked context, with fresh-process full and incremental analysis of the same edited snapshot. Virtual results are rejected by ordinary index loading/publication and are retained only in isolated benchmark artifacts. Physical copied fixtures prove the production CLI's disk freshness and publication behavior. Overlay equality is not proof of physically edited `<project_name>` MSBuild/generator behavior.
 
 Budgets were accepted before measurement: at least three paired representative body-edit cycles; median reference collection <=245.4005 seconds; median total refresh <=300 seconds and <=60% of paired full time; each refresh <=400 seconds; maximum main-process working set <=3,681,945,600 bytes, excluding MSBuild children. Small-fixture incremental refresh is compared with paired same-version full rebuilding; regression is material only when it exceeds both 10% and one second. All runs, fallbacks and failures must be retained. Measurements include fresh-process loading/compilation, reuse/search and the isolated artifact transaction; any difference from real target publication must be stated.
 

@@ -16,12 +16,6 @@ Setup can reuse `OPENAI_API_KEY` and other provider-specific environment keys al
 
 ## Request, respond, import
 
-Provider selection in 0.00.28 passed 456 .NET tests and 39 Python tests on Windows. Live fixed-prompt connection tests passed for OpenAI using an existing environment key and for the installed Ollama `qwen3:8b` model with effort `none`. The OpenAI key was persisted at Windows user scope and verified absent from JSON settings. Tests cover the other provider protocols, key separation, failed-connection preservation and settings-backed CLI generation; Azure, Anthropic, Kimi and OpenRouter have no live validation in this change.
-
-Version 0.00.27 passed all 429 .NET tests and 39 Python tests on Windows: 116 description-focused tests and 313 remaining tests. An initial stalled test run was stopped; the diagnostic rerun and remaining suite passed. A local test provider exercised the actual CLI path: no-key disablement, generation, validated storage, resumed batches and later search without credentials. Focused regressions cover class/method discovery, stale/corrupt cache exclusion, citation validation, Unicode anchor boundaries and description-aware pagination.
-
-One approved live OpenAI call using an existing environment key reached response validation, but its evidence ID or source quote was invalid; nothing was accepted or saved. The automatic adapter now requests evidence IDs and constructs anchors locally. A subsequently approved retry generated and saved one class description in 6.679 seconds; assisted search matched its generated wording while names-only search returned no result, with CodeAtlas AI settings removed during both searches. This one-class test verifies the connection/storage/retrieval path, not general generated accuracy. These checks do not measure generated-description accuracy on eConnector.
-
 Use a fresh verified manifest and copy the symbol ID from `find-symbol`. With the source checkout launcher:
 
 ```powershell

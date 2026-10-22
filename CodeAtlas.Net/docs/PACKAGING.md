@@ -1,19 +1,38 @@
-# Installable CLI
+# Install and update the CLI
 
-[Current qualification](QUALIFICATION-2026-10.md) records the 21 October hosted Windows pass and Linux interruption-test failure. Clean-host installation and final release remain unqualified; historical local evidence below is kept separately.
+CodeAtlas is packaged as the .NET tool `CodeAtlas.Tool`, with command `codeatlas`. The package is framework-dependent and includes the Roslyn build-host payload and dependency notices. Keep a .NET SDK compatible with the target solution installed; a runtime alone is insufficient for solution loading.
 
-Milestone 8 packages the CLI as the .NET tool `CodeAtlas.Tool`, command `codeatlas`. The package is framework-dependent, not self-contained, not trimmed, and not published to NuGet.org. The selected download location remains a GitHub Release on `dimitriskl/CodeAtlas`. This machine produced a local package and installed it from that folder. A clean machine and Linux have not been qualified.
+## Install a downloaded package
 
-NuGet normalizes the padded version: `0.00.16` becomes package version `0.0.16`. The installed command still prints the padded version from `Version.props`.
+Put the downloaded `.nupkg` in a local folder. Replace the version below with the package version:
+
+```powershell
+$packageVersion = '<package_version>'
+dotnet tool install CodeAtlas.Tool --tool-path C:/Tools/CodeAtlas --add-source C:/Downloads/CodeAtlas --version $packageVersion
+C:/Tools/CodeAtlas/codeatlas.exe --help
+C:/Tools/CodeAtlas/codeatlas.exe --version
+```
+
+Use the full executable path, or add the tool directory to `PATH` to run `codeatlas` directly.
+
+## Update
+
+```powershell
+$packageVersion = '<package_version>'
+dotnet tool update CodeAtlas.Tool --tool-path C:/Tools/CodeAtlas --add-source C:/Downloads/CodeAtlas --version $packageVersion
+```
+
+NuGet normalizes padded product versions: for example, `0.00.29` becomes package version `0.0.29`. The command prints the padded product version. After updating CodeAtlas, regenerate the project index.
+
+See the [quick guide](USAGE.md) for indexing, search, optional AI descriptions and output locations. To build from source, follow the [README](../README.md#build-and-test).
+
+## Build a package from source
+
+Run from the CodeAtlas.Net checkout:
 
 ```powershell
 dotnet pack src/CodeAtlas.Cli/CodeAtlas.Cli.csproj -o .codeatlas/packages
-dotnet tool install CodeAtlas.Tool --tool-path <empty-directory> --add-source .codeatlas/packages --version 0.0.16
 ```
-
-Indexing still needs the .NET SDK selected by `global.json` on the machine that analyzes a solution. The tool does not bundle an SDK. macOS, ARM64, and Alpine are not claimed.
-
-On 20 October 2026 the same `CodeAtlas.Tool.0.0.16.nupkg` was installed in WSL with a user-local .NET SDK 10.0.402 and an empty tool directory. `codeatlas --version` printed `0.00.16`. Indexing a missing solution under the home directory returned `analysis_failed` and `Solution does not exist`. This is not a clean virtual-machine image and not a full Linux index. The milestone 7 retrieval gate remains open, so this package is not a production release.
 
 ## Reproducible qualification tooling
 
@@ -24,7 +43,3 @@ The installed smoke uses an explicit local-only feed, cleared fallback package f
 The package bundles upstream runtime notice files and an inventory derived from the locked restored assets. `verify-package.py --assets src/CodeAtlas.Cli/obj/project.assets.json` verifies exact notice bytes as well as the Roslyn BuildHost payload. When dependency versions change, explicitly refresh and review `python scripts/package_notices.py --assets src/CodeAtlas.Cli/obj/project.assets.json`; verification fails on drift. This preserves upstream metadata/notices and is not a legal certification.
 
 `build/qualification.yml` is the Windows/Ubuntu workflow, activated at the Git-root `.github/workflows/qualification.yml` under the user's explicit directory/machine exception in AGENTS.md. It builds/tests on both hosts and installs the same Windows-built package on separate hosts with no source checkout. Actions are pinned to resolved commit IDs. A build/test failure blocks both install jobs; a package build alone is not clean-host installation evidence.
-
-## Local 0.00.23 candidate — 21 October 2026
-
-The exact final local package passed payload/19-runtime-package notice verification, clean isolated installation and explicit update from the retained 0.00.22 package. Both installed runs completed the public-fixture smoke, including indexing and method/reference queries, stale refusal and rebuilding. Packaged CLI/Core bytes match the Release binaries that passed all 368 .NET tests; 37 Python tests pass. The earlier notice-path failure remains retained. [Repair validation](REPAIR-VALIDATION.md) records the scope; hosted clean-host Windows/Linux checks and final publication are still pending.

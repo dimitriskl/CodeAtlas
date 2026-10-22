@@ -1,20 +1,20 @@
 # CodeAtlas .NET
 
-Version: **0.00.29**
+Version: **0.00.30**
 
 See [version history](docs/VERSION.md) for what is implemented and the versioning rules. `Version.props` is the build's version source. Run `dotnet run --project src/CodeAtlas.Cli --no-build -- --version` to check the built CLI.
 
 CodeAtlas is a C# semantic-analysis library and CLI built with Roslyn. The CLI calls our library directly; there is no MCP layer.
 
-Current focus: map code, optionally generate class/type and method descriptions, and search those saved descriptions. Run `configure-ai --provider ollama --model qwen3:8b --effort none` for a locally installed Ollama model, or select a cloud provider and model. Setup tests the connection, requests a missing cloud key without echo, saves keys in Windows user environment variables and keeps non-secret options in `.codeatlas/appsettings.json`. Then run `describe --index <manifest>`. Assisted search uses saved descriptions without provider calls. See the [user guide](docs/USER-GUIDE.md#search-by-purpose-and-read-structural-facts) for providers, model/effort overrides and batching.
+Map code, optionally generate class/type and method descriptions, and search those saved descriptions. Run `configure-ai --provider ollama --model qwen3:8b --effort none` for a locally installed Ollama model, or select a cloud provider and model. Setup tests the connection, requests a missing cloud key without echo, saves keys in Windows user environment variables and keeps non-secret options in `.codeatlas/appsettings.json`. Then run `describe --index <manifest>`. Assisted search uses saved descriptions without provider calls. See the [user guide](docs/USER-GUIDE.md#search-by-purpose-and-read-structural-facts) for providers, model/effort overrides and batching.
 
 CodeAtlas scans all C# projects in a solution, saves a structured index and a readable overview, and answers method/reference queries from that index. Refresh can reuse references after verified method-body edits and safely rebuilds when reuse cannot be established. Bounded caller traversal and duplicate candidates are available with explicit static-analysis limits. Angular/TypeScript analysis remains outside the initial C# scope.
 
-Start with [end-user usage](docs/USAGE.md) for copyable PowerShell commands to map eConnector, choose a model, generate descriptions and search them. The [reference guide](docs/USER-GUIDE.md) covers detailed queries, warning reports, refresh, coding-agent usage and recovery.
+Start with [end-user usage](docs/USAGE.md) for a short list of commands to map your project, choose a model, generate descriptions and search them, with output locations and uses. The [reference guide](docs/USER-GUIDE.md) covers detailed queries, warning reports, refresh, coding-agent usage and recovery.
 
-[October qualification](docs/QUALIFICATION-2026-10.md) records current real-solution measurements, tests, package checks and remaining release gates, including retained failures.
+[Validation measurements](docs/QUALIFICATION-2026-10.md) record analysis timings, tests and package checks.
 
-See the [development roadmap](docs/ROADMAP.md) for the ordered production-readiness milestones, semantic descriptions and discovery, duplicate detection, and acceptance criteria. Planned capabilities are distinct from the implemented commands below.
+Contributor documentation includes the [development roadmap](docs/ROADMAP.md) and its acceptance criteria.
 
 ## Build and test
 
@@ -33,7 +33,7 @@ The [complete correctness baseline](docs/CORRECTNESS-BASELINE.md) adds linked-fi
 
 On Windows, use `python` instead of `python3` if only that executable is installed. SDK `10.0.400` does not satisfy the `10.0.402` pin with `latestPatch`; install the pinned SDK (or a later compatible patch). A private SDK installation also works: prepend its directory to `PATH` and set `DOTNET_ROOT` and `DOTNET_ROOT_X64` for the current PowerShell session so fixture restores and Roslyn use the same SDK.
 
-See [Windows validation](docs/WINDOWS-VALIDATION.md) for local setup, the real eConnector solution run, timings, and analysis boundaries.
+See [Windows validation](docs/WINDOWS-VALIDATION.md) for setup, solution measurements, timings and analysis boundaries.
 
 ## Index once, then query
 
@@ -107,7 +107,7 @@ The JSON result includes `freshness.isStale` and `freshness.changedFiles`. Index
 Refresh uses the same solution path and stable manifest:
 
 ```powershell
-dotnet run --project src/CodeAtlas.Cli --no-build -- refresh --solution 'C:\LocalCode\eConnectorV2Git\eConnectorV2.sln'
+dotnet run --project src/CodeAtlas.Cli --no-build -- refresh --solution 'C:\Projects\<project_name>\<project_name>.sln'
 ```
 
 Refresh still loads and compiles the current solution. It reuses unchanged reference origins only when all observed compilation contexts match and the changed documents preserve their declaration surfaces. It searches every supported method in every changed document context, including linked files. Signature, project/configuration, document inventory and unsupported-context changes take a full reference rebuild; a missing or older baseline also needs a full seed. A corrupt existing snapshot is an explicit error.

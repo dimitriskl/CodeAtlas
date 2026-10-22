@@ -31,7 +31,7 @@ The three corresponding serial fixture runs retained under `.codeatlas/validatio
 
 The predeclared acceptance target was at least 20% lower median reference time with peak CLI working set at most 1.5 times the initial baseline (3,736,547,328 bytes), complete canonical equivalence, repeated large/small runs, and no material small-solution regression.
 
-| eConnector run | Reference seconds | Process wall seconds | Peak CLI working set, bytes |
+| `<project_name>` run | Reference seconds | Process wall seconds | Peak CLI working set, bytes |
 | --- | ---: | ---: | ---: |
 | Serial baseline, 17 October | 605.246 | 638.405 | 2,491,031,552 |
 | Two workers, 17 October | 471.346 | 524.495 | 2,658,758,656 |

@@ -1,8 +1,8 @@
 # CodeAtlas version history
 
-Version: **0.00.29**
+Version: **0.00.30**
 
-Status: unpublished development version. Version history starts at `0.00.01`; earlier work did not have assigned version numbers.
+Version history starts at `0.00.01`; earlier work did not have assigned version numbers.
 
 ## Versioning rules
 
@@ -32,9 +32,13 @@ This flag synchronizes the same files; it does not publish a package, create a t
 
 ## History
 
+### 0.00.30
+
+- Simplify end-user command and output guide, anonymize project examples and use neutral usage documentation
+
 ### 0.00.29
 
-- Document end-user setup, eConnector indexing, model and effort selection, searchable descriptions, refresh and troubleshooting
+- Document end-user setup, `<project_name>` indexing, model and effort selection, searchable descriptions, refresh and troubleshooting
 
 ### 0.00.28
 

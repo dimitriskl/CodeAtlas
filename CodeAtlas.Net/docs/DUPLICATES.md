@@ -10,7 +10,7 @@ Default limits cap 100,000 methods, 4,096 tokens per body, two million total tok
 
 `find-duplicates --index <manifest> --mode purpose --symbol <id>` instead ranks possible overlap using authored documentation and structural facts for a selected method. It does not depend on generated descriptions or a model. Similar purpose is not structural duplication or behavioral equivalence; names and descriptions can conceal different business rules.
 
-The historical eConnector count of 711 groups came from the old lexical detector and includes known false matches. It is retained as diagnostic history, not evidence for the replacement. Current engine tests cover renamed variables, literal/member differences, implicit caller information, checked arithmetic, bounded work and candidate evidence. The labeled study and resource qualification must report their own corpus, thresholds, hashes, false positives and omissions before any broader quality claim. CodeAtlas never merges or deletes application source.
+The historical `<project_name>` count of 711 groups came from the old lexical detector and includes known false matches. It is retained as diagnostic history, not evidence for the replacement. Current engine tests cover renamed variables, literal/member differences, implicit caller information, checked arithmetic, bounded work and candidate evidence. The labeled study and resource qualification must report their own corpus, thresholds, hashes, false positives and omissions before any broader quality claim. CodeAtlas never merges or deletes application source.
 
 ## Labeled public evidence — 21 October 2026
 

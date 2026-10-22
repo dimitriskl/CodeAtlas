@@ -1,6 +1,6 @@
 # CodeAtlas — Project Recap
 
-Version: **0.00.29**
+Version: **0.00.30**
 
 See [VERSION.md](VERSION.md) for implementation history and versioning rules.
 
@@ -16,7 +16,7 @@ CodeAtlas will help a coding agent understand a codebase through a queryable gra
 
 Instead of relying only on text searches, the agent should be able to ask which method a call refers to, what references a symbol, and what code may be affected by a change. Text search and reading source code will remain useful alongside graph queries.
 
-Example question: “If I change this method in Agent Investigator, which methods reference it?”
+Example question: “If I change this method in `<project_name>`, which methods reference it?”
 
 ## Decisions made
 
@@ -52,7 +52,7 @@ We considered Go for extending Atomic's existing implementation and Rust for a n
 
 ## Proposed first milestone
 
-Load a C# solution, identify a method, and report its source references with file locations. Agent Investigator was suggested as a possible first real-world example.
+Load a C# solution, identify a method, and report its source references with file locations. Use `<project_name>` as the target solution.
 
 The initial tool surface proposed was:
 
@@ -88,4 +88,4 @@ We found that Atomic already documents an MCP server, making direct reuse a plau
 
 ## Starting point for the next session
 
-Follow [ROADMAP.md](ROADMAP.md). The next implementation step is deterministic reference ordering and a retained complete comparison baseline, followed by reference-collection optimization. Descriptions will start with existing XML documentation and structural facts; optional AI explanations must retain provenance and freshness, and similarity results remain duplicate candidates rather than proof of equivalence. Windows validation and full eConnector indexing evidence are in [WINDOWS-VALIDATION.md](WINDOWS-VALIDATION.md). Version 0.00.07 introduced per-stage timings; the roadmap documentation does not change analysis behavior. The CLI calls our C# code directly; no MCP layer is planned.
+Follow [ROADMAP.md](ROADMAP.md). The next implementation step is deterministic reference ordering and a retained complete comparison baseline, followed by reference-collection optimization. Descriptions will start with existing XML documentation and structural facts; optional AI explanations must retain provenance and freshness, and similarity results remain duplicate candidates rather than proof of equivalence. Windows validation and full `<project_name>` indexing evidence are in [WINDOWS-VALIDATION.md](WINDOWS-VALIDATION.md). Version 0.00.07 introduced per-stage timings; the roadmap documentation does not change analysis behavior. The CLI calls our C# code directly; no MCP layer is planned.

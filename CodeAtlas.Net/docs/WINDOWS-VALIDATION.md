@@ -1,12 +1,12 @@
 # Windows validation — 15 October 2026
 
-Development and validation ran in `C:\Code\CodeAtlas\CodeAtlas.Net`. The target was `C:\localcode\econnectorv2git\econnectorv2.sln`. No target application source was edited.
+Development and validation ran in `C:\Code\CodeAtlas\CodeAtlas.Net`. The target was `C:\Projects\<project_name>\<project_name>.sln`. No target application source was edited.
 
 ## Stage timing follow-up — 16–17 October 2026, version 0.00.07
 
 The system SDK is now `10.0.402`, matching `global.json`. Locked restore and build passed with zero build warnings/errors; all 29 .NET tests and 6 Python versioning tests passed. CLI `--version` and version documents agree on `0.00.07`. Three new tests cover repeated progress events, non-mutating timing snapshots, and cancellation preserving the previous timing report.
 
-The instrumented target run completed on 16 October; follow-up query verification completed on 17 October. It took **618.368 seconds (10 min 18 s)**. Detailed timings are in `C:\LocalCode\eConnectorV2Git\.codeatlas\timings.json`, linked to index `667af8659b504a258a6578d0b5d1a7b4`. The CLI prints the report path and slowest stage instead of all stage details.
+The instrumented target run completed on 16 October; follow-up query verification completed on 17 October. It took **618.368 seconds (10 min 18 s)**. Detailed timings are in `C:\Projects\<project_name>\.codeatlas\timings.json`, linked to index `667af8659b504a258a6578d0b5d1a7b4`. The CLI prints the report path and slowest stage instead of all stage details.
 
 | Stage | Seconds |
 | --- | ---: |
@@ -77,8 +77,8 @@ Affected advisory package versions included `System.Security.Cryptography.Pkcs` 
 
 The corrected full indexing command succeeded in **673.977 seconds (11 min 14 s)**. It published both outputs beside the exact requested solution:
 
-- `C:\localcode\econnectorv2git\.codeatlas\index.json`: **140,001,349 bytes** (140.0 MB / 133.52 MiB).
-- `C:\localcode\econnectorv2git\.codeatlas\overview.md`: **140,280 bytes** (140.3 KB / 136.99 KiB).
+- `C:\Projects\<project_name>\.codeatlas\index.json`: **140,001,349 bytes** (140.0 MB / 133.52 MiB).
+- `C:\Projects\<project_name>\.codeatlas\overview.md`: **140,280 bytes** (140.3 KB / 136.99 KiB).
 - 30 projects, 3,943 source types, 16,979 methods, 232,687 stored reference entries, and 3,750 input fingerprints.
 - Reference entries are summed across per-method results; related definitions can repeat a location across queries. This is not a count of unique runtime calls.
 - 56 warnings retained; no remaining fatal loading or compilation diagnostic.
@@ -139,5 +139,5 @@ $env:DOTNET_ROOT = $codeAtlasSdk
 $env:DOTNET_ROOT_X64 = $codeAtlasSdk
 dotnet --version
 dotnet run --project src/CodeAtlas.Cli --no-build -- --version
-dotnet run --project src/CodeAtlas.Cli --no-build -- index-status --index C:\localcode\econnectorv2git\.codeatlas\index.json
+dotnet run --project src/CodeAtlas.Cli --no-build -- index-status --index C:\Projects\<project_name>\.codeatlas\index.json
 ```
