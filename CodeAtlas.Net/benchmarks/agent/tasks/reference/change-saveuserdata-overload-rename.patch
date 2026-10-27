@@ -1,0 +1,141 @@
+diff --git a/Emby.Server.Implementations/Library/UserDataManager.cs b/Emby.Server.Implementations/Library/UserDataManager.cs
+index 72c8d7a..27f527d 100644
+--- a/Emby.Server.Implementations/Library/UserDataManager.cs
++++ b/Emby.Server.Implementations/Library/UserDataManager.cs
+@@ -47,7 +47,7 @@ namespace Emby.Server.Implementations.Library
+         public event EventHandler<UserDataSaveEventArgs>? UserDataSaved;
+ 
+         /// <inheritdoc />
+-        public void SaveUserData(User user, BaseItem item, UserItemData userData, UserDataSaveReason reason, CancellationToken cancellationToken)
++        public void SaveUserItemData(User user, BaseItem item, UserItemData userData, UserDataSaveReason reason, CancellationToken cancellationToken)
+         {
+             ArgumentNullException.ThrowIfNull(userData);
+ 
+@@ -136,7 +136,7 @@ namespace Emby.Server.Implementations.Library
+                 userData.Rating = userDataDto.Rating.Value;
+             }
+ 
+-            SaveUserData(user, item, userData, reason, CancellationToken.None);
++            SaveUserItemData(user, item, userData, reason, CancellationToken.None);
+         }
+ 
+         private UserData Map(UserItemData dto, Guid userId, Guid itemId)
+diff --git a/Emby.Server.Implementations/Session/SessionManager.cs b/Emby.Server.Implementations/Session/SessionManager.cs
+index d852326..69d2e6b 100644
+--- a/Emby.Server.Implementations/Session/SessionManager.cs
++++ b/Emby.Server.Implementations/Session/SessionManager.cs
+@@ -827,7 +827,7 @@ namespace Emby.Server.Implementations.Session
+                 data.Played = false;
+             }
+ 
+-            _userDataManager.SaveUserData(user, item, data, UserDataSaveReason.PlaybackStart, CancellationToken.None);
++            _userDataManager.SaveUserItemData(user, item, data, UserDataSaveReason.PlaybackStart, CancellationToken.None);
+         }
+ 
+         /// <inheritdoc />
+@@ -957,7 +957,7 @@ namespace Emby.Server.Implementations.Session
+ 
+             if (changed)
+             {
+-                _userDataManager.SaveUserData(user, item, data, UserDataSaveReason.PlaybackProgress, CancellationToken.None);
++                _userDataManager.SaveUserItemData(user, item, data, UserDataSaveReason.PlaybackProgress, CancellationToken.None);
+             }
+         }
+ 
+@@ -1134,7 +1134,7 @@ namespace Emby.Server.Implementations.Session
+                 playedToCompletion = true;
+             }
+ 
+-            _userDataManager.SaveUserData(user, item, data, UserDataSaveReason.PlaybackFinished, CancellationToken.None);
++            _userDataManager.SaveUserItemData(user, item, data, UserDataSaveReason.PlaybackFinished, CancellationToken.None);
+ 
+             return playedToCompletion;
+         }
+diff --git a/Jellyfin.Api/Controllers/UserLibraryController.cs b/Jellyfin.Api/Controllers/UserLibraryController.cs
+index 0e04beb..2ba2378 100644
+--- a/Jellyfin.Api/Controllers/UserLibraryController.cs
++++ b/Jellyfin.Api/Controllers/UserLibraryController.cs
+@@ -667,7 +667,7 @@ public class UserLibraryController : BaseJellyfinApiController
+             // Set favorite status
+             data.IsFavorite = isFavorite;
+ 
+-            _userDataRepository.SaveUserData(user, item, data, UserDataSaveReason.UpdateUserRating, CancellationToken.None);
++            _userDataRepository.SaveUserItemData(user, item, data, UserDataSaveReason.UpdateUserRating, CancellationToken.None);
+         }
+ 
+         return _userDataRepository.GetUserDataDto(item, user)!;
+@@ -688,7 +688,7 @@ public class UserLibraryController : BaseJellyfinApiController
+         {
+             data.Likes = likes;
+ 
+-            _userDataRepository.SaveUserData(user, item, data, UserDataSaveReason.UpdateUserRating, CancellationToken.None);
++            _userDataRepository.SaveUserItemData(user, item, data, UserDataSaveReason.UpdateUserRating, CancellationToken.None);
+         }
+ 
+         return _userDataRepository.GetUserDataDto(item, user);
+diff --git a/MediaBrowser.Controller/Entities/BaseItem.cs b/MediaBrowser.Controller/Entities/BaseItem.cs
+index 252a5d8..05551af 100644
+--- a/MediaBrowser.Controller/Entities/BaseItem.cs
++++ b/MediaBrowser.Controller/Entities/BaseItem.cs
+@@ -1919,7 +1919,7 @@ namespace MediaBrowser.Controller.Entities
+             data.LastPlayedDate = datePlayed ?? data.LastPlayedDate ?? DateTime.UtcNow;
+             data.Played = true;
+ 
+-            UserDataManager.SaveUserData(user, this, data, UserDataSaveReason.TogglePlayed, CancellationToken.None);
++            UserDataManager.SaveUserItemData(user, this, data, UserDataSaveReason.TogglePlayed, CancellationToken.None);
+         }
+ 
+         /// <summary>
+@@ -1941,7 +1941,7 @@ namespace MediaBrowser.Controller.Entities
+             data.LastPlayedDate = null;
+             data.Played = false;
+ 
+-            UserDataManager.SaveUserData(user, this, data, UserDataSaveReason.TogglePlayed, CancellationToken.None);
++            UserDataManager.SaveUserItemData(user, this, data, UserDataSaveReason.TogglePlayed, CancellationToken.None);
+         }
+ 
+         /// <summary>
+diff --git a/MediaBrowser.Controller/Library/IUserDataManager.cs b/MediaBrowser.Controller/Library/IUserDataManager.cs
+index eb46611..b3ba801 100644
+--- a/MediaBrowser.Controller/Library/IUserDataManager.cs
++++ b/MediaBrowser.Controller/Library/IUserDataManager.cs
+@@ -27,7 +27,7 @@ namespace MediaBrowser.Controller.Library
+         /// <param name="userData">The user data.</param>
+         /// <param name="reason">The reason.</param>
+         /// <param name="cancellationToken">The cancellation token.</param>
+-        void SaveUserData(User user, BaseItem item, UserItemData userData, UserDataSaveReason reason, CancellationToken cancellationToken);
++        void SaveUserItemData(User user, BaseItem item, UserItemData userData, UserDataSaveReason reason, CancellationToken cancellationToken);
+ 
+         /// <summary>
+         /// Save the provided user data for the given user.
+diff --git a/MediaBrowser.XbmcMetadata/Parsers/BaseNfoParser.cs b/MediaBrowser.XbmcMetadata/Parsers/BaseNfoParser.cs
+index 3f83f1d..937feaf 100644
+--- a/MediaBrowser.XbmcMetadata/Parsers/BaseNfoParser.cs
++++ b/MediaBrowser.XbmcMetadata/Parsers/BaseNfoParser.cs
+@@ -319,7 +319,7 @@ namespace MediaBrowser.XbmcMetadata.Parsers
+ 
+                                 if (!item.Id.IsEmpty())
+                                 {
+-                                    _userDataManager.SaveUserData(user, item, userData, UserDataSaveReason.Import, CancellationToken.None);
++                                    _userDataManager.SaveUserItemData(user, item, userData, UserDataSaveReason.Import, CancellationToken.None);
+                                 }
+                             }
+                         }
+@@ -340,7 +340,7 @@ namespace MediaBrowser.XbmcMetadata.Parsers
+ 
+                                 if (!item.Id.IsEmpty())
+                                 {
+-                                    _userDataManager.SaveUserData(user, item, userData, UserDataSaveReason.Import, CancellationToken.None);
++                                    _userDataManager.SaveUserItemData(user, item, userData, UserDataSaveReason.Import, CancellationToken.None);
+                                 }
+                             }
+                         }
+@@ -361,7 +361,7 @@ namespace MediaBrowser.XbmcMetadata.Parsers
+ 
+                                 if (!item.Id.IsEmpty())
+                                 {
+-                                    _userDataManager.SaveUserData(user, item, userData, UserDataSaveReason.Import, CancellationToken.None);
++                                    _userDataManager.SaveUserItemData(user, item, userData, UserDataSaveReason.Import, CancellationToken.None);
+                                 }
+                             }
+                         }

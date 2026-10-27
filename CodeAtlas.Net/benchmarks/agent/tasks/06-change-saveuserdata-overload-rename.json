@@ -1,0 +1,60 @@
+{
+  "id": "change-saveuserdata-overload-rename",
+  "kind": "change",
+  "title": "Rename one SaveUserData overload",
+  "prompt": "IUserDataManager has two SaveUserData overloads. Rename only the overload that takes a UserItemData and a CancellationToken to SaveUserItemData, in the interface, its implementation and every call site. Keep the overload that takes an UpdateUserItemDataDto named SaveUserData, and do not keep a forwarding method with the old name. The solution, including tests, must build.",
+  "answer": false,
+  "checks": [
+    {
+      "type": "regex",
+      "path": "MediaBrowser.Controller/Library/IUserDataManager.cs",
+      "expect": "present",
+      "pristine": false,
+      "pattern": "void\\s+SaveUserItemData\\(\\s*User\\s+\\w+\\s*,\\s*BaseItem\\s+\\w+\\s*,\\s*UserItemData\\s+\\w+\\s*,\\s*UserDataSaveReason\\s+\\w+\\s*,\\s*CancellationToken\\s+\\w+\\s*\\)"
+    },
+    {
+      "type": "regex",
+      "path": "MediaBrowser.Controller/Library/IUserDataManager.cs",
+      "expect": "present",
+      "pristine": true,
+      "pattern": "void\\s+SaveUserData\\(\\s*User\\s+\\w+\\s*,\\s*BaseItem\\s+\\w+\\s*,\\s*UpdateUserItemDataDto\\s+\\w+\\s*,\\s*UserDataSaveReason\\s+\\w+\\s*\\)"
+    },
+    {
+      "type": "regex",
+      "path": "Emby.Server.Implementations/Library/UserDataManager.cs",
+      "expect": "present",
+      "pristine": false,
+      "pattern": "void\\s+SaveUserItemData\\(\\s*User\\s+\\w+\\s*,\\s*BaseItem\\s+\\w+\\s*,\\s*UserItemData\\s+\\w+"
+    },
+    {
+      "type": "regex",
+      "path": "Emby.Server.Implementations/Library/UserDataManager.cs",
+      "expect": "present",
+      "pristine": true,
+      "pattern": "void\\s+SaveUserData\\(\\s*User\\s+\\w+\\s*,\\s*BaseItem\\s+\\w+\\s*,\\s*UpdateUserItemDataDto\\s+\\w+"
+    },
+    {
+      "type": "regex",
+      "glob": "**/*.cs",
+      "expect": "absent",
+      "pristine": false,
+      "pattern": "\\bSaveUserData\\([^;{]*CancellationToken"
+    },
+    {
+      "type": "regex",
+      "path": "Jellyfin.Api/Controllers/ItemsController.cs",
+      "expect": "present",
+      "pristine": true,
+      "pattern": "\\.SaveUserData\\(user, item, userDataDto, UserDataSaveReason\\.UpdateUserData\\)"
+    },
+    {
+      "type": "command",
+      "name": "build",
+      "argv": ["dotnet", "build", "Jellyfin.sln", "--no-restore", "-nologo", "-v:q"],
+      "timeoutSeconds": 900
+    }
+  ],
+  "reference": {
+    "patch": "reference/change-saveuserdata-overload-rename.patch"
+  }
+}

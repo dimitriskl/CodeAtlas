@@ -1,0 +1,107 @@
+{
+  "label": "ollama-qwen3-8b-small-smoke",
+  "suite": "small",
+  "results": "C:\\Code\\CodeAtlas\\CodeAtlas.Net\\benchmarks\\agent\\results\\20261025T083043Z-ollama-qwen3-8b-small-smoke",
+  "totals": {
+    "plain": {
+      "runs": 1,
+      "oldSuccesses": 0,
+      "newSuccesses": 0,
+      "lenientSuccesses": 0
+    },
+    "codeatlas": {
+      "runs": 1,
+      "oldSuccesses": 1,
+      "newSuccesses": 1,
+      "lenientSuccesses": 0
+    }
+  },
+  "runs": [
+    {
+      "task": "find-coupon-expiry",
+      "mode": "codeatlas",
+      "repetition": 1,
+      "oldSuccess": true,
+      "answerFileFrom": "stream",
+      "answerSource": "file",
+      "answerParse": "json-object",
+      "answerLenient": false,
+      "answer": {
+        "files": [
+          "Shop.Core/Discounts/CouponValidator.cs"
+        ],
+        "symbols": [
+          "CouponValidator.IsExpired"
+        ]
+      },
+      "checks": [
+        {
+          "type": "answer-set",
+          "name": "files",
+          "passed": true,
+          "recall": 1.0,
+          "precision": 1.0,
+          "missing": [],
+          "unexpected": [],
+          "forbidden": []
+        },
+        {
+          "type": "answer-contains",
+          "name": "symbols",
+          "passed": true,
+          "missingGroups": []
+        }
+      ],
+      "success": true
+    },
+    {
+      "task": "find-coupon-expiry",
+      "mode": "plain",
+      "repetition": 1,
+      "oldSuccess": false,
+      "answerFileFrom": null,
+      "answerSource": "final-text",
+      "answerParse": "text-fallback",
+      "answerLenient": true,
+      "answer": {
+        "files": [
+          "CouponValidator.cs",
+          "DiscountCalculator.cs"
+        ],
+        "symbols": [
+          "Coupon",
+          "Coupon.IsExpired",
+          "Write"
+        ]
+      },
+      "checks": [
+        {
+          "type": "answer-set",
+          "name": "files",
+          "passed": false,
+          "recall": 0.0,
+          "precision": 0.0,
+          "missing": [
+            "shop.core/discounts/couponvalidator.cs"
+          ],
+          "unexpected": [
+            "couponvalidator.cs",
+            "discountcalculator.cs"
+          ],
+          "forbidden": []
+        },
+        {
+          "type": "answer-contains",
+          "name": "symbols",
+          "passed": false,
+          "missingGroups": [
+            [
+              "CouponValidator.IsExpired"
+            ]
+          ]
+        }
+      ],
+      "success": false
+    }
+  ]
+}

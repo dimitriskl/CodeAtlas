@@ -1,0 +1,7 @@
+{
+  "name": "shop",
+  "source": "small/Shop",
+  "commit": "16f89b6822e62675c3be73acb72ee199194dc57e",
+  "solution": "Shop.slnx",
+  "why": "Small local benchmark target sized for 8B local models: 2 projects, 23 C# files. It contains an interface with direct and base-class implementations plus a look-alike class that does not implement it, two overloads of one method, and a same-named method on an unrelated interface, so it exercises the same find, impact and change navigation as the Jellyfin suite in a context a small model can hold."
+}

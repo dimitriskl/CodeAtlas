@@ -1,0 +1,60 @@
+{
+  "id": "change-coupon-overload-rename",
+  "kind": "change",
+  "title": "Rename only the coupon overload of DiscountCalculator.Apply",
+  "prompt": "Rename the overload DiscountCalculator.Apply(Order, Coupon) to ApplyCoupon and update its callers. Keep Apply(Order, decimal) and its callers unchanged. The solution must build.",
+  "answer": false,
+  "checks": [
+    {
+      "type": "regex",
+      "path": "Shop.Core/Discounts/DiscountCalculator.cs",
+      "expect": "present",
+      "pristine": false,
+      "pattern": "public decimal ApplyCoupon\\(Order \\w+, Coupon \\w+\\)"
+    },
+    {
+      "type": "regex",
+      "path": "Shop.Core/Discounts/DiscountCalculator.cs",
+      "expect": "present",
+      "pristine": true,
+      "pattern": "public decimal Apply\\(Order order, decimal percent\\)"
+    },
+    {
+      "type": "regex",
+      "glob": "**/*.cs",
+      "expect": "absent",
+      "pristine": false,
+      "pattern": "decimal Apply\\(Order \\w+, Coupon \\w+\\)"
+    },
+    {
+      "type": "regex",
+      "path": "Shop.App/ReminderJob.cs",
+      "expect": "present",
+      "pristine": true,
+      "pattern": "discounts\\.Apply\\(order, 5m\\)"
+    },
+    {
+      "type": "regex",
+      "path": "Shop.App/LoyaltyService.cs",
+      "expect": "present",
+      "pristine": false,
+      "pattern": "\\.ApplyCoupon\\("
+    },
+    {
+      "type": "command",
+      "name": "build",
+      "argv": [
+        "dotnet",
+        "build",
+        "Shop.slnx",
+        "--no-restore",
+        "-nologo",
+        "-v:q"
+      ],
+      "timeoutSeconds": 300
+    }
+  ],
+  "reference": {
+    "patch": "reference/change-coupon-overload-rename.patch"
+  }
+}

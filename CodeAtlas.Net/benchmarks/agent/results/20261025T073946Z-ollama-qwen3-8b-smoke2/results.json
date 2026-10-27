@@ -1,0 +1,158 @@
+{
+  "schemaVersion": 1,
+  "label": "ollama-qwen3-8b-smoke2",
+  "startedAtUtc": "20261025T073946Z",
+  "target": {
+    "name": "jellyfin",
+    "repository": "https://github.com/jellyfin/jellyfin.git",
+    "tag": "v10.11.9",
+    "commit": "e83a7e62f26443f7dd98f126d6955ac1af090125",
+    "solution": "Jellyfin.sln",
+    "sdk": "Repository global.json selects 9.0.x (9.0.0 with latestMinor); 9.0.311 was used locally",
+    "why": "Well-known, actively maintained C# media server with 40 projects and about 2,000 C# files. It restores and builds with an installed .NET 9 SDK and has no Aspire, Node or database setup. Its layered interfaces (MediaBrowser.Controller), base-class hierarchies, same-named members on unrelated types and DI-heavy controllers exercise the navigation that CodeAtlas claims to improve. OrchardCore is larger than useful for a first baseline; eShop is smaller; nopCommerce was not needed."
+  },
+  "model": "qwen3-8b-32k",
+  "provider": "ollama",
+  "ollama": {
+    "url": "http://localhost:11434",
+    "version": "0.40.10",
+    "model": "qwen3-8b-32k",
+    "numCtx": 32768,
+    "modelContextLength": 40960,
+    "capabilities": [
+      "completion",
+      "tools",
+      "thinking"
+    ],
+    "warning": null
+  },
+  "effort": null,
+  "repetitions": 1,
+  "maxBudgetUsdPerRun": null,
+  "timeoutSecondsPerRun": 1200,
+  "maxTurns": 40,
+  "claudeVersion": "2.1.310 (Claude Code)",
+  "platform": "win32",
+  "isolation": "no setting sources plus agent-settings.json, empty strict MCP config, slash commands disabled, auto memory off, allowlisted environment",
+  "permissions": "dontAsk with allowlist",
+  "lsp": {
+    "available": false,
+    "status": "unavailable: csharp-ls is not installed (dotnet tool install --global csharp-ls); the LSP mode is skipped"
+  },
+  "codeatlas": {
+    "version": "0.00.31",
+    "setup": {
+      "wrapper": "C:\\temp\\codeatlas-bench\\tools\\codeatlas.py",
+      "solution": "C:\\temp\\codeatlas-bench\\work\\codeatlas\\Jellyfin.sln",
+      "version": "0.00.31",
+      "manifest": "C:\\temp\\codeatlas-bench\\work\\codeatlas\\.codeatlas\\solutions\\Jellyfin.sln-C8B0AE2780728F4EE537D093E91FDC8FD6F8E3CB18ADC5E3B79B9AC70ED67442\\current.json",
+      "overview": "C:\\temp\\codeatlas-bench\\work\\codeatlas\\.codeatlas\\solutions\\Jellyfin.sln-C8B0AE2780728F4EE537D093E91FDC8FD6F8E3CB18ADC5E3B79B9AC70ED67442\\generations\\090d78e7740a4dcdaf15dd72e2909e7a\\overview.md",
+      "indexId": "090d78e7740a4dcdaf15dd72e2909e7a",
+      "indexSeconds": 308.7,
+      "reportedElapsedSeconds": 308.473,
+      "projects": 40,
+      "types": 2095,
+      "methods": 6527,
+      "storeBytes": 778444774,
+      "modelCostUsd": 0,
+      "createdAtUtc": "2026-10-25T07:30:15.5701219+00:00"
+    }
+  },
+  "tasks": [
+    "find-password-verification"
+  ],
+  "runs": [
+    {
+      "task": "find-password-verification",
+      "kind": "find",
+      "mode": "codeatlas",
+      "repetition": 1,
+      "status": "completed",
+      "setupSeconds": 0.0,
+      "indexFreshness": "unknown",
+      "elapsedSeconds": 65.7,
+      "exitCode": 0,
+      "timedOut": false,
+      "tools": {
+        "Grep": 5,
+        "Glob": 2
+      },
+      "bash": {},
+      "initTools": [
+        "Bash",
+        "Edit",
+        "Glob",
+        "Grep",
+        "Read",
+        "Write"
+      ],
+      "model": "qwen3-8b-32k",
+      "apiKeySource": "none",
+      "inputTokens": 11730,
+      "outputTokens": 4372,
+      "cacheReadInputTokens": 53301,
+      "cacheCreationInputTokens": 0,
+      "totalTokens": 69403,
+      "resultReceived": true,
+      "subtype": "success",
+      "isError": false,
+      "usageSource": "result",
+      "turns": 8,
+      "costUsd": 0.0,
+      "durationSeconds": 65.326,
+      "apiSeconds": 64.885,
+      "models": [
+        "qwen3-8b-32k"
+      ],
+      "finalText": "{\n  \"files\": [\n    \"src/Jellyfin.Database/Jellyfin.Database.Implementations/Entities/User.cs\"\n  ],\n  \"symbols\": [\n    \"Jellyfin.Database.Implementations.Entities.User.ValidatePassword\"\n  ]\n}",
+      "provider": "ollama",
+      "reportedCostUsd": 0.1946005,
+      "answerSource": null,
+      "changedFiles": [],
+      "checks": [
+        {
+          "type": "answer-set",
+          "name": "files",
+          "passed": false,
+          "detail": "answer.files is not a list"
+        },
+        {
+          "type": "answer-contains",
+          "name": "symbols",
+          "passed": false,
+          "detail": "answer.symbols is not a list"
+        }
+      ],
+      "success": false
+    }
+  ],
+  "summary": {
+    "modes": {
+      "codeatlas": {
+        "runs": 1,
+        "successes": 0,
+        "successRate": 0.0,
+        "meanTotalTokens": 69403.0,
+        "meanOutputTokens": 4372.0,
+        "meanTurns": 8.0,
+        "meanCostUsd": 0.0,
+        "totalCostUsd": 0,
+        "meanElapsedSeconds": 65.7
+      }
+    },
+    "tasks": {
+      "find-password-verification": {
+        "codeatlas": {
+          "runs": 1,
+          "successes": 0,
+          "meanTotalTokens": 69403.0,
+          "meanTurns": 8.0,
+          "meanCostUsd": 0.0,
+          "meanElapsedSeconds": 65.7
+        }
+      }
+    },
+    "relativeToPlain": {}
+  },
+  "finishedAtUtc": "20261025T074056Z"
+}

@@ -1,0 +1,46 @@
+{
+  "id": "change-charge-currency",
+  "kind": "change",
+  "title": "Add a currency parameter to IPaymentProcessor.Charge",
+  "prompt": "Add a string parameter named currency as the last parameter of IPaymentProcessor.Charge. Update every implementation, and pass \"EUR\" at every call site. Do not change FakeGatewayClient.Charge. The solution must build.",
+  "answer": false,
+  "checks": [
+    {
+      "type": "regex",
+      "path": "Shop.Core/Payments/IPaymentProcessor.cs",
+      "expect": "present",
+      "pristine": false,
+      "pattern": "PaymentResult Charge\\(Order \\w+, decimal \\w+, string currency\\);"
+    },
+    {
+      "type": "regex",
+      "path": "Shop.Core/Payments/FakeGatewayClient.cs",
+      "expect": "present",
+      "pristine": true,
+      "pattern": "public PaymentResult Charge\\(Order order, decimal amount\\)"
+    },
+    {
+      "type": "regex",
+      "path": "Shop.App/CheckoutService.cs",
+      "expect": "present",
+      "pristine": false,
+      "pattern": "\\.Charge\\([^;]*\\\"EUR\\\"\\)"
+    },
+    {
+      "type": "command",
+      "name": "build",
+      "argv": [
+        "dotnet",
+        "build",
+        "Shop.slnx",
+        "--no-restore",
+        "-nologo",
+        "-v:q"
+      ],
+      "timeoutSeconds": 300
+    }
+  ],
+  "reference": {
+    "patch": "reference/change-charge-currency.patch"
+  }
+}

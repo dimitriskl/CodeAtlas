@@ -1,0 +1,36 @@
+{
+  "id": "find-coupon-expiry",
+  "kind": "find",
+  "title": "Find the coupon expiry check",
+  "prompt": "Which method decides whether a coupon has expired? Report its file and Type.Method.",
+  "answer": true,
+  "checks": [
+    {
+      "type": "answer-set",
+      "field": "files",
+      "match": "path",
+      "required": [
+        "Shop.Core/Discounts/CouponValidator.cs"
+      ]
+    },
+    {
+      "type": "answer-contains",
+      "field": "symbols",
+      "groups": [
+        [
+          "CouponValidator.IsExpired"
+        ]
+      ]
+    }
+  ],
+  "reference": {
+    "answer": {
+      "files": [
+        "Shop.Core/Discounts/CouponValidator.cs"
+      ],
+      "symbols": [
+        "Shop.Core.Discounts.CouponValidator.IsExpired(Coupon, DateOnly)"
+      ]
+    }
+  }
+}

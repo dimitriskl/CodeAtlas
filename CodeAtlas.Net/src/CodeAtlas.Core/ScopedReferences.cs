@@ -23,7 +23,9 @@ public sealed partial class SolutionAnalysis
         {
             var compilation = await project.GetCompilationAsync(cancellationToken)
                 ?? throw new AnalysisException($"Could not compile symbol project: {projectPath}");
-            var selected = DocumentationCommentId.GetFirstSymbolForDeclarationId(id[(separator + 2)..], compilation);
+            var declarationId = id[(separator + 2)..];
+            var selected = DocumentationCommentId.GetFirstSymbolForDeclarationId(declarationId, compilation)
+                ?? FindSourceMethodByDeclarationId(declarationId, compilation);
             if (selected is INamedTypeSymbol or IPropertySymbol or IFieldSymbol && selected.Locations.Any(location => location.IsInSource))
                 throw new QueryException("unsupported_symbol_kind", "References support ordinary and explicit-interface source methods only.");
             if (selected is IMethodSymbol method && method.Locations.Any(location => location.IsInSource)) methods.Add(method);
@@ -60,6 +62,25 @@ public sealed partial class SolutionAnalysis
             }
         }
         return CanonicalReferences(references);
+    }
+
+    // Roslyn cannot parse some IDs that it creates, such as an explicit implementation of a
+    // generic interface inside a generic type (Type`1.Ns#IFoo{T}#Member). Match the source
+    // methods with that simple name by the ID Roslyn generates for them instead.
+    private static IMethodSymbol? FindSourceMethodByDeclarationId(string declarationId, Compilation compilation)
+    {
+        if (!declarationId.StartsWith("M:", StringComparison.Ordinal))
+            return null;
+        var end = declarationId.IndexOf('(');
+        var member = end < 0 ? declarationId : declarationId[..end];
+        var arity = member.IndexOf("``", StringComparison.Ordinal);
+        if (arity >= 0)
+            member = member[..arity];
+        var name = member[(member.LastIndexOfAny(['.', '#']) + 1)..];
+        return compilation.GetSymbolsWithName(candidate => candidate == name
+                || candidate.EndsWith("." + name, StringComparison.Ordinal), SymbolFilter.Member)
+            .OfType<IMethodSymbol>()
+            .FirstOrDefault(method => string.Equals(Canonical(method).GetDocumentationCommentId(), declarationId, StringComparison.Ordinal));
     }
 
     internal static SourceReference[] CanonicalReferences(IEnumerable<SourceReference> references) =>

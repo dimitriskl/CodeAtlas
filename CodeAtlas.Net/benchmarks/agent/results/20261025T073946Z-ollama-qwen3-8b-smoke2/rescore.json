@@ -1,0 +1,60 @@
+{
+  "label": "ollama-qwen3-8b-smoke2",
+  "suite": "jellyfin",
+  "results": "C:\\Code\\CodeAtlas\\CodeAtlas.Net\\benchmarks\\agent\\results\\20261025T073946Z-ollama-qwen3-8b-smoke2",
+  "totals": {
+    "codeatlas": {
+      "runs": 1,
+      "oldSuccesses": 0,
+      "newSuccesses": 0,
+      "lenientSuccesses": 0
+    }
+  },
+  "runs": [
+    {
+      "task": "find-password-verification",
+      "mode": "codeatlas",
+      "repetition": 1,
+      "oldSuccess": false,
+      "answerFileFrom": null,
+      "answerSource": "final-text",
+      "answerParse": "json-object",
+      "answerLenient": true,
+      "answer": {
+        "files": [
+          "src/Jellyfin.Database/Jellyfin.Database.Implementations/Entities/User.cs"
+        ],
+        "symbols": [
+          "Jellyfin.Database.Implementations.Entities.User.ValidatePassword"
+        ]
+      },
+      "checks": [
+        {
+          "type": "answer-set",
+          "name": "files",
+          "passed": false,
+          "recall": 0.0,
+          "precision": 0.0,
+          "missing": [
+            "jellyfin.server.implementations/users/defaultauthenticationprovider.cs"
+          ],
+          "unexpected": [
+            "src/jellyfin.database/jellyfin.database.implementations/entities/user.cs"
+          ],
+          "forbidden": []
+        },
+        {
+          "type": "answer-contains",
+          "name": "symbols",
+          "passed": false,
+          "missingGroups": [
+            [
+              "DefaultAuthenticationProvider.Authenticate"
+            ]
+          ]
+        }
+      ],
+      "success": false
+    }
+  ]
+}

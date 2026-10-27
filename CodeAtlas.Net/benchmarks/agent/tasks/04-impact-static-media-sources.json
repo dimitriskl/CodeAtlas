@@ -1,0 +1,47 @@
+{
+  "id": "impact-static-media-sources",
+  "kind": "impact",
+  "title": "Files affected by changing IMediaSourceManager.GetStaticMediaSources",
+  "prompt": "We plan to change the signature of IMediaSourceManager.GetStaticMediaSources(BaseItem, bool, User). List every source file, including tests, that calls or implements this method and would therefore need to change. Do not include files that only use other methods with the same name. Report repository-relative paths in files and the calling or implementing methods (Type.Method) in symbols.",
+  "answer": true,
+  "checks": [
+    {
+      "type": "answer-set",
+      "field": "files",
+      "match": "path",
+      "required": [
+        "Emby.Server.Implementations/Dto/DtoService.cs",
+        "Emby.Server.Implementations/Library/MediaSourceManager.cs",
+        "Jellyfin.Api/Controllers/SubtitleController.cs",
+        "src/Jellyfin.LiveTv/LiveTvMediaSourceProvider.cs"
+      ],
+      "allowed": [
+        "MediaBrowser.Controller/Library/IMediaSourceManager.cs"
+      ],
+      "forbidden": [
+        "MediaBrowser.Controller/Channels/IChannelManager.cs",
+        "MediaBrowser.Controller/Entities/BaseItem.cs",
+        "src/Jellyfin.LiveTv/Channels/ChannelManager.cs"
+      ]
+    }
+  ],
+  "reference": {
+    "answer": {
+      "files": [
+        "Emby.Server.Implementations/Dto/DtoService.cs",
+        "Emby.Server.Implementations/Library/MediaSourceManager.cs",
+        "Jellyfin.Api/Controllers/SubtitleController.cs",
+        "src/Jellyfin.LiveTv/LiveTvMediaSourceProvider.cs",
+        "MediaBrowser.Controller/Library/IMediaSourceManager.cs"
+      ],
+      "symbols": [
+        "DtoService.GetBaseItemDtoInternal",
+        "DtoService.AttachBasicFields",
+        "MediaSourceManager.GetStaticMediaSources",
+        "MediaSourceManager.GetPlaybackMediaSources",
+        "SubtitleController.GetSubtitle",
+        "LiveTvMediaSourceProvider.GetMediaSourcesInternal"
+      ]
+    }
+  }
+}

@@ -1,0 +1,38 @@
+diff --git a/Shop.App/CheckoutService.cs b/Shop.App/CheckoutService.cs
+index 5c728f1..a7e76da 100644
+--- a/Shop.App/CheckoutService.cs
++++ b/Shop.App/CheckoutService.cs
+@@ -9,7 +9,7 @@ public sealed class CheckoutService(IPaymentProcessor processor, DiscountCalcula
+ {
+     public PaymentResult Complete(Order order, Coupon? coupon)
+     {
+-        var total = coupon is null ? order.Total : discounts.Apply(order, coupon);
++        var total = coupon is null ? order.Total : discounts.ApplyCoupon(order, coupon);
+         total += shipping.Calculate(order);
+         return processor.Charge(order, total);
+     }
+diff --git a/Shop.App/LoyaltyService.cs b/Shop.App/LoyaltyService.cs
+index ee2ad21..690dbf8 100644
+--- a/Shop.App/LoyaltyService.cs
++++ b/Shop.App/LoyaltyService.cs
+@@ -7,6 +7,6 @@ public sealed class LoyaltyService(DiscountCalculator discounts)
+ {
+     public decimal PriceForMember(Order order, Coupon memberCoupon)
+     {
+-        return discounts.Apply(order, memberCoupon);
++        return discounts.ApplyCoupon(order, memberCoupon);
+     }
+ }
+diff --git a/Shop.Core/Discounts/DiscountCalculator.cs b/Shop.Core/Discounts/DiscountCalculator.cs
+index 3eba310..9fab380 100644
+--- a/Shop.Core/Discounts/DiscountCalculator.cs
++++ b/Shop.Core/Discounts/DiscountCalculator.cs
+@@ -11,7 +11,7 @@ public sealed class DiscountCalculator
+         return Math.Round(order.Total * (1 - percent / 100m), 2);
+     }
+ 
+-    public decimal Apply(Order order, Coupon coupon)
++    public decimal ApplyCoupon(Order order, Coupon coupon)
+     {
+         var today = DateOnly.FromDateTime(DateTime.UtcNow);
+         if (_validator.IsExpired(coupon, today) || !_validator.HasValidCode(coupon))

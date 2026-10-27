@@ -1,0 +1,54 @@
+{
+  "id": "impact-metadata-saver-implementations",
+  "kind": "impact",
+  "title": "Classes affected by a new IMetadataSaver member",
+  "prompt": "We plan to add a new member to the interface MediaBrowser.Controller.Library.IMetadataSaver. List every concrete (non-abstract) class in the solution that implements IMetadataSaver, directly or through a derived interface or a base class, because each of them will need the new behavior. Report the class names in symbols and their files in files.",
+  "answer": true,
+  "checks": [
+    {
+      "type": "answer-set",
+      "field": "symbols",
+      "match": "name",
+      "required": [
+        "BoxSetXmlSaver",
+        "PlaylistXmlSaver",
+        "AlbumNfoSaver",
+        "ArtistNfoSaver",
+        "EpisodeNfoSaver",
+        "MovieNfoSaver",
+        "SeasonNfoSaver",
+        "SeriesNfoSaver"
+      ],
+      "allowed": [
+        "BaseXmlSaver",
+        "BaseNfoSaver",
+        "IMetadataFileSaver"
+      ],
+      "minPrecision": 0.8
+    }
+  ],
+  "reference": {
+    "answer": {
+      "files": [
+        "MediaBrowser.LocalMetadata/Savers/BoxSetXmlSaver.cs",
+        "MediaBrowser.LocalMetadata/Savers/PlaylistXmlSaver.cs",
+        "MediaBrowser.XbmcMetadata/Savers/AlbumNfoSaver.cs",
+        "MediaBrowser.XbmcMetadata/Savers/ArtistNfoSaver.cs",
+        "MediaBrowser.XbmcMetadata/Savers/EpisodeNfoSaver.cs",
+        "MediaBrowser.XbmcMetadata/Savers/MovieNfoSaver.cs",
+        "MediaBrowser.XbmcMetadata/Savers/SeasonNfoSaver.cs",
+        "MediaBrowser.XbmcMetadata/Savers/SeriesNfoSaver.cs"
+      ],
+      "symbols": [
+        "MediaBrowser.LocalMetadata.Savers.BoxSetXmlSaver",
+        "MediaBrowser.LocalMetadata.Savers.PlaylistXmlSaver",
+        "MediaBrowser.XbmcMetadata.Savers.AlbumNfoSaver",
+        "MediaBrowser.XbmcMetadata.Savers.ArtistNfoSaver",
+        "MediaBrowser.XbmcMetadata.Savers.EpisodeNfoSaver",
+        "MediaBrowser.XbmcMetadata.Savers.MovieNfoSaver",
+        "MediaBrowser.XbmcMetadata.Savers.SeasonNfoSaver",
+        "MediaBrowser.XbmcMetadata.Savers.SeriesNfoSaver"
+      ]
+    }
+  }
+}

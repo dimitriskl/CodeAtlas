@@ -1,0 +1,302 @@
+{
+  "label": "ollama-qwen3-8b",
+  "suite": "jellyfin",
+  "results": "C:\\Code\\CodeAtlas\\CodeAtlas.Net\\benchmarks\\agent\\results\\20261025T075028Z-ollama-qwen3-8b",
+  "totals": {
+    "plain": {
+      "runs": 5,
+      "oldSuccesses": 0,
+      "newSuccesses": 0,
+      "lenientSuccesses": 0
+    },
+    "codeatlas": {
+      "runs": 6,
+      "oldSuccesses": 0,
+      "newSuccesses": 0,
+      "lenientSuccesses": 0
+    }
+  },
+  "runs": [
+    {
+      "task": "find-password-verification",
+      "mode": "plain",
+      "repetition": 1,
+      "oldSuccess": false,
+      "answerFileFrom": null,
+      "answerSource": "final-text",
+      "answerParse": "json-object",
+      "answerLenient": true,
+      "answer": {
+        "files": [
+          "Jellyfin.Server.Implementations/Users/UserManager.cs"
+        ],
+        "symbols": [
+          "Jellyfin.Server.Implementations.Users.UserManager.ValidatePassword"
+        ]
+      },
+      "checks": [
+        {
+          "type": "answer-set",
+          "name": "files",
+          "passed": false,
+          "recall": 0.0,
+          "precision": 0.0,
+          "missing": [
+            "jellyfin.server.implementations/users/defaultauthenticationprovider.cs"
+          ],
+          "unexpected": [
+            "jellyfin.server.implementations/users/usermanager.cs"
+          ],
+          "forbidden": []
+        },
+        {
+          "type": "answer-contains",
+          "name": "symbols",
+          "passed": false,
+          "missingGroups": [
+            [
+              "DefaultAuthenticationProvider.Authenticate"
+            ]
+          ]
+        }
+      ],
+      "success": false
+    },
+    {
+      "task": "find-password-verification",
+      "mode": "codeatlas",
+      "repetition": 1,
+      "oldSuccess": false,
+      "answerFileFrom": null,
+      "answerSource": "final-text",
+      "answerParse": "json-object",
+      "answerLenient": true,
+      "answer": {
+        "files": [
+          "Jellyfin.Server.Implementations/Users/UserManager.cs"
+        ],
+        "symbols": [
+          "Jellyfin.Server.Implementations.Users.UserManager.AuthenticateLocalUser",
+          "Jellyfin.Server.Implementations.Users.UserManager.AuthenticateWithProvider"
+        ]
+      },
+      "checks": [
+        {
+          "type": "answer-set",
+          "name": "files",
+          "passed": false,
+          "recall": 0.0,
+          "precision": 0.0,
+          "missing": [
+            "jellyfin.server.implementations/users/defaultauthenticationprovider.cs"
+          ],
+          "unexpected": [
+            "jellyfin.server.implementations/users/usermanager.cs"
+          ],
+          "forbidden": []
+        },
+        {
+          "type": "answer-contains",
+          "name": "symbols",
+          "passed": false,
+          "missingGroups": [
+            [
+              "DefaultAuthenticationProvider.Authenticate"
+            ]
+          ]
+        }
+      ],
+      "success": false
+    },
+    {
+      "task": "find-episode-number-parsing",
+      "mode": "codeatlas",
+      "repetition": 1,
+      "oldSuccess": false,
+      "answerFileFrom": null,
+      "answerSource": null,
+      "answerParse": null,
+      "answerLenient": false,
+      "answer": null,
+      "checks": [
+        {
+          "type": "answer-set",
+          "name": "files",
+          "passed": false,
+          "detail": "answer.files is not a list"
+        },
+        {
+          "type": "answer-contains",
+          "name": "symbols",
+          "passed": false,
+          "detail": "answer.symbols is not a list"
+        }
+      ],
+      "success": false
+    },
+    {
+      "task": "find-episode-number-parsing",
+      "mode": "plain",
+      "repetition": 1,
+      "oldSuccess": false,
+      "answerFileFrom": null,
+      "answerSource": "final-text",
+      "answerParse": "json-object",
+      "answerLenient": true,
+      "answer": {
+        "files": [
+          "Jellyfin.Naming/TV/EpisodePathParser.cs",
+          "Jellyfin.Naming/TV/SeasonNumberTests.cs"
+        ],
+        "symbols": [
+          "EpisodePathParser.ParseEpisodeInfo",
+          "EpisodePathParser.ExtractSeasonEpisode"
+        ]
+      },
+      "checks": [
+        {
+          "type": "answer-set",
+          "name": "files",
+          "passed": false,
+          "recall": 0.0,
+          "precision": 0.0,
+          "missing": [
+            "emby.naming/tv/episodepathparser.cs"
+          ],
+          "unexpected": [
+            "jellyfin.naming/tv/episodepathparser.cs",
+            "jellyfin.naming/tv/seasonnumbertests.cs"
+          ],
+          "forbidden": []
+        },
+        {
+          "type": "answer-contains",
+          "name": "symbols",
+          "passed": true,
+          "missingGroups": []
+        }
+      ],
+      "success": false
+    },
+    {
+      "task": "impact-metadata-saver-implementations",
+      "mode": "plain",
+      "repetition": 1,
+      "oldSuccess": false,
+      "answerFileFrom": null,
+      "answerSource": "final-text",
+      "answerParse": "json-object",
+      "answerLenient": true,
+      "answer": {
+        "files": [
+          "MediaBrowser.Providers\\Manager\\ProviderManager.cs"
+        ],
+        "symbols": [
+          "ImageSaver"
+        ]
+      },
+      "checks": [
+        {
+          "type": "answer-set",
+          "name": "symbols",
+          "passed": false,
+          "recall": 0.0,
+          "precision": 0.0,
+          "missing": [
+            "AlbumNfoSaver",
+            "ArtistNfoSaver",
+            "BoxSetXmlSaver",
+            "EpisodeNfoSaver",
+            "MovieNfoSaver",
+            "PlaylistXmlSaver",
+            "SeasonNfoSaver",
+            "SeriesNfoSaver"
+          ],
+          "unexpected": [
+            "ImageSaver"
+          ],
+          "forbidden": []
+        }
+      ],
+      "success": false
+    },
+    {
+      "task": "impact-metadata-saver-implementations",
+      "mode": "codeatlas",
+      "repetition": 1,
+      "oldSuccess": false,
+      "answerFileFrom": null,
+      "answerSource": null,
+      "answerParse": null,
+      "answerLenient": false,
+      "answer": null,
+      "checks": [
+        {
+          "type": "answer-set",
+          "name": "symbols",
+          "passed": false,
+          "detail": "answer.symbols is not a list"
+        }
+      ],
+      "success": false
+    },
+    {
+      "task": "impact-static-media-sources",
+      "mode": "codeatlas",
+      "repetition": 1,
+      "oldSuccess": false,
+      "answerFileFrom": null,
+      "answerSource": null,
+      "answerParse": null,
+      "answerLenient": false,
+      "answer": null,
+      "checks": [
+        {
+          "type": "answer-set",
+          "name": "files",
+          "passed": false,
+          "detail": "answer.files is not a list"
+        }
+      ],
+      "success": false
+    },
+    {
+      "task": "impact-static-media-sources",
+      "mode": "plain",
+      "repetition": 1,
+      "oldSuccess": false,
+      "answerFileFrom": null,
+      "answerSource": "final-text",
+      "answerParse": "json-object",
+      "answerLenient": true,
+      "answer": {
+        "files": [
+          "MediaBrowser.Controller\\Library\\IMediaSourceManager.cs",
+          "Emby.Server.Implementations\\Library\\MediaSourceManager.cs",
+          "src\\Jellyfin.LiveTv\\LiveTvMediaSourceProvider.cs"
+        ],
+        "symbols": [
+          "IMediaSourceManager.GetStaticMediaSources",
+          "MediaSourceManager.GetStaticMediaSources",
+          "LiveTvMediaSourceProvider.GetStaticMediaSources"
+        ]
+      },
+      "checks": [
+        {
+          "type": "answer-set",
+          "name": "files",
+          "passed": false,
+          "recall": 0.5,
+          "precision": 1.0,
+          "missing": [
+            "emby.server.implementations/dto/dtoservice.cs",
+            "jellyfin.api/controllers/subtitlecontroller.cs"
+          ],
+          "unexpected": [],
+          "forbidden": []
+        }
+      ],
+      "success": false
+    }
+  ]
+}

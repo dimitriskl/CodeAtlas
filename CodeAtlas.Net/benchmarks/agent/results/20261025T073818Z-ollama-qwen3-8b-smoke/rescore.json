@@ -1,0 +1,60 @@
+{
+  "label": "ollama-qwen3-8b-smoke",
+  "suite": "jellyfin",
+  "results": "C:\\Code\\CodeAtlas\\CodeAtlas.Net\\benchmarks\\agent\\results\\20261025T073818Z-ollama-qwen3-8b-smoke",
+  "totals": {
+    "plain": {
+      "runs": 1,
+      "oldSuccesses": 0,
+      "newSuccesses": 0,
+      "lenientSuccesses": 0
+    }
+  },
+  "runs": [
+    {
+      "task": "find-password-verification",
+      "mode": "plain",
+      "repetition": 1,
+      "oldSuccess": false,
+      "answerFileFrom": "stream",
+      "answerSource": "file",
+      "answerParse": "json-object",
+      "answerLenient": false,
+      "answer": {
+        "files": [
+          "Emby.Server.Implementations/Cryptography/CryptographyProvider.cs"
+        ],
+        "symbols": [
+          "CryptographyProvider.Verify"
+        ]
+      },
+      "checks": [
+        {
+          "type": "answer-set",
+          "name": "files",
+          "passed": false,
+          "recall": 0.0,
+          "precision": 0.0,
+          "missing": [
+            "jellyfin.server.implementations/users/defaultauthenticationprovider.cs"
+          ],
+          "unexpected": [
+            "emby.server.implementations/cryptography/cryptographyprovider.cs"
+          ],
+          "forbidden": []
+        },
+        {
+          "type": "answer-contains",
+          "name": "symbols",
+          "passed": false,
+          "missingGroups": [
+            [
+              "DefaultAuthenticationProvider.Authenticate"
+            ]
+          ]
+        }
+      ],
+      "success": false
+    }
+  ]
+}

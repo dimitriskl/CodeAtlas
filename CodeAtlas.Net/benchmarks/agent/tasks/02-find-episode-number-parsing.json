@@ -1,0 +1,36 @@
+{
+  "id": "find-episode-number-parsing",
+  "kind": "find",
+  "title": "Find where season and episode numbers are parsed from a path",
+  "prompt": "When the library scan meets a file such as 'Show Name/Season 02/Show Name S02E05.mkv', which method applies the episode naming expressions to extract the season and episode numbers from the path? Report the file and the method (Type.Method).",
+  "answer": true,
+  "checks": [
+    {
+      "type": "answer-set",
+      "field": "files",
+      "match": "path",
+      "required": [
+        "Emby.Naming/TV/EpisodePathParser.cs"
+      ]
+    },
+    {
+      "type": "answer-contains",
+      "field": "symbols",
+      "groups": [
+        [
+          "EpisodePathParser.Parse"
+        ]
+      ]
+    }
+  ],
+  "reference": {
+    "answer": {
+      "files": [
+        "Emby.Naming/TV/EpisodePathParser.cs"
+      ],
+      "symbols": [
+        "Emby.Naming.TV.EpisodePathParser.Parse"
+      ]
+    }
+  }
+}

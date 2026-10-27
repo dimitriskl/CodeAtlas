@@ -1,0 +1,38 @@
+{
+  "id": "impact-open-orders-callers",
+  "kind": "impact",
+  "title": "Files that call or implement IOrderRepository.GetOpenOrders",
+  "prompt": "List every file that calls or implements IOrderRepository.GetOpenOrders. Do not list files that only use the unrelated IReportService.GetOpenOrders.",
+  "answer": true,
+  "checks": [
+    {
+      "type": "answer-set",
+      "field": "files",
+      "match": "path",
+      "required": [
+        "Shop.Core/Orders/InMemoryOrderRepository.cs",
+        "Shop.App/CustomerStatementService.cs",
+        "Shop.App/ReminderJob.cs"
+      ],
+      "allowed": [
+        "Shop.Core/Orders/IOrderRepository.cs"
+      ],
+      "forbidden": [
+        "Shop.App/ReportPrinter.cs",
+        "Shop.Core/Reports/DailyReportService.cs",
+        "Shop.Core/Reports/IReportService.cs"
+      ]
+    }
+  ],
+  "reference": {
+    "answer": {
+      "files": [
+        "Shop.Core/Orders/IOrderRepository.cs",
+        "Shop.Core/Orders/InMemoryOrderRepository.cs",
+        "Shop.App/CustomerStatementService.cs",
+        "Shop.App/ReminderJob.cs"
+      ],
+      "symbols": []
+    }
+  }
+}

@@ -1,0 +1,9 @@
+{
+  "name": "jellyfin",
+  "repository": "https://github.com/jellyfin/jellyfin.git",
+  "tag": "v10.11.9",
+  "commit": "e83a7e62f26443f7dd98f126d6955ac1af090125",
+  "solution": "Jellyfin.sln",
+  "sdk": "Repository global.json selects 9.0.x (9.0.0 with latestMinor); 9.0.311 was used locally",
+  "why": "Well-known, actively maintained C# media server with 40 projects and about 2,000 C# files. It restores and builds with an installed .NET 9 SDK and has no Aspire, Node or database setup. Its layered interfaces (MediaBrowser.Controller), base-class hierarchies, same-named members on unrelated types and DI-heavy controllers exercise the navigation that CodeAtlas claims to improve. OrchardCore is larger than useful for a first baseline; eShop is smaller; nopCommerce was not needed."
+}

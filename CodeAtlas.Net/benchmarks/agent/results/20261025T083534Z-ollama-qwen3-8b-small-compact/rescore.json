@@ -1,0 +1,647 @@
+{
+  "label": "ollama-qwen3-8b-small-compact",
+  "suite": "small",
+  "results": "C:\\Code\\CodeAtlas\\CodeAtlas.Net\\benchmarks\\agent\\results\\20261025T083534Z-ollama-qwen3-8b-small-compact",
+  "totals": {
+    "plain": {
+      "runs": 15,
+      "oldSuccesses": 1,
+      "newSuccesses": 4,
+      "lenientSuccesses": 3
+    },
+    "codeatlas": {
+      "runs": 15,
+      "oldSuccesses": 4,
+      "newSuccesses": 7,
+      "lenientSuccesses": 3
+    }
+  },
+  "runs": [
+    {
+      "task": "find-coupon-expiry",
+      "mode": "plain",
+      "repetition": 1,
+      "oldSuccess": false,
+      "answerFileFrom": "stream",
+      "answerSource": "file",
+      "answerParse": "backslashes+json-object",
+      "answerLenient": true,
+      "answer": {
+        "files": [
+          "Shop.Core\\Discounts\\CouponValidator.cs"
+        ],
+        "symbols": [
+          "Shop.Core.Discounts.CouponValidator.IsExpired"
+        ]
+      },
+      "checks": [
+        {
+          "type": "answer-set",
+          "name": "files",
+          "passed": true,
+          "recall": 1.0,
+          "precision": 1.0,
+          "missing": [],
+          "unexpected": [],
+          "forbidden": []
+        },
+        {
+          "type": "answer-contains",
+          "name": "symbols",
+          "passed": true,
+          "missingGroups": []
+        }
+      ],
+      "success": true
+    },
+    {
+      "task": "find-coupon-expiry",
+      "mode": "codeatlas",
+      "repetition": 1,
+      "oldSuccess": false,
+      "answerFileFrom": "stream",
+      "answerSource": "file",
+      "answerParse": "double-encoded+json-object",
+      "answerLenient": true,
+      "answer": {
+        "files": [
+          "Shop.Core/Discounts/CouponValidator.cs"
+        ],
+        "symbols": [
+          "Shop.Core.Discounts.CouponValidator+IsExpired"
+        ]
+      },
+      "checks": [
+        {
+          "type": "answer-set",
+          "name": "files",
+          "passed": true,
+          "recall": 1.0,
+          "precision": 1.0,
+          "missing": [],
+          "unexpected": [],
+          "forbidden": []
+        },
+        {
+          "type": "answer-contains",
+          "name": "symbols",
+          "passed": true,
+          "missingGroups": []
+        }
+      ],
+      "success": true
+    },
+    {
+      "task": "impact-payment-processors",
+      "mode": "codeatlas",
+      "repetition": 1,
+      "oldSuccess": false,
+      "answerFileFrom": "stream",
+      "answerSource": "file",
+      "answerParse": "double-encoded+json-object",
+      "answerLenient": true,
+      "answer": {
+        "files": [
+          "Shop.Core/Payments/CardPaymentProcessor.cs",
+          "Shop.Core/Payments/PayPalPaymentProcessor.cs"
+        ],
+        "symbols": [
+          "Shop.Core.Payments.CardPaymentProcessor",
+          "Shop.Core.Payments.PayPalPaymentProcessor"
+        ]
+      },
+      "checks": [
+        {
+          "type": "answer-set",
+          "name": "symbols",
+          "passed": false,
+          "recall": 0.5,
+          "precision": 1.0,
+          "missing": [
+            "SepaPaymentProcessor",
+            "WirePaymentProcessor"
+          ],
+          "unexpected": [],
+          "forbidden": []
+        }
+      ],
+      "success": false
+    },
+    {
+      "task": "impact-payment-processors",
+      "mode": "plain",
+      "repetition": 1,
+      "oldSuccess": false,
+      "answerFileFrom": "stream",
+      "answerSource": "file",
+      "answerParse": "backslashes+json-object",
+      "answerLenient": true,
+      "answer": {
+        "files": [
+          "Shop.Core\\Payments\\CardPaymentProcessor.cs",
+          "Shop.Core\\Payments\\PayPalPaymentProcessor.cs"
+        ],
+        "symbols": [
+          "Shop.Core.Payments.CardPaymentProcessor",
+          "Shop.Core.Payments.PayPalPaymentProcessor"
+        ]
+      },
+      "checks": [
+        {
+          "type": "answer-set",
+          "name": "symbols",
+          "passed": false,
+          "recall": 0.5,
+          "precision": 1.0,
+          "missing": [
+            "SepaPaymentProcessor",
+            "WirePaymentProcessor"
+          ],
+          "unexpected": [],
+          "forbidden": []
+        }
+      ],
+      "success": false
+    },
+    {
+      "task": "impact-open-orders-callers",
+      "mode": "plain",
+      "repetition": 1,
+      "oldSuccess": false,
+      "answerFileFrom": null,
+      "answerSource": null,
+      "answerParse": null,
+      "answerLenient": false,
+      "answer": null,
+      "checks": [
+        {
+          "type": "answer-set",
+          "name": "files",
+          "passed": false,
+          "detail": "answer.files is not a list"
+        }
+      ],
+      "success": false
+    },
+    {
+      "task": "impact-open-orders-callers",
+      "mode": "codeatlas",
+      "repetition": 1,
+      "oldSuccess": false,
+      "answerFileFrom": "stream",
+      "answerSource": "file",
+      "answerParse": "escaped-quotes+backslashes+json-object",
+      "answerLenient": true,
+      "answer": {
+        "files": [
+          "Shop.Core\\Orders\\InMemoryOrderRepository.cs",
+          "Shop.Core\\Orders\\IOrderRepository.cs"
+        ],
+        "symbols": [
+          "Shop.Core\\Orders\\IOrderRepository.GetOpenOrders",
+          "Shop.Core\\Orders\\InMemoryOrderRepository.GetOpenOrders"
+        ]
+      },
+      "checks": [
+        {
+          "type": "answer-set",
+          "name": "files",
+          "passed": false,
+          "recall": 0.3333,
+          "precision": 1.0,
+          "missing": [
+            "shop.app/customerstatementservice.cs",
+            "shop.app/reminderjob.cs"
+          ],
+          "unexpected": [],
+          "forbidden": []
+        }
+      ],
+      "success": false
+    },
+    {
+      "task": "find-coupon-expiry",
+      "mode": "codeatlas",
+      "repetition": 2,
+      "oldSuccess": false,
+      "answerFileFrom": "stream",
+      "answerSource": "file",
+      "answerParse": "double-encoded+json-object",
+      "answerLenient": true,
+      "answer": {
+        "files": [
+          "Shop.Core/Discounts/CouponValidator.cs"
+        ],
+        "symbols": [
+          "CouponValidator.IsExpired"
+        ]
+      },
+      "checks": [
+        {
+          "type": "answer-set",
+          "name": "files",
+          "passed": true,
+          "recall": 1.0,
+          "precision": 1.0,
+          "missing": [],
+          "unexpected": [],
+          "forbidden": []
+        },
+        {
+          "type": "answer-contains",
+          "name": "symbols",
+          "passed": true,
+          "missingGroups": []
+        }
+      ],
+      "success": true
+    },
+    {
+      "task": "find-coupon-expiry",
+      "mode": "plain",
+      "repetition": 2,
+      "oldSuccess": false,
+      "answerFileFrom": "stream",
+      "answerSource": "final-text",
+      "answerParse": "markdown-fence+json-object",
+      "answerLenient": false,
+      "answer": {
+        "files": [
+          "Shop.Core\\Discounts\\Coupon.cs"
+        ],
+        "symbols": [
+          "Shop.Core.Discounts.Coupon.IsExpired"
+        ]
+      },
+      "checks": [
+        {
+          "type": "answer-set",
+          "name": "files",
+          "passed": false,
+          "recall": 0.0,
+          "precision": 0.0,
+          "missing": [
+            "shop.core/discounts/couponvalidator.cs"
+          ],
+          "unexpected": [
+            "shop.core/discounts/coupon.cs"
+          ],
+          "forbidden": []
+        },
+        {
+          "type": "answer-contains",
+          "name": "symbols",
+          "passed": false,
+          "missingGroups": [
+            [
+              "CouponValidator.IsExpired"
+            ]
+          ]
+        }
+      ],
+      "success": false
+    },
+    {
+      "task": "impact-payment-processors",
+      "mode": "plain",
+      "repetition": 2,
+      "oldSuccess": false,
+      "answerFileFrom": "stream",
+      "answerSource": "file",
+      "answerParse": "escaped-quotes+backslashes+json-object",
+      "answerLenient": true,
+      "answer": {
+        "files": [
+          "Shop.Core\\Payments\\PayPalPaymentProcessor.cs",
+          "Shop.Core\\Payments\\CardPaymentProcessor.cs"
+        ],
+        "symbols": [
+          "PayPalPaymentProcessor",
+          "CardPaymentProcessor"
+        ]
+      },
+      "checks": [
+        {
+          "type": "answer-set",
+          "name": "symbols",
+          "passed": false,
+          "recall": 0.5,
+          "precision": 1.0,
+          "missing": [
+            "SepaPaymentProcessor",
+            "WirePaymentProcessor"
+          ],
+          "unexpected": [],
+          "forbidden": []
+        }
+      ],
+      "success": false
+    },
+    {
+      "task": "impact-payment-processors",
+      "mode": "codeatlas",
+      "repetition": 2,
+      "oldSuccess": false,
+      "answerFileFrom": "stream",
+      "answerSource": "file",
+      "answerParse": "layout+json-object",
+      "answerLenient": true,
+      "answer": {
+        "files": [
+          "Shop.Core/Payments/CardPaymentProcessor.cs",
+          "Shop.Core/Payments/PayPalPaymentProcessor.cs",
+          "Shop.Core/Payments/SepaPaymentProcessor.cs",
+          "Shop.Core/Payments/WirePaymentProcessor.cs"
+        ],
+        "symbols": [
+          "Shop.Core.Payments.CardPaymentProcessor",
+          "Shop.Core.Payments.PayPalPaymentProcessor",
+          "Shop.Core.Payments.SepaPaymentProcessor",
+          "Shop.Core.Payments.WirePaymentProcessor"
+        ]
+      },
+      "checks": [
+        {
+          "type": "answer-set",
+          "name": "symbols",
+          "passed": true,
+          "recall": 1.0,
+          "precision": 1.0,
+          "missing": [],
+          "unexpected": [],
+          "forbidden": []
+        }
+      ],
+      "success": true
+    },
+    {
+      "task": "impact-open-orders-callers",
+      "mode": "codeatlas",
+      "repetition": 2,
+      "oldSuccess": false,
+      "answerFileFrom": "stream",
+      "answerSource": "file",
+      "answerParse": "double-encoded+json-object",
+      "answerLenient": true,
+      "answer": {
+        "files": [
+          "Shop.Core/Orders/IOrderRepository.cs",
+          "Shop.Core/Orders/InMemoryOrderRepository.cs"
+        ],
+        "symbols": [
+          "Shop.Core/Shop.Core.csproj::M:Shop.Core.Orders.IOrderRepository.GetOpenOrders(System.String)",
+          "Shop.Core/Shop.Core.csproj::M:Shop.Core.Orders.InMemoryOrderRepository.GetOpenOrders(System.String)"
+        ]
+      },
+      "checks": [
+        {
+          "type": "answer-set",
+          "name": "files",
+          "passed": false,
+          "recall": 0.3333,
+          "precision": 1.0,
+          "missing": [
+            "shop.app/customerstatementservice.cs",
+            "shop.app/reminderjob.cs"
+          ],
+          "unexpected": [],
+          "forbidden": []
+        }
+      ],
+      "success": false
+    },
+    {
+      "task": "impact-open-orders-callers",
+      "mode": "plain",
+      "repetition": 2,
+      "oldSuccess": false,
+      "answerFileFrom": "stream",
+      "answerSource": "file",
+      "answerParse": "escaped-quotes+backslashes+json-object",
+      "answerLenient": true,
+      "answer": {
+        "files": [
+          "Shop.Core\\Orders\\InMemoryOrderRepository.cs"
+        ],
+        "symbols": [
+          "Shop.Core.Orders.IOrderRepository.GetOpenOrders"
+        ]
+      },
+      "checks": [
+        {
+          "type": "answer-set",
+          "name": "files",
+          "passed": false,
+          "recall": 0.3333,
+          "precision": 1.0,
+          "missing": [
+            "shop.app/customerstatementservice.cs",
+            "shop.app/reminderjob.cs"
+          ],
+          "unexpected": [],
+          "forbidden": []
+        }
+      ],
+      "success": false
+    },
+    {
+      "task": "find-coupon-expiry",
+      "mode": "plain",
+      "repetition": 3,
+      "oldSuccess": false,
+      "answerFileFrom": "stream",
+      "answerSource": "file",
+      "answerParse": "backslashes+json-object",
+      "answerLenient": true,
+      "answer": {
+        "files": [
+          "Shop.Core\\Discounts\\CouponValidator.cs"
+        ],
+        "symbols": [
+          "CouponValidator.IsExpired"
+        ]
+      },
+      "checks": [
+        {
+          "type": "answer-set",
+          "name": "files",
+          "passed": true,
+          "recall": 1.0,
+          "precision": 1.0,
+          "missing": [],
+          "unexpected": [],
+          "forbidden": []
+        },
+        {
+          "type": "answer-contains",
+          "name": "symbols",
+          "passed": true,
+          "missingGroups": []
+        }
+      ],
+      "success": true
+    },
+    {
+      "task": "find-coupon-expiry",
+      "mode": "codeatlas",
+      "repetition": 3,
+      "oldSuccess": true,
+      "answerFileFrom": "stream",
+      "answerSource": "file",
+      "answerParse": "json-object",
+      "answerLenient": false,
+      "answer": {
+        "files": [
+          "Shop.Core/Discounts/CouponValidator.cs"
+        ],
+        "symbols": [
+          "Shop.Core.Discounts.CouponValidator.IsExpired"
+        ]
+      },
+      "checks": [
+        {
+          "type": "answer-set",
+          "name": "files",
+          "passed": true,
+          "recall": 1.0,
+          "precision": 1.0,
+          "missing": [],
+          "unexpected": [],
+          "forbidden": []
+        },
+        {
+          "type": "answer-contains",
+          "name": "symbols",
+          "passed": true,
+          "missingGroups": []
+        }
+      ],
+      "success": true
+    },
+    {
+      "task": "impact-payment-processors",
+      "mode": "codeatlas",
+      "repetition": 3,
+      "oldSuccess": false,
+      "answerFileFrom": null,
+      "answerSource": null,
+      "answerParse": null,
+      "answerLenient": false,
+      "answer": null,
+      "checks": [
+        {
+          "type": "answer-set",
+          "name": "symbols",
+          "passed": false,
+          "detail": "answer.symbols is not a list"
+        }
+      ],
+      "success": false
+    },
+    {
+      "task": "impact-payment-processors",
+      "mode": "plain",
+      "repetition": 3,
+      "oldSuccess": false,
+      "answerFileFrom": "stream",
+      "answerSource": "file",
+      "answerParse": "backslashes+json-list",
+      "answerLenient": true,
+      "answer": {
+        "files": [
+          "Shop.Core\\Payments\\PayPalPaymentProcessor.cs",
+          "Shop.Core\\Payments\\BankPaymentProcessorBase.cs",
+          "Shop.Core\\Payments\\CardPaymentProcessor.cs"
+        ],
+        "symbols": []
+      },
+      "checks": [
+        {
+          "type": "answer-set",
+          "name": "symbols",
+          "passed": false,
+          "recall": 0.0,
+          "precision": 0.0,
+          "missing": [
+            "CardPaymentProcessor",
+            "PayPalPaymentProcessor",
+            "SepaPaymentProcessor",
+            "WirePaymentProcessor"
+          ],
+          "unexpected": [],
+          "forbidden": []
+        }
+      ],
+      "success": false
+    },
+    {
+      "task": "impact-open-orders-callers",
+      "mode": "plain",
+      "repetition": 3,
+      "oldSuccess": false,
+      "answerFileFrom": "stream",
+      "answerSource": "file",
+      "answerParse": "backslashes+json-list",
+      "answerLenient": true,
+      "answer": {
+        "files": [
+          "Shop.Core\\Orders\\InMemoryOrderRepository.cs",
+          "Shop.App\\CustomerStatementService.cs",
+          "Shop.App\\ReminderJob.cs",
+          "Shop.App\\CheckoutService.cs",
+          "Shop.App\\LoyaltyService.cs"
+        ],
+        "symbols": []
+      },
+      "checks": [
+        {
+          "type": "answer-set",
+          "name": "files",
+          "passed": true,
+          "recall": 1.0,
+          "precision": 0.6,
+          "missing": [],
+          "unexpected": [
+            "shop.app/checkoutservice.cs",
+            "shop.app/loyaltyservice.cs"
+          ],
+          "forbidden": []
+        }
+      ],
+      "success": true
+    },
+    {
+      "task": "impact-open-orders-callers",
+      "mode": "codeatlas",
+      "repetition": 3,
+      "oldSuccess": false,
+      "answerFileFrom": "stream",
+      "answerSource": "file",
+      "answerParse": "backslashes+json-list",
+      "answerLenient": true,
+      "answer": {
+        "files": [
+          "Shop.Core\\Orders\\InMemoryOrderRepository.cs",
+          "Shop.Core\\Orders\\IOrderRepository.cs"
+        ],
+        "symbols": []
+      },
+      "checks": [
+        {
+          "type": "answer-set",
+          "name": "files",
+          "passed": false,
+          "recall": 0.3333,
+          "precision": 1.0,
+          "missing": [
+            "shop.app/customerstatementservice.cs",
+            "shop.app/reminderjob.cs"
+          ],
+          "unexpected": [],
+          "forbidden": []
+        }
+      ],
+      "success": false
+    }
+  ]
+}

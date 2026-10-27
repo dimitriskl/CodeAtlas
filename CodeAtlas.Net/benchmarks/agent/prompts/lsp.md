@@ -1,0 +1,1 @@
+A C# language server (csharp-ls) for this solution is available through the LSP tool: go to definition, find references, find implementations, hover, document symbols and workspace symbols. Prefer it for semantic navigation such as overloads, interface implementations and call sites, then read the source at the returned locations.

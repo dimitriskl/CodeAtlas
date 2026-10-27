@@ -1,0 +1,52 @@
+{
+  "label": "ollama-qwen3-8b-small-smoke2",
+  "suite": "small",
+  "results": "C:\\Code\\CodeAtlas\\CodeAtlas.Net\\benchmarks\\agent\\results\\20261025T083322Z-ollama-qwen3-8b-small-smoke2",
+  "totals": {
+    "plain": {
+      "runs": 2,
+      "oldSuccesses": 0,
+      "newSuccesses": 1,
+      "lenientSuccesses": 1
+    }
+  },
+  "runs": [
+    {
+      "task": "find-coupon-expiry",
+      "mode": "plain",
+      "repetition": 1,
+      "oldSuccess": false,
+      "answerFileFrom": "stream",
+      "answerSource": "file",
+      "answerParse": "backslashes+json-object",
+      "answerLenient": true,
+      "answer": {
+        "files": [
+          "Shop.Core\\Discounts\\CouponValidator.cs"
+        ],
+        "symbols": [
+          "CouponValidator.IsExpired"
+        ]
+      },
+      "checks": [
+        {
+          "type": "answer-set",
+          "name": "files",
+          "passed": true,
+          "recall": 1.0,
+          "precision": 1.0,
+          "missing": [],
+          "unexpected": [],
+          "forbidden": []
+        },
+        {
+          "type": "answer-contains",
+          "name": "symbols",
+          "passed": true,
+          "missingGroups": []
+        }
+      ],
+      "success": true
+    }
+  ]
+}

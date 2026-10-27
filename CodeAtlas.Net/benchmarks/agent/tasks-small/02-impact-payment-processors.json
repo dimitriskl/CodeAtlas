@@ -1,0 +1,39 @@
+{
+  "id": "impact-payment-processors",
+  "kind": "impact",
+  "title": "List the concrete payment processors",
+  "prompt": "List every concrete (non-abstract) class that implements IPaymentProcessor, directly or through a base class.",
+  "answer": true,
+  "checks": [
+    {
+      "type": "answer-set",
+      "field": "symbols",
+      "match": "name",
+      "required": [
+        "CardPaymentProcessor",
+        "PayPalPaymentProcessor",
+        "SepaPaymentProcessor",
+        "WirePaymentProcessor"
+      ],
+      "allowed": [
+        "BankPaymentProcessorBase",
+        "IPaymentProcessor"
+      ],
+      "forbidden": [
+        "FakeGatewayClient"
+      ],
+      "minPrecision": 0.8
+    }
+  ],
+  "reference": {
+    "answer": {
+      "files": [],
+      "symbols": [
+        "Shop.Core.Payments.CardPaymentProcessor",
+        "Shop.Core.Payments.PayPalPaymentProcessor",
+        "Shop.Core.Payments.SepaPaymentProcessor",
+        "Shop.Core.Payments.WirePaymentProcessor"
+      ]
+    }
+  }
+}

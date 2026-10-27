@@ -1,0 +1,257 @@
+{
+  "schemaVersion": 1,
+  "label": "ollama-qwen3-8b-small-smoke",
+  "startedAtUtc": "20261025T083043Z",
+  "target": {
+    "name": "shop",
+    "source": "small/Shop",
+    "commit": "16f89b6822e62675c3be73acb72ee199194dc57e",
+    "solution": "Shop.slnx",
+    "why": "Small local benchmark target sized for 8B local models: 2 projects, 23 C# files. It contains an interface with direct and base-class implementations plus a look-alike class that does not implement it, two overloads of one method, and a same-named method on an unrelated interface, so it exercises the same find, impact and change navigation as the Jellyfin suite in a context a small model can hold.",
+    "repository": "local source benchmarks/agent/small/Shop"
+  },
+  "model": "qwen3-8b-32k",
+  "suite": "small",
+  "compactAgent": true,
+  "provider": "ollama",
+  "ollama": {
+    "url": "http://localhost:11434",
+    "version": "0.40.10",
+    "model": "qwen3-8b-32k",
+    "numCtx": 32768,
+    "modelContextLength": 40960,
+    "capabilities": [
+      "completion",
+      "tools",
+      "thinking"
+    ],
+    "warning": null
+  },
+  "effort": null,
+  "repetitions": 1,
+  "maxBudgetUsdPerRun": null,
+  "timeoutSecondsPerRun": 900,
+  "maxTurns": 30,
+  "claudeVersion": "2.1.310 (Claude Code)",
+  "platform": "win32",
+  "isolation": "no setting sources plus agent-settings.json, empty strict MCP config, slash commands disabled, auto memory off, allowlisted environment",
+  "permissions": "dontAsk with allowlist",
+  "lsp": {
+    "available": false,
+    "status": "unavailable: csharp-ls is not installed (dotnet tool install --global csharp-ls); the LSP mode is skipped"
+  },
+  "codeatlas": {
+    "version": "0.00.32",
+    "setup": {
+      "wrapper": "C:\\temp\\codeatlas-bench\\suites\\small\\tools\\codeatlas.py",
+      "solution": "C:\\temp\\codeatlas-bench\\suites\\small\\work\\codeatlas\\Shop.slnx",
+      "version": "0.00.32",
+      "manifest": "C:\\temp\\codeatlas-bench\\suites\\small\\work\\codeatlas\\.codeatlas\\solutions\\Shop.slnx-6D45B1CB9D7AC82F62BDA9C627A925A92C6D0A7B8A681656DBB6078387043B01\\current.json",
+      "overview": "C:\\temp\\codeatlas-bench\\suites\\small\\work\\codeatlas\\.codeatlas\\solutions\\Shop.slnx-6D45B1CB9D7AC82F62BDA9C627A925A92C6D0A7B8A681656DBB6078387043B01\\generations\\02642382a02449ac95f40ebacb1c409a\\overview.md",
+      "indexId": "02642382a02449ac95f40ebacb1c409a",
+      "indexSeconds": 7.1,
+      "reportedElapsedSeconds": 6.967,
+      "projects": 2,
+      "types": 23,
+      "methods": 24,
+      "storeBytes": 873515,
+      "modelCostUsd": 0,
+      "createdAtUtc": "2026-10-25T08:30:04.3782724+00:00"
+    }
+  },
+  "tasks": [
+    "find-coupon-expiry"
+  ],
+  "runs": [
+    {
+      "task": "find-coupon-expiry",
+      "kind": "find",
+      "mode": "codeatlas",
+      "repetition": 1,
+      "status": "completed",
+      "setupSeconds": 0.0,
+      "indexFreshness": "unknown",
+      "elapsedSeconds": 50.5,
+      "exitCode": 0,
+      "timedOut": false,
+      "tools": {
+        "Bash": 4,
+        "Grep": 4,
+        "Read": 1,
+        "Write": 1
+      },
+      "bash": {
+        "codeatlas": 4
+      },
+      "initTools": [
+        "Bash",
+        "Glob",
+        "Grep",
+        "Read",
+        "Write"
+      ],
+      "model": "qwen3-8b-32k",
+      "apiKeySource": "none",
+      "inputTokens": 10763,
+      "outputTokens": 2841,
+      "cacheReadInputTokens": 88487,
+      "cacheCreationInputTokens": 0,
+      "totalTokens": 102091,
+      "resultReceived": true,
+      "subtype": "success",
+      "isError": false,
+      "usageSource": "result",
+      "turns": 11,
+      "costUsd": 0.0,
+      "durationSeconds": 50.049,
+      "apiSeconds": 47.447,
+      "models": [
+        "qwen3-8b-32k"
+      ],
+      "finalText": "The method `IsExpired` in the `CouponValidator` class determines if a coupon has expired by comparing its expiry date with the current date. \n\n**File:** `Shop.Core/Discounts/CouponValidator.cs`  \n**Symbol:** `CouponValidator.IsExpired`\n\nThe answer has been saved to `codeatlas-bench-answer.json`.",
+      "provider": "ollama",
+      "reportedCostUsd": 0.16908350000000003,
+      "answerSource": "file",
+      "changedFiles": [
+        "?? codeatlas-bench-answer.json"
+      ],
+      "checks": [
+        {
+          "type": "answer-set",
+          "name": "files",
+          "passed": true,
+          "recall": 1.0,
+          "precision": 1.0,
+          "missing": [],
+          "unexpected": [],
+          "forbidden": []
+        },
+        {
+          "type": "answer-contains",
+          "name": "symbols",
+          "passed": true,
+          "missingGroups": []
+        }
+      ],
+      "success": true
+    },
+    {
+      "task": "find-coupon-expiry",
+      "kind": "find",
+      "mode": "plain",
+      "repetition": 1,
+      "status": "completed",
+      "setupSeconds": 0.0,
+      "elapsedSeconds": 75.6,
+      "exitCode": 0,
+      "timedOut": false,
+      "tools": {
+        "Glob": 2,
+        "Grep": 3,
+        "Read": 9,
+        "Write": 1
+      },
+      "bash": {},
+      "initTools": [
+        "Glob",
+        "Grep",
+        "Read",
+        "Write"
+      ],
+      "model": "qwen3-8b-32k",
+      "apiKeySource": "none",
+      "inputTokens": 7666,
+      "outputTokens": 5314,
+      "cacheReadInputTokens": 64959,
+      "cacheCreationInputTokens": 0,
+      "totalTokens": 77939,
+      "resultReceived": true,
+      "subtype": "success",
+      "isError": false,
+      "usageSource": "result",
+      "turns": 16,
+      "costUsd": 0.0,
+      "durationSeconds": 75.18,
+      "apiSeconds": 74.852,
+      "models": [
+        "qwen3-8b-32k"
+      ],
+      "finalText": "The files `CouponValidator.cs` and `DiscountCalculator.cs` could not be located in the expected paths. This might indicate an incorrect directory structure or missing files in the current worktree. \n\nIf the method is indeed present in the codebase, it may reside in a different file or path. Alternatively, the method might be part of the `Coupon` class itself (e.g., `Coupon.IsExpired`). \n\nTo proceed, please verify the directory structure or confirm if the files exist in the current worktree. If the method is found, provide the file path and symbol (e.g., `Coupon.IsExpired`) for the final answer. \n\nSince the `Write` tool is denied, I cannot generate the JSON file directly. Let me know how to proceed!",
+      "provider": "ollama",
+      "reportedCostUsd": 0.2036595,
+      "answerSource": null,
+      "changedFiles": [],
+      "checks": [
+        {
+          "type": "answer-set",
+          "name": "files",
+          "passed": false,
+          "detail": "answer.files is not a list"
+        },
+        {
+          "type": "answer-contains",
+          "name": "symbols",
+          "passed": false,
+          "detail": "answer.symbols is not a list"
+        }
+      ],
+      "success": false
+    }
+  ],
+  "summary": {
+    "modes": {
+      "plain": {
+        "runs": 1,
+        "successes": 0,
+        "successRate": 0.0,
+        "meanTotalTokens": 77939.0,
+        "meanOutputTokens": 5314.0,
+        "meanTurns": 16.0,
+        "meanCostUsd": 0.0,
+        "totalCostUsd": 0,
+        "meanElapsedSeconds": 75.6
+      },
+      "codeatlas": {
+        "runs": 1,
+        "successes": 1,
+        "successRate": 1.0,
+        "meanTotalTokens": 102091.0,
+        "meanOutputTokens": 2841.0,
+        "meanTurns": 11.0,
+        "meanCostUsd": 0.0,
+        "totalCostUsd": 0,
+        "meanElapsedSeconds": 50.5
+      }
+    },
+    "tasks": {
+      "find-coupon-expiry": {
+        "codeatlas": {
+          "runs": 1,
+          "successes": 1,
+          "meanTotalTokens": 102091.0,
+          "meanTurns": 11.0,
+          "meanCostUsd": 0.0,
+          "meanElapsedSeconds": 50.5
+        },
+        "plain": {
+          "runs": 1,
+          "successes": 0,
+          "meanTotalTokens": 77939.0,
+          "meanTurns": 16.0,
+          "meanCostUsd": 0.0,
+          "meanElapsedSeconds": 75.6
+        }
+      }
+    },
+    "relativeToPlain": {
+      "codeatlas": {
+        "TotalTokens": 0.3098833703280771,
+        "Turns": -0.3125,
+        "CostUsd": null,
+        "ElapsedSeconds": -0.332010582010582,
+        "pairedTasks": 1
+      }
+    }
+  },
+  "finishedAtUtc": "20261025T083250Z"
+}

@@ -1,0 +1,13 @@
+{
+  "name": "codeatlas-bench-csharp-lsp",
+  "description": "Benchmark-only copy of the official csharp-lsp plugin configuration: starts csharp-ls for .cs files.",
+  "version": "1.0.0",
+  "lspServers": {
+    "csharp-ls": {
+      "command": "csharp-ls",
+      "extensionToLanguage": {
+        ".cs": "csharp"
+      }
+    }
+  }
+}
