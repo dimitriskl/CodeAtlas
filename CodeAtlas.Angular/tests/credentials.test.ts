@@ -1,4 +1,4 @@
-import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
@@ -400,3 +400,109 @@ describe("credentials.json", () => {
     expect(file).toBe(expected);
   });
 });
+
+describe("credential lookup precedence", () => {
+  it("prefers an environment variable over a different keychain entry and credentials file", () => {
+    // Arrange
+    const file = credentialsPath();
+    const original = encodedCredentials({ openai: "file-key" });
+    writeFileSync(file, original);
+    const before = statSync(file, { bigint: true }).mtimeNs;
+    const reads: string[] = [];
+    const keychain: Keychain = {
+      name: "Linux Secret Service",
+      isAvailable: () => true,
+      read: (provider) => {
+        reads.push(provider);
+        return "keychain-key";
+      },
+      write: () => {
+        throw new Error("Unexpected keychain write");
+      },
+    };
+
+    // Act
+    const found = findCredential("openai", {
+      platform: "linux",
+      readEnvironment: (name) => (name === "CODEATLAS_AI_OPENAI_KEY" ? "env-key" : " \t"),
+      keychain,
+      credentialsPath: file,
+    });
+
+    // Assert
+    expect(found).toEqual({
+      value: "env-key",
+      location: "environment variable CODEATLAS_AI_OPENAI_KEY",
+    });
+    expect(reads).toEqual([]);
+    expect(readFileSync(file, "utf8")).toBe(original);
+    expect(statSync(file, { bigint: true }).mtimeNs).toBe(before);
+  });
+
+  it("prefers the keychain over a different credentials file when the environment is empty", () => {
+    // Arrange
+    const file = credentialsPath();
+    const original = encodedCredentials({ openai: "file-key" });
+    writeFileSync(file, original);
+    const before = statSync(file, { bigint: true }).mtimeNs;
+
+    // Act
+    const found = findCredential("openai", {
+      platform: "linux",
+      readEnvironment: () => "",
+      keychain: {
+        name: "Linux Secret Service",
+        isAvailable: () => true,
+        read: () => "keychain-key",
+        write: () => {
+          throw new Error("Unexpected keychain write");
+        },
+      },
+      credentialsPath: file,
+    });
+
+    // Assert
+    expect(found).toEqual({ value: "keychain-key", location: "Linux Secret Service" });
+    expect(readFileSync(file, "utf8")).toBe(original);
+    expect(statSync(file, { bigint: true }).mtimeNs).toBe(before);
+  });
+
+  it("uses credentials.json when the keychain value is empty and does not rewrite the file", () => {
+    // Arrange
+    const file = credentialsPath();
+    const original = encodedCredentials({ openai: "file-key" });
+    writeFileSync(file, original);
+    const before = statSync(file, { bigint: true }).mtimeNs;
+
+    // Act
+    const found = findCredential("openai", {
+      platform: "linux",
+      readEnvironment: () => undefined,
+      keychain: {
+        name: "Linux Secret Service",
+        isAvailable: () => true,
+        read: () => " \n",
+        write: () => {
+          throw new Error("Unexpected keychain write");
+        },
+      },
+      credentialsPath: file,
+    });
+
+    // Assert
+    expect(found).toEqual({
+      value: "file-key",
+      location: `credentials file ${path.resolve(file)}`,
+    });
+    expect(readFileSync(file, "utf8")).toBe(original);
+    expect(statSync(file, { bigint: true }).mtimeNs).toBe(before);
+  });
+});
+
+function encodedCredentials(keys: Record<string, string>): string {
+  const encoded: Record<string, string> = {};
+  for (const [provider, value] of Object.entries(keys)) {
+    encoded[provider] = `b64:${Buffer.from(value, "utf8").toString("base64")}`;
+  }
+  return `${JSON.stringify({ version: 1, keys: encoded }, null, 2)}\n`;
+}

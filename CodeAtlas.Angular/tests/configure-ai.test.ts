@@ -1,15 +1,18 @@
-import { createServer, type Server } from "node:http";
+import { createHash } from "node:crypto";
+import { createServer, type IncomingHttpHeaders, type Server } from "node:http";
 import {
   chmodSync,
   existsSync,
   mkdirSync,
   mkdtempSync,
   readFileSync,
+  statSync,
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
+import { assertAiEndpoint } from "../src/configure-ai.js";
 import { runCli } from "./support/run-cli.js";
 
 const secret = "sk-synthetic-credential-0123456789";
@@ -247,8 +250,20 @@ function installFakeKeychain(root: string, env: NodeJS.ProcessEnv): string {
         "const path = require('node:path');",
         "const dir = process.env.CODEATLAS_FAKE_KEYCHAIN_DIR;",
         "fs.mkdirSync(dir, { recursive: true });",
-        "fs.writeFileSync(path.join(dir, 'stdin'), fs.readFileSync(0));",
-        "fs.writeFileSync(path.join(dir, 'args'), process.argv.slice(2).join('\\n') + '\\n');",
+        "const args = process.argv.slice(2);",
+        "const opIndex = args.findIndex((arg) => arg === 'read' || arg === 'write');",
+        "const operation = opIndex >= 0 ? args[opIndex] : '';",
+        "const target = opIndex >= 0 ? args[opIndex + 1] : '';",
+        "const provider = target.startsWith('CodeAtlas:ai:') ? target.slice('CodeAtlas:ai:'.length) : '';",
+        "if (operation === 'read') {",
+        "  const stored = path.join(dir, 'value-' + provider);",
+        "  if (fs.existsSync(stored)) { process.stdout.write(fs.readFileSync(stored)); process.exit(0); }",
+        "  process.exit(1168);",
+        "}",
+        "const stdin = fs.readFileSync(0);",
+        "fs.writeFileSync(path.join(dir, 'stdin'), stdin);",
+        "fs.writeFileSync(path.join(dir, 'args'), args.join('\\n') + '\\n');",
+        "if (operation === 'write') fs.writeFileSync(path.join(dir, 'value-' + provider), stdin);",
         "process.exit(0);",
         "",
       ].join("\n"),
@@ -262,8 +277,20 @@ function installFakeKeychain(root: string, env: NodeJS.ProcessEnv): string {
         "set -eu",
         'dir="$CODEATLAS_FAKE_KEYCHAIN_DIR"',
         'mkdir -p "$dir"',
+        'op="${1:-}"',
+        'provider=""',
+        'prev=""',
+        'for arg in "$@"; do',
+        '  if [ "$prev" = "provider" ]; then provider="$arg"; fi',
+        '  prev="$arg"',
+        "done",
+        'if [ "$op" = "lookup" ]; then',
+        '  if [ -f "$dir/value-$provider" ]; then cat "$dir/value-$provider"; exit 0; fi',
+        "  exit 1",
+        "fi",
         'printf "%s\\n" "$@" > "$dir/args"',
         'cat > "$dir/stdin"',
+        'if [ "$op" = "store" ]; then cp "$dir/stdin" "$dir/value-$provider"; fi',
         "exit 0",
         "",
       ].join("\n"),
@@ -283,8 +310,14 @@ function credentialsFile(root: string): string {
   return path.join(root, "xdg", "codeatlas", "credentials.json");
 }
 
-function startProvider(): Promise<{ port: number; bodies: string[]; close: () => Promise<void> }> {
+function startProvider(failure?: { status: number; body: string }): Promise<{
+  port: number;
+  bodies: string[];
+  headers: IncomingHttpHeaders[];
+  close: () => Promise<void>;
+}> {
   const bodies: string[] = [];
+  const headers: IncomingHttpHeaders[] = [];
   const server: Server = createServer((request, response) => {
     const chunks: Buffer[] = [];
     request.on("data", (chunk: Buffer) => {
@@ -292,6 +325,12 @@ function startProvider(): Promise<{ port: number; bodies: string[]; close: () =>
     });
     request.on("end", () => {
       bodies.push(Buffer.concat(chunks).toString("utf8"));
+      headers.push(request.headers);
+      if (failure !== undefined) {
+        response.writeHead(failure.status, { "content-type": "text/plain" });
+        response.end(failure.body);
+        return;
+      }
       response.writeHead(200, { "content-type": "application/json" });
       response.end(
         JSON.stringify({
@@ -317,6 +356,7 @@ function startProvider(): Promise<{ port: number; bodies: string[]; close: () =>
       resolve({
         port: address.port,
         bodies,
+        headers,
         close: () =>
           new Promise((done, fail) => {
             server.close((error) => (error ? fail(error) : done()));
@@ -325,3 +365,299 @@ function startProvider(): Promise<{ port: number; bodies: string[]; close: () =>
     });
   });
 }
+
+function headerValue(headers: IncomingHttpHeaders, name: string): string | undefined {
+  const value = headers[name];
+  return Array.isArray(value) ? value[0] : value;
+}
+
+function fileFingerprint(file: string): { sha256: string; mtimeNs: bigint } {
+  return {
+    sha256: createHash("sha256").update(readFileSync(file)).digest("hex"),
+    mtimeNs: statSync(file, { bigint: true }).mtimeNs,
+  };
+}
+
+function writeEncodedCredentials(file: string, keys: Record<string, string>): void {
+  mkdirSync(path.dirname(file), { recursive: true });
+  const encoded: Record<string, string> = {};
+  for (const [provider, value] of Object.entries(keys)) {
+    encoded[provider] = `b64:${Buffer.from(value, "utf8").toString("base64")}`;
+  }
+  writeFileSync(file, `${JSON.stringify({ version: 1, keys: encoded }, null, 2)}\n`);
+}
+
+const envSecret = "sk-env-source-111";
+const keychainSecret = "sk-keychain-source-222";
+const fileSecret = "sk-file-source-333";
+const stdinSecret = "sk-stdin-source-444";
+
+describe("configure-ai credential precedence", () => {
+  it("sends the environment key and does not rewrite credentials.json", async () => {
+    // Arrange
+    const root = mkdtempSync(path.join(tmpdir(), "codeatlas-configure-ai-"));
+    const env = blankCredentialEnv(isolatedEnv(root));
+    env.CODEATLAS_AI_OPENAI_KEY = envSecret;
+    const state = installFakeKeychain(root, env);
+    writeFileSync(path.join(state, "value-openai"), keychainSecret);
+    const credentials = credentialsFile(root);
+    writeEncodedCredentials(credentials, { openai: fileSecret });
+    const before = fileFingerprint(credentials);
+    const provider = await startProvider();
+    const endpoint = `http://127.0.0.1:${provider.port}/v1/chat/completions`;
+    let result: Awaited<ReturnType<typeof runCli>>;
+    try {
+      // Act
+      result = await runCli(
+        ["configure-ai", "--provider", "openai", "--model", "test-model", "--endpoint", endpoint],
+        { cwd: root, env, stdin: `${stdinSecret}\n` },
+      );
+    } finally {
+      await provider.close();
+    }
+
+    // Assert
+    expect(result.exitCode).toBe(0);
+    expect(`${result.stdout}${result.stderr}`).not.toContain(envSecret);
+    expect(result.stdout).not.toContain(keychainSecret);
+    expect(result.stdout).not.toContain(fileSecret);
+    expect(result.stdout).not.toContain(stdinSecret);
+    expect(headerValue(provider.headers[0] ?? {}, "authorization")).toBe(`Bearer ${envSecret}`);
+    expect(provider.bodies[0] ?? "").not.toContain(envSecret);
+    expect(existsSync(path.join(state, "args"))).toBe(false);
+    expect(readFileSync(path.join(state, "value-openai"), "utf8")).toBe(keychainSecret);
+    expect(fileFingerprint(credentials)).toEqual(before);
+  });
+
+  it("sends the keychain key when the environment is empty and leaves credentials.json unchanged", async () => {
+    // Arrange
+    const root = mkdtempSync(path.join(tmpdir(), "codeatlas-configure-ai-"));
+    const env = blankCredentialEnv(isolatedEnv(root));
+    const state = installFakeKeychain(root, env);
+    writeFileSync(path.join(state, "value-openai"), keychainSecret);
+    const credentials = credentialsFile(root);
+    writeEncodedCredentials(credentials, { openai: fileSecret, anthropic: "other-provider-key" });
+    const before = fileFingerprint(credentials);
+    const provider = await startProvider();
+    const endpoint = `http://127.0.0.1:${provider.port}/v1/chat/completions`;
+    let result: Awaited<ReturnType<typeof runCli>>;
+    try {
+      // Act
+      result = await runCli(
+        ["configure-ai", "--provider", "openai", "--model", "test-model", "--endpoint", endpoint],
+        { cwd: root, env, stdin: `${stdinSecret}\n` },
+      );
+    } finally {
+      await provider.close();
+    }
+
+    // Assert
+    expect(result.exitCode).toBe(0);
+    expect(headerValue(provider.headers[0] ?? {}, "authorization")).toBe(
+      `Bearer ${keychainSecret}`,
+    );
+    expect(provider.bodies[0] ?? "").not.toContain(keychainSecret);
+    expect(`${result.stdout}${result.stderr}`).not.toContain(keychainSecret);
+    expect(result.stdout).not.toContain(fileSecret);
+    expect(result.stdout).not.toContain(stdinSecret);
+    expect(existsSync(path.join(state, "stdin"))).toBe(false);
+    expect(readFileSync(path.join(state, "value-openai"), "utf8")).toBe(keychainSecret);
+    expect(fileFingerprint(credentials)).toEqual(before);
+  });
+
+  it("sends a credentials.json key and does not rewrite the file", async () => {
+    // Arrange
+    const root = mkdtempSync(path.join(tmpdir(), "codeatlas-configure-ai-"));
+    const env = blankCredentialEnv(isolatedEnv(root));
+    env.PATH = path.join(root, "empty-path");
+    env.Path = env.PATH;
+    mkdirSync(env.PATH, { recursive: true });
+    const credentials = credentialsFile(root);
+    writeEncodedCredentials(credentials, { openai: fileSecret });
+    const before = fileFingerprint(credentials);
+    const provider = await startProvider();
+    const endpoint = `http://127.0.0.1:${provider.port}/v1/chat/completions`;
+    let result: Awaited<ReturnType<typeof runCli>>;
+    try {
+      // Act
+      result = await runCli(
+        ["configure-ai", "--provider", "openai", "--model", "test-model", "--endpoint", endpoint],
+        { cwd: root, env, stdin: `${stdinSecret}\n` },
+      );
+    } finally {
+      await provider.close();
+    }
+
+    // Assert
+    expect(result.exitCode).toBe(0);
+    expect(headerValue(provider.headers[0] ?? {}, "authorization")).toBe(`Bearer ${fileSecret}`);
+    expect(provider.bodies[0] ?? "").not.toContain(fileSecret);
+    expect(provider.bodies[0] ?? "").not.toContain(stdinSecret);
+    expect(`${result.stdout}${result.stderr}`).not.toContain(fileSecret);
+    expect(result.stdout).not.toContain(stdinSecret);
+    expect(fileFingerprint(credentials)).toEqual(before);
+  });
+
+  it("does not create credentials.json when the key is stored in the keychain", async () => {
+    // Arrange
+    const root = mkdtempSync(path.join(tmpdir(), "codeatlas-configure-ai-"));
+    const env = blankCredentialEnv(isolatedEnv(root));
+    const state = installFakeKeychain(root, env);
+    const credentials = credentialsFile(root);
+    const provider = await startProvider();
+    const endpoint = `http://127.0.0.1:${provider.port}/v1/chat/completions`;
+    let result: Awaited<ReturnType<typeof runCli>>;
+    try {
+      // Act
+      result = await runCli(
+        ["configure-ai", "--provider", "openai", "--model", "test-model", "--endpoint", endpoint],
+        { cwd: root, env, stdin: `${secret}\n` },
+      );
+    } finally {
+      await provider.close();
+    }
+
+    // Assert
+    expect(result.exitCode).toBe(0);
+    expect(readFileSync(path.join(state, "stdin"), "utf8")).toBe(secret);
+    expect(readFileSync(path.join(state, "args"), "utf8")).not.toContain(secret);
+    expect(existsSync(credentials)).toBe(false);
+    expect(result.stdout).not.toContain(secret);
+    expect(readFileSync(path.join(root, ".codeatlas", "appsettings.json"), "utf8")).not.toContain(
+      secret,
+    );
+  });
+});
+
+describe("configure-ai endpoint boundaries", () => {
+  it.each([
+    ["http://0.0.0.0/v1", endpointError],
+    ["http://localhost.evil.com/chat", endpointError],
+    ["http://127.0.0.1.evil.com/v1", endpointError],
+    ["HTTP://EXAMPLE.COM/v1", endpointError],
+    ["ftp://127.0.0.1/v1", endpointError],
+    ["http://user:secret@127.0.0.1/v1", endpointError],
+    ["not a url", "AI endpoint must be an absolute URL."],
+    ["example.com/v1", "AI endpoint must be an absolute URL."],
+  ] as const)("rejects %s before any settings are written", async (endpoint, message) => {
+    // Arrange
+    const root = mkdtempSync(path.join(tmpdir(), "codeatlas-configure-ai-"));
+    const credentials = credentialsFile(root);
+    writeEncodedCredentials(credentials, { openai: fileSecret });
+    const before = fileFingerprint(credentials);
+
+    // Act
+    const result = await runCli(
+      ["configure-ai", "--provider", "openai", "--model", "test-model", "--endpoint", endpoint],
+      { cwd: root, env: isolatedEnv(root), stdin: `${stdinSecret}\n` },
+    );
+
+    // Assert
+    expect(result.exitCode).toBe(1);
+    expect(result.stdout).toBe("");
+    expect(JSON.parse(result.stderr)).toMatchObject({
+      success: false,
+      command: "configure-ai",
+      error: { code: "ai_configuration_invalid", message, diagnostics: [] },
+    });
+    expect(result.stderr).not.toContain(endpoint);
+    expect(result.stderr).not.toContain(stdinSecret);
+    expect(result.stderr).not.toContain(fileSecret);
+    expect(existsSync(path.join(root, ".codeatlas", "appsettings.json"))).toBe(false);
+    expect(fileFingerprint(credentials)).toEqual(before);
+  });
+
+  it.each([
+    ["http://localhost/v1", "localhost", "http:"],
+    ["http://127.0.0.1/v1", "127.0.0.1", "http:"],
+    ["http://[::1]/v1", "[::1]", "http:"],
+    ["http://127.0.0.2/v1", "127.0.0.2", "http:"],
+    ["HTTP://LOCALHOST/v1", "localhost", "http:"],
+    ["https://api.example.com/v1", "api.example.com", "https:"],
+  ] as const)("accepts %s", (endpoint, hostname, protocol) => {
+    // Arrange
+    const value = endpoint;
+
+    // Act
+    const url = assertAiEndpoint(value);
+
+    // Assert
+    expect(url.hostname).toBe(hostname);
+    expect(url.protocol).toBe(protocol);
+  });
+});
+
+describe("configure-ai secret handling", () => {
+  it("omits a provider error body that echoes the key", async () => {
+    // Arrange
+    const root = mkdtempSync(path.join(tmpdir(), "codeatlas-configure-ai-"));
+    const env = blankCredentialEnv(isolatedEnv(root));
+    env.PATH = path.join(root, "empty-path");
+    env.Path = env.PATH;
+    mkdirSync(env.PATH, { recursive: true });
+    const provider = await startProvider({ status: 401, body: `ECHO ${secret} denied` });
+    const endpoint = `http://127.0.0.1:${provider.port}/v1/chat/completions`;
+    let result: Awaited<ReturnType<typeof runCli>>;
+    try {
+      // Act
+      result = await runCli(
+        ["configure-ai", "--provider", "openai", "--model", "test-model", "--endpoint", endpoint],
+        { cwd: root, env, stdin: `${secret}\n` },
+      );
+    } finally {
+      await provider.close();
+    }
+
+    // Assert
+    expect(result.exitCode).toBe(1);
+    expect(JSON.parse(result.stderr).error.code).toBe("ai_provider_failed");
+    expect(`${result.stdout}${result.stderr}`).not.toContain(secret);
+    expect(result.stderr).not.toContain("ECHO");
+    expect(headerValue(provider.headers[0] ?? {}, "authorization")).toBe(`Bearer ${secret}`);
+    expect(existsSync(path.join(root, ".codeatlas", "appsettings.json"))).toBe(false);
+    expect(existsSync(credentialsFile(root))).toBe(false);
+  });
+
+  it("sends an anthropic key only in x-api-key", async () => {
+    // Arrange
+    const root = mkdtempSync(path.join(tmpdir(), "codeatlas-configure-ai-"));
+    const env = blankCredentialEnv(isolatedEnv(root));
+    env.PATH = path.join(root, "empty-path");
+    env.Path = env.PATH;
+    mkdirSync(env.PATH, { recursive: true });
+    const canary = "PROJECT_SOURCE_CANARY_anthropic_9f3c";
+    writeFileSync(path.join(root, "component.ts"), `export const marker = "${canary}";\n`);
+    const provider = await startProvider();
+    const endpoint = `http://127.0.0.1:${provider.port}/v1/messages`;
+    let result: Awaited<ReturnType<typeof runCli>>;
+    try {
+      // Act
+      result = await runCli(
+        [
+          "configure-ai",
+          "--provider",
+          "anthropic",
+          "--model",
+          "claude-test",
+          "--endpoint",
+          endpoint,
+        ],
+        { cwd: root, env, stdin: `${secret}\n` },
+      );
+    } finally {
+      await provider.close();
+    }
+
+    // Assert
+    expect(result.exitCode).toBe(1);
+    const headers = provider.headers[0] ?? {};
+    expect(headerValue(headers, "x-api-key")).toBe(secret);
+    expect(headerValue(headers, "authorization")).toBeUndefined();
+    const body = provider.bodies[0] ?? "";
+    expect(body).not.toContain(secret);
+    expect(body).not.toContain(canary);
+    expect(body).not.toContain("component.ts");
+    expect(body).toContain("Connection test. Do not use tools or obtain any external context.");
+    expect(`${result.stdout}${result.stderr}`).not.toContain(secret);
+  });
+});
