@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Text.Json;
 using CodeAtlas.Persistence;
 using CodeAtlas.Storage;
 using Xunit;
@@ -208,6 +209,32 @@ public sealed class SqliteFileUpdateTests
     }
 
     [Fact]
+    public async Task LiveSessionEditPublishesTheEditedFilesCatalogRows()
+    {
+        // Arrange
+        using var fixture = await SampleCopy.CreateAsync();
+        await IndexStore.PublishAsync(await SolutionAnalysis.CreateIndexAsync(fixture.Solution));
+        using var session = await LiveIndexSession.OpenAsync(fixture.Solution);
+        var edited = EditedCalculator(await File.ReadAllTextAsync(fixture.Calculator));
+        using var editedFixture = await SampleCopy.CreateAsync();
+        await File.WriteAllTextAsync(editedFixture.Calculator, edited);
+        var expected = await IndexAsync(editedFixture.Solution, Path.Combine(editedFixture.Root, "expected.db"));
+
+        // Act
+        await session.ApplyAsync(fixture.Calculator, edited);
+
+        // Assert
+        var opened = await IndexStore.OpenSnapshotAsync(IndexStore.DefaultPath(fixture.Solution));
+        var found = SnapshotQueries.FindSymbols(opened, "Extra", "method", new QueryRequest());
+        Assert.Equal(["Extra"], found.Items.Select(symbol => symbol.Name).ToArray());
+        var search = await PurposeSnapshotQueries.SearchAsync(opened, "Extra", "names", "method", new QueryRequest());
+        Assert.Contains(search.Page.Items, item => item.Symbol.Name == "Extra");
+        Assert.Equal(FileCatalog(expected.Database), FileCatalog(opened.IndexPath));
+        var stored = new SqliteIndexReader(opened.IndexPath).Use(session => session.Duplicates(CancellationToken.None));
+        Assert.Equal(opened.Index.IndexId, stored!.Scan!.IndexId);
+    }
+
+    [Fact]
     public async Task FailedPublicationLeavesTheCurrentGenerationUnchanged()
     {
         // Arrange
@@ -258,6 +285,33 @@ public sealed class SqliteFileUpdateTests
         {
             SqliteIndexWriter.BeforeFileRowCommit = null;
         }
+    }
+
+    private static string FileCatalog(string database)
+    {
+        var reader = new SqliteIndexReader(database);
+        return reader.Use(session =>
+        {
+            var symbols = session.Symbols(CancellationToken.None).Where(symbol => symbol.Location.File == CalculatorFile).ToArray();
+            var ids = symbols.Select(symbol => symbol.Id).ToHashSet(StringComparer.Ordinal);
+            var structural = session.StructuralCatalog(CancellationToken.None);
+            var duplicates = session.Duplicates(CancellationToken.None);
+            var facts = structural!.Facts.Where(fact => fact.Evidence.Location.Start.File == CalculatorFile).ToArray();
+            var analysis = duplicates!.Analysis!;
+            var scan = duplicates.Scan!;
+            return JsonSerializer.Serialize(new
+            {
+                symbols,
+                facts,
+                search = session.SearchPostingsForFile(CalculatorFile),
+                bodies = analysis.Bodies.Where(body => body.Location.Start.File == CalculatorFile).ToArray(),
+                omissions = analysis.Omissions.Where(omission => omission.Location.Start.File == CalculatorFile).ToArray(),
+                scanOmissions = scan.Omissions.Where(omission => omission.Location.Start.File == CalculatorFile).ToArray(),
+                candidates = scan.Candidates.Where(candidate => candidate.Left.Location.Start.File == CalculatorFile
+                    || candidate.Right.Location.Start.File == CalculatorFile).ToArray(),
+                groups = duplicates.Groups.Where(group => group.MemberIds.Any(ids.Contains)).ToArray()
+            }, SqliteIndexSchema.Json);
+        });
     }
 
     private static string EditedCalculator(string source) => source.Replace(

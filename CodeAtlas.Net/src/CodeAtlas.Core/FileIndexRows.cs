@@ -38,8 +38,10 @@ public sealed partial class SolutionAnalysis
     }
 
     /// <summary>
-    /// Applies one file's text in memory, builds that file's rows, and replaces them in a private working copy.
-    /// The stored file hash is the applied text. A path that is not an open document throws <see cref="AnalysisException"/> and does not write.
+    /// Applies one file's text in memory and replaces that file's rows in a private working copy.
+    /// Method and reference rows come from <see cref="FileRowsAsync"/>. Symbol, fact, search and duplicate
+    /// rows come from the same builders as a full index. The stored file hash is the applied text, written
+    /// in that same transaction. A path that is not an open document throws <see cref="AnalysisException"/> and does not write.
     /// </summary>
     public async Task UpdateWorkingCopyAsync(string workingCopy, string path, string text, CancellationToken cancellationToken = default)
     {
@@ -47,8 +49,13 @@ public sealed partial class SolutionAnalysis
         if (updated.Length == 0)
             throw new AnalysisException($"The path is not an open source document: {path}");
         var rows = await FileRowsAsync(path, cancellationToken);
-        SqliteIndexWriter.ReplaceFileRows(workingCopy, updated[0], rows.Methods, rows.References);
-        SqliteIndexWriter.RecordAppliedText(workingCopy, Path.GetFullPath(path, directory), updated[0], text);
+        var symbols = await GetDocumentedSymbolsAsync(cancellationToken);
+        var catalog = await GetStructuralCatalogAsync(symbols, cancellationToken);
+        var state = new SqliteIndexReader(workingCopy).Use(session => session.IncrementalState())
+            ?? throw new AnalysisException("The working copy has no incremental state.");
+        var duplicates = await DuplicateFinder.CreateAsync(solution, SolutionPath, state, cancellationToken);
+        SqliteIndexWriter.UpdateWorkingCopy(workingCopy, Path.GetFullPath(path, directory), updated[0], text,
+            rows.Methods, rows.References, symbols, catalog, duplicates);
     }
 
     private string OneRelativePath(Document[] documents, string path)

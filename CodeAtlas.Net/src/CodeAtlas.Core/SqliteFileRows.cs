@@ -36,15 +36,190 @@ internal sealed partial class SqliteIndexWriter
     }
 
     /// <summary>
-    /// Records the SHA-256 of the text the file's rows were built from.
-    /// Publication keeps this hash; freshness then reports stale when disk bytes differ.
+    /// Replaces one file's method and reference rows, then the symbol, fact, search and duplicate
+    /// rows, and records the applied text hash. One transaction: a failure leaves the copy unchanged.
     /// </summary>
-    internal static void RecordAppliedText(string database, string absolutePath, string relativeFile, string text)
+    internal static void UpdateWorkingCopy(string database, string absolutePath, string relativeFile, string text,
+        MethodInfo[] methods, IReadOnlyDictionary<string, SourceReference[]> references,
+        DocumentedSymbol[] symbols, StructuralCatalog catalog, DuplicateCatalog duplicates)
     {
-        var hash = Convert.ToHexString(SHA256.HashData(Utf8.GetBytes(text)));
+        RequireFileRows(relativeFile, methods, references);
+        ArgumentNullException.ThrowIfNull(symbols);
+        ArgumentNullException.ThrowIfNull(catalog);
+        ArgumentNullException.ThrowIfNull(duplicates);
+        SqliteAvailability.Require();
         using var connection = OpenWorkingCopy(database);
         Execute(connection, "PRAGMA journal_mode=DELETE;");
         using var transaction = connection.BeginTransaction();
+        try
+        {
+            ApplyFileRows(connection, transaction, relativeFile, methods, references);
+            ReplaceCatalog(connection, transaction, symbols, catalog, duplicates);
+            RecordAppliedHash(connection, transaction, absolutePath, relativeFile, text);
+            BeforeFileRowCommit?.Invoke();
+            transaction.Commit();
+        }
+        catch
+        {
+            transaction.Rollback();
+            throw;
+        }
+    }
+
+    /// <summary>Gives a generation copy a new id. Tracked file hashes stay as recorded for the text that was indexed.</summary>
+    internal static void PreparePublishedCopy(string path, string indexId)
+    {
+        using var connection = OpenWorkingCopy(path);
+        Execute(connection, "PRAGMA journal_mode=DELETE;");
+        using var transaction = connection.BeginTransaction();
+        SetGenerationId(connection, transaction, indexId);
+        SetDuplicateGeneration(connection, transaction, indexId);
+        transaction.Commit();
+    }
+
+    private static void ReplaceCatalog(SqliteConnection connection, SqliteTransaction transaction,
+        DocumentedSymbol[] symbols, StructuralCatalog catalog, DuplicateCatalog duplicates)
+    {
+        ClearCatalog(connection, transaction);
+        var files = ReadFileIds(connection, transaction);
+        WriteSymbolRows(connection, transaction, symbols, files);
+        WriteFactRows(connection, transaction, catalog, files);
+        WriteSearchRows(connection, transaction, symbols, catalog);
+        WriteDuplicateRows(connection, transaction, duplicates, files);
+        WriteDuplicateHeader(connection, transaction, duplicates);
+    }
+
+    private static void ClearCatalog(SqliteConnection connection, SqliteTransaction transaction)
+    {
+        foreach (var table in new[]
+        {
+            "documentation", "search_postings", "search_tokens", "search_field_lengths", "symbols", "facts",
+            "structural_issues", "duplicate_groups", "duplicate_vocabulary", "duplicate_bodies",
+            "duplicate_body_omissions", "duplicate_candidates", "duplicate_scan_omissions"
+        })
+            Execute("DELETE FROM " + table, connection, transaction);
+    }
+
+    private static void WriteSymbolRows(SqliteConnection connection, SqliteTransaction transaction,
+        DocumentedSymbol[] symbols, Dictionary<string, long> files)
+    {
+        for (var i = 0; i < symbols.Length; i++)
+        {
+            var symbol = symbols[i];
+            Execute("INSERT INTO symbols VALUES($o,$id,$name,$kind,$tk,$sig,$project,$ns,$type,$file,$line,$col,$locations)",
+                connection, transaction,
+                ("$o", i), ("$id", symbol.Id), ("$name", symbol.Name), ("$kind", symbol.Kind), ("$tk", Db(symbol.TypeKind)),
+                ("$sig", symbol.Signature), ("$project", symbol.Project), ("$ns", symbol.Namespace), ("$type", Db(symbol.ContainingType)),
+                ("$file", FileId(files, symbol.Location.File)), ("$line", symbol.Location.Line), ("$col", symbol.Location.Column),
+                ("$locations", Json(symbol.Locations)));
+            Execute("INSERT INTO documentation VALUES($o,$status,$value)", connection, transaction,
+                ("$o", i), ("$status", symbol.Documentation.Status), ("$value", Json(symbol.Documentation)));
+        }
+    }
+
+    private static void WriteFactRows(SqliteConnection connection, SqliteTransaction transaction,
+        StructuralCatalog catalog, Dictionary<string, long> files)
+    {
+        for (var i = 0; i < catalog.Facts.Length; i++)
+        {
+            var fact = catalog.Facts[i];
+            var target = fact.Target;
+            var range = fact.Evidence.Location;
+            Execute("INSERT INTO facts VALUES($o,$owner,$kind,$tn,$ts,$td,$tsid,$ta,$tr,$origin,$file,$sl,$sc,$efile,$el,$ec,$scope)",
+                connection, transaction,
+                ("$o", i), ("$owner", fact.OwnerId), ("$kind", fact.Kind), ("$tn", target.Name), ("$ts", target.Signature),
+                ("$td", Db(target.DeclarationId)), ("$tsid", Db(target.SourceSymbolId)), ("$ta", Db(target.AssemblyIdentity)),
+                ("$tr", target.Resolution), ("$origin", fact.Evidence.Origin),
+                ("$file", FileId(files, range.Start.File)), ("$sl", range.Start.Line), ("$sc", range.Start.Column),
+                ("$efile", FileId(files, range.End.File)), ("$el", range.End.Line), ("$ec", range.End.Column),
+                ("$scope", fact.Evidence.SemanticScope));
+        }
+        for (var i = 0; i < catalog.Issues.Length; i++)
+        {
+            var issue = catalog.Issues[i];
+            Execute("INSERT INTO structural_issues VALUES($o,$owner,$code,$file,$value)", connection, transaction,
+                ("$o", i), ("$owner", issue.OwnerId), ("$code", issue.Code),
+                ("$file", FileId(files, issue.Location.Start.File)), ("$value", Json(issue)));
+        }
+    }
+
+    private static void WriteSearchRows(SqliteConnection connection, SqliteTransaction transaction,
+        DocumentedSymbol[] symbols, StructuralCatalog catalog)
+    {
+        var tokenIds = new Dictionary<string, long>(StringComparer.Ordinal);
+        var totals = PurposeSearch.BuildStoreIndex(symbols, catalog, (ordinal, tokens) =>
+        {
+            foreach (var (token, nameField) in tokens)
+            {
+                if (!tokenIds.TryGetValue(token, out var id))
+                {
+                    tokenIds.Add(token, id = tokenIds.Count + 1);
+                    Execute("INSERT INTO search_tokens VALUES($id,$token)", connection, transaction, ("$id", id), ("$token", token));
+                }
+                Execute("INSERT INTO search_postings VALUES($token,$symbol,$name)", connection, transaction,
+                    ("$token", id), ("$symbol", ordinal), ("$name", nameField ? 1 : 0));
+            }
+        });
+        foreach (var (kind, families) in totals)
+            foreach (var (family, total) in families)
+                Execute("INSERT INTO search_field_lengths VALUES($kind,$family,$total,$count)", connection, transaction,
+                    ("$kind", kind), ("$family", family), ("$total", total.Length), ("$count", total.Count));
+    }
+
+    private static void WriteDuplicateRows(SqliteConnection connection, SqliteTransaction transaction,
+        DuplicateCatalog duplicates, Dictionary<string, long> files)
+    {
+        if (duplicates.Analysis is not { } analysis || duplicates.Scan is not { } scan)
+            throw new ArgumentException("Replacement duplicates must include analysis and a scan.", nameof(duplicates));
+        for (var i = 0; i < duplicates.Groups.Length; i++)
+            Execute("INSERT INTO duplicate_groups VALUES($o,$value)", connection, transaction, ("$o", i), ("$value", Json(duplicates.Groups[i])));
+        for (var i = 0; i < analysis.Vocabulary.Length; i++)
+            Execute("INSERT INTO duplicate_vocabulary VALUES($o,$token)", connection, transaction, ("$o", i), ("$token", analysis.Vocabulary[i]));
+        WriteDuplicateBodies(connection, transaction, analysis, files);
+        for (var i = 0; i < analysis.Omissions.Length; i++)
+            Execute("INSERT INTO duplicate_body_omissions VALUES($o,$symbol,$value)", connection, transaction,
+                ("$o", i), ("$symbol", analysis.Omissions[i].SymbolId), ("$value", Json(analysis.Omissions[i])));
+        for (var i = 0; i < scan.Candidates.Length; i++)
+        {
+            var candidate = scan.Candidates[i];
+            Execute("INSERT INTO duplicate_candidates VALUES($o,$left,$right,$lp,$rp,$value)", connection, transaction,
+                ("$o", i), ("$left", candidate.Left.SymbolId), ("$right", candidate.Right.SymbolId),
+                ("$lp", candidate.Left.Project), ("$rp", candidate.Right.Project), ("$value", Json(candidate)));
+        }
+        for (var i = 0; i < scan.Omissions.Length; i++)
+            Execute("INSERT INTO duplicate_scan_omissions VALUES($o,$symbol,$value)", connection, transaction,
+                ("$o", i), ("$symbol", scan.Omissions[i].SymbolId), ("$value", Json(scan.Omissions[i])));
+    }
+
+    private static void WriteDuplicateBodies(SqliteConnection connection, SqliteTransaction transaction,
+        DuplicateBodyCatalog analysis, Dictionary<string, long> files)
+    {
+        for (var i = 0; i < analysis.Bodies.Length; i++)
+        {
+            var body = analysis.Bodies[i];
+            Execute("INSERT INTO duplicate_bodies VALUES($o,$symbol,$file,$count,$value)", connection, transaction,
+                ("$o", i), ("$symbol", body.SymbolId), ("$file", FileId(files, body.Location.Start.File)),
+                ("$count", body.Tokens.Length), ("$value", Json(body)));
+        }
+    }
+
+    private static void WriteDuplicateHeader(SqliteConnection connection, SqliteTransaction transaction, DuplicateCatalog duplicates)
+    {
+        var indexId = JsonSerializer.Deserialize<string>(RequiredMeta(connection, transaction, "indexId"))
+            ?? throw new IndexFormatException("invalid_index", "The working copy has no generation id.");
+        var header = duplicates with
+        {
+            Groups = [],
+            Analysis = duplicates.Analysis is { } analysis ? analysis with { Vocabulary = [], Bodies = [], Omissions = [] } : null,
+            Scan = duplicates.Scan is { } scan ? scan with { IndexId = indexId, Candidates = [], Omissions = [] } : null
+        };
+        Execute("UPDATE meta SET value = $value WHERE key = 'duplicates'", connection, transaction, ("$value", Json(header)));
+    }
+
+    private static void RecordAppliedHash(SqliteConnection connection, SqliteTransaction transaction,
+        string absolutePath, string relativeFile, string text)
+    {
+        var hash = Convert.ToHexString(SHA256.HashData(Utf8.GetBytes(text)));
         var recorded = false;
         foreach (var (path, _) in ReadInputHashes(connection, transaction))
         {
@@ -56,18 +231,33 @@ internal sealed partial class SqliteIndexWriter
         if (!recorded)
             throw new IndexFormatException("invalid_index", "The working copy has no input row for " + absolutePath + ".");
         Execute("UPDATE files SET content_hash = $hash WHERE path = $path", connection, transaction, ("$hash", hash), ("$path", relativeFile));
-        transaction.Commit();
     }
 
-    /// <summary>Gives a generation copy a new id. Tracked file hashes stay as recorded for the text that was indexed.</summary>
-    internal static void PreparePublishedCopy(string path, string indexId)
+    private static void SetDuplicateGeneration(SqliteConnection connection, SqliteTransaction transaction, string indexId)
     {
-        using var connection = OpenWorkingCopy(path);
-        Execute(connection, "PRAGMA journal_mode=DELETE;");
-        using var transaction = connection.BeginTransaction();
-        SetGenerationId(connection, transaction, indexId);
-        transaction.Commit();
+        var catalog = JsonSerializer.Deserialize<DuplicateCatalog>(RequiredMeta(connection, transaction, "duplicates"), SqliteIndexSchema.Json);
+        if (catalog?.Scan is not { } scan || scan.IndexId == indexId) return;
+        Execute("UPDATE meta SET value = $value WHERE key = 'duplicates'", connection, transaction,
+            ("$value", Json(catalog with { Scan = scan with { IndexId = indexId } })));
     }
+
+    private static string RequiredMeta(SqliteConnection connection, SqliteTransaction transaction, string key)
+    {
+        using var command = connection.CreateCommand();
+        command.Transaction = transaction;
+        command.CommandText = "SELECT value FROM meta WHERE key = $key";
+        command.Parameters.AddWithValue("$key", key);
+        return command.ExecuteScalar() as string
+            ?? throw new IndexFormatException("invalid_index", "The working copy has no " + key + " record.");
+    }
+
+    private static long FileId(Dictionary<string, long> files, string path) =>
+        files.TryGetValue(path, out var id) ? id
+            : throw new ArgumentException("The working copy has no file row for " + path + ".", nameof(path));
+
+    private static object Db(object? value) => value ?? DBNull.Value;
+
+    private static string Json<T>(T value) => JsonSerializer.Serialize(value, SqliteIndexSchema.Json);
 
     private static void SetGenerationId(SqliteConnection connection, SqliteTransaction transaction, string indexId)
     {

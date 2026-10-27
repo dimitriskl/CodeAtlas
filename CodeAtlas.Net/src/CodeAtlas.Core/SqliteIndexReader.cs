@@ -460,6 +460,23 @@ internal sealed class SqliteIndexReader(string path)
             return result;
         }
 
+        /// <summary>Search postings of symbols located in one file, in symbol, token, then name-field order.</summary>
+        public (string SymbolId, string Token, bool NameField)[] SearchPostingsForFile(string relativeFile)
+        {
+            var result = new List<(string, string, bool)>();
+            using var reader = Reader("search-postings-file", """
+                SELECT s.id, t.token, p.name_field
+                FROM search_postings p
+                JOIN search_tokens t ON t.id = p.token_id
+                JOIN symbols s ON s.ordinal = p.symbol_ordinal
+                JOIN files f ON f.id = s.file_id
+                WHERE f.path = $p0
+                ORDER BY s.id, t.token, p.name_field
+                """, relativeFile);
+            while (reader.Read()) result.Add((reader.GetString(0), reader.GetString(1), reader.GetInt64(2) != 0));
+            return result.ToArray();
+        }
+
         /// <summary>Symbol ordinals whose stored fields contain the token, restricted to kind and name fields.</summary>
         public HashSet<long> Postings(string token, string kind, bool nameFieldsOnly)
         {
