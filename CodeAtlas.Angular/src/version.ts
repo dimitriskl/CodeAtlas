@@ -1,8 +1,28 @@
-/** JSON envelope contract. Independent of the index schema and the application version. */
-export const contractVersion = 0;
+import { readFileSync } from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 
-/** Persisted index schema. Independent of the JSON contract and the application version. */
-export const schemaVersion = 0;
+function readAppVersion(): string {
+  const here = path.dirname(fileURLToPath(import.meta.url));
+  const manifest = JSON.parse(readFileSync(path.join(here, "..", "package.json"), "utf8")) as {
+    version: string;
+  };
+  return manifest.version;
+}
 
-/** Application version (`x.xx.xx`). Stub value so the seam test fails until wired to the package. */
-export const appVersion = "0.0.0";
+/**
+ * JSON envelope contract. Independent of {@link schemaVersion} and {@link appVersion}.
+ */
+export const contractVersion = 1;
+
+/**
+ * Persisted index schema. Independent of {@link contractVersion} and {@link appVersion}.
+ * No index is written yet. This is the first schema number.
+ */
+export const schemaVersion = 1;
+
+/**
+ * Application version (`x.xx.xx`). This is the package version and `responseToolVersion`.
+ * Resolved from the manifest beside this module (`src/` in tests, `dist/` when installed).
+ */
+export const appVersion = readAppVersion();

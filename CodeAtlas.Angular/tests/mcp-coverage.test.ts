@@ -1,6 +1,17 @@
 import { describe, expect, it } from "vitest";
 import { connectInProcess } from "./support/mcp-client.js";
 
+function isTextBlock(block: unknown): block is { type: "text"; text: string } {
+  return (
+    typeof block === "object" &&
+    block !== null &&
+    "type" in block &&
+    block.type === "text" &&
+    "text" in block &&
+    typeof block.text === "string"
+  );
+}
+
 const staticCoverage = {
   language: "TypeScript",
   symbols: [
@@ -62,9 +73,12 @@ describe("MCP coverage tool", () => {
 
       // Assert
       expect(result.isError).toBeFalsy();
-      const block = result.content[0];
-      expect(block).toMatchObject({ type: "text" });
-      if (block === undefined || block.type !== "text") {
+      const content: unknown = result.content;
+      if (!Array.isArray(content)) {
+        throw new Error("coverage did not return content");
+      }
+      const block: unknown = content[0];
+      if (!isTextBlock(block)) {
         throw new Error("coverage did not return a text block");
       }
       const envelope = JSON.parse(block.text) as {
