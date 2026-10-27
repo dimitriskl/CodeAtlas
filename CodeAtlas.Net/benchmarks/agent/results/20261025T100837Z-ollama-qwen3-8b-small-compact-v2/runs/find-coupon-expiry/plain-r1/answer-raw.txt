@@ -1,0 +1,1 @@
+{\n  "files": [\n    "Shop.Core/Discounts/CouponValidator.cs"\n  ],\n  "symbols": [\n    "CouponValidator.IsExpired"\n  ]\n}

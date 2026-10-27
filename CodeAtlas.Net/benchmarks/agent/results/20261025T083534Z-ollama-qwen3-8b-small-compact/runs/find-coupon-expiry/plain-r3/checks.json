@@ -1,0 +1,14 @@
+[
+  {
+    "type": "answer-set",
+    "name": "files",
+    "passed": false,
+    "detail": "answer.files is not a list"
+  },
+  {
+    "type": "answer-contains",
+    "name": "symbols",
+    "passed": false,
+    "detail": "answer.symbols is not a list"
+  }
+]

@@ -1,0 +1,7 @@
+{
+  "files": [
+    "Shop.Core\\Orders\\InMemoryOrderRepository.cs",
+    "Shop.Core\\Orders\\IOrderRepository.cs"
+  ],
+  "symbols": []
+}

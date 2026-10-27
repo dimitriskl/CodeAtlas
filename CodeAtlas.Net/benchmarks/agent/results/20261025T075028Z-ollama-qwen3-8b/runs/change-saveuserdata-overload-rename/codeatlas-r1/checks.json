@@ -1,0 +1,61 @@
+[
+  {
+    "type": "regex",
+    "name": "MediaBrowser.Controller/Library/IUserDataManager.cs",
+    "passed": true,
+    "matches": [
+      "MediaBrowser.Controller/Library/IUserDataManager.cs"
+    ]
+  },
+  {
+    "type": "regex",
+    "name": "MediaBrowser.Controller/Library/IUserDataManager.cs",
+    "passed": true,
+    "matches": [
+      "MediaBrowser.Controller/Library/IUserDataManager.cs"
+    ]
+  },
+  {
+    "type": "regex",
+    "name": "Emby.Server.Implementations/Library/UserDataManager.cs",
+    "passed": true,
+    "matches": [
+      "Emby.Server.Implementations/Library/UserDataManager.cs"
+    ]
+  },
+  {
+    "type": "regex",
+    "name": "Emby.Server.Implementations/Library/UserDataManager.cs",
+    "passed": true,
+    "matches": [
+      "Emby.Server.Implementations/Library/UserDataManager.cs"
+    ]
+  },
+  {
+    "type": "regex",
+    "name": "**/*.cs",
+    "passed": false,
+    "matches": [
+      "Emby.Server.Implementations/Library/UserDataManager.cs",
+      "Emby.Server.Implementations/Session/SessionManager.cs",
+      "Jellyfin.Api/Controllers/UserLibraryController.cs",
+      "MediaBrowser.Controller/Entities/BaseItem.cs",
+      "MediaBrowser.XbmcMetadata/Parsers/BaseNfoParser.cs"
+    ]
+  },
+  {
+    "type": "regex",
+    "name": "Jellyfin.Api/Controllers/ItemsController.cs",
+    "passed": true,
+    "matches": [
+      "Jellyfin.Api/Controllers/ItemsController.cs"
+    ]
+  },
+  {
+    "type": "command",
+    "name": "build",
+    "passed": false,
+    "exitCode": 1,
+    "seconds": 4.53
+  }
+]

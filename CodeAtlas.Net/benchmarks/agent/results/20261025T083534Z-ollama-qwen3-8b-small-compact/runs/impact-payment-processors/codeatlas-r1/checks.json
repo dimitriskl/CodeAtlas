@@ -1,0 +1,8 @@
+[
+  {
+    "type": "answer-set",
+    "name": "symbols",
+    "passed": false,
+    "detail": "answer.symbols is not a list"
+  }
+]

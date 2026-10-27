@@ -1,0 +1,62 @@
+diff --git a/Shop.App/CheckoutService.cs b/Shop.App/CheckoutService.cs
+index 5c728f1..2859417 100644
+--- a/Shop.App/CheckoutService.cs
++++ b/Shop.App/CheckoutService.cs
+@@ -11,6 +11,6 @@ public sealed class CheckoutService(IPaymentProcessor processor, DiscountCalcula
+     {
+         var total = coupon is null ? order.Total : discounts.Apply(order, coupon);
+         total += shipping.Calculate(order);
+-        return processor.Charge(order, total);
++        return processor.Charge(order, total, "EUR");
+     }
+ }
+diff --git a/Shop.Core/Payments/BankPaymentProcessorBase.cs b/Shop.Core/Payments/BankPaymentProcessorBase.cs
+index 600fe97..45c21aa 100644
+--- a/Shop.Core/Payments/BankPaymentProcessorBase.cs
++++ b/Shop.Core/Payments/BankPaymentProcessorBase.cs
+@@ -8,7 +8,7 @@ public abstract class BankPaymentProcessorBase : IPaymentProcessor
+ 
+     protected abstract string Scheme { get; }
+ 
+-    public PaymentResult Charge(Order order, decimal amount)
++    public PaymentResult Charge(Order order, decimal amount, string currency)
+     {
+         return new PaymentResult(amount > 0, $"{Scheme}-{order.Id:N}");
+     }
+diff --git a/Shop.Core/Payments/CardPaymentProcessor.cs b/Shop.Core/Payments/CardPaymentProcessor.cs
+index d572faf..dfe9b3e 100644
+--- a/Shop.Core/Payments/CardPaymentProcessor.cs
++++ b/Shop.Core/Payments/CardPaymentProcessor.cs
+@@ -6,7 +6,7 @@ public sealed class CardPaymentProcessor : IPaymentProcessor
+ {
+     public string Name => "card";
+ 
+-    public PaymentResult Charge(Order order, decimal amount)
++    public PaymentResult Charge(Order order, decimal amount, string currency)
+     {
+         return new PaymentResult(amount > 0, $"card-{order.Id:N}");
+     }
+diff --git a/Shop.Core/Payments/IPaymentProcessor.cs b/Shop.Core/Payments/IPaymentProcessor.cs
+index 8aeedca..009ba60 100644
+--- a/Shop.Core/Payments/IPaymentProcessor.cs
++++ b/Shop.Core/Payments/IPaymentProcessor.cs
+@@ -6,5 +6,5 @@ public interface IPaymentProcessor
+ {
+     string Name { get; }
+ 
+-    PaymentResult Charge(Order order, decimal amount);
++    PaymentResult Charge(Order order, decimal amount, string currency);
+ }
+diff --git a/Shop.Core/Payments/PayPalPaymentProcessor.cs b/Shop.Core/Payments/PayPalPaymentProcessor.cs
+index 5b6898f..2f09a6e 100644
+--- a/Shop.Core/Payments/PayPalPaymentProcessor.cs
++++ b/Shop.Core/Payments/PayPalPaymentProcessor.cs
+@@ -6,7 +6,7 @@ public sealed class PayPalPaymentProcessor : IPaymentProcessor
+ {
+     public string Name => "paypal";
+ 
+-    public PaymentResult Charge(Order order, decimal amount)
++    public PaymentResult Charge(Order order, decimal amount, string currency)
+     {
+         return new PaymentResult(amount > 0 && amount < 10_000m, $"pp-{order.Id:N}");
+     }

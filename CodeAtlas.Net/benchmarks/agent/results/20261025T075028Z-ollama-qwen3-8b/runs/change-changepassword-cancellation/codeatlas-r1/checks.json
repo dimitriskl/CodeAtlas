@@ -1,0 +1,53 @@
+[
+  {
+    "type": "regex",
+    "name": "MediaBrowser.Controller/Library/IUserManager.cs",
+    "passed": false,
+    "matches": []
+  },
+  {
+    "type": "regex",
+    "name": "MediaBrowser.Controller/Library/IUserManager.cs",
+    "passed": false,
+    "matches": [
+      "MediaBrowser.Controller/Library/IUserManager.cs"
+    ]
+  },
+  {
+    "type": "regex",
+    "name": "Jellyfin.Server.Implementations/Users/UserManager.cs",
+    "passed": false,
+    "matches": []
+  },
+  {
+    "type": "regex",
+    "name": "MediaBrowser.Controller/Authentication/IAuthenticationProvider.cs",
+    "passed": true,
+    "matches": [
+      "MediaBrowser.Controller/Authentication/IAuthenticationProvider.cs"
+    ]
+  },
+  {
+    "type": "regex",
+    "name": "Jellyfin.Server.Implementations/Users/DefaultAuthenticationProvider.cs",
+    "passed": true,
+    "matches": [
+      "Jellyfin.Server.Implementations/Users/DefaultAuthenticationProvider.cs"
+    ]
+  },
+  {
+    "type": "regex",
+    "name": "Jellyfin.Server.Implementations/Users/InvalidAuthProvider.cs",
+    "passed": true,
+    "matches": [
+      "Jellyfin.Server.Implementations/Users/InvalidAuthProvider.cs"
+    ]
+  },
+  {
+    "type": "command",
+    "name": "build",
+    "passed": true,
+    "exitCode": 0,
+    "seconds": 3.13
+  }
+]

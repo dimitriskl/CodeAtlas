@@ -1,0 +1,8 @@
+{
+  "files": [
+    "Shop.Core\\Orders\\InMemoryOrderRepository.cs"
+  ],
+  "symbols": [
+    "Shop.Core.Orders.IOrderRepository.GetOpenOrders"
+  ]
+}

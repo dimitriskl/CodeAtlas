@@ -1,0 +1,9 @@
+C:\temp\codeatlas-bench\suites\small\work\codeatlas\Shop.App\CheckoutService.cs(14,26): error CS7036: There is no argument given that corresponds to the required parameter 'currency' of 'IPaymentProcessor.Charge(Order, decimal, string)' [C:\temp\codeatlas-bench\suites\small\work\codeatlas\Shop.App\Shop.App.csproj]
+
+Build FAILED.
+
+C:\temp\codeatlas-bench\suites\small\work\codeatlas\Shop.App\CheckoutService.cs(14,26): error CS7036: There is no argument given that corresponds to the required parameter 'currency' of 'IPaymentProcessor.Charge(Order, decimal, string)' [C:\temp\codeatlas-bench\suites\small\work\codeatlas\Shop.App\Shop.App.csproj]
+    0 Warning(s)
+    1 Error(s)
+
+Time Elapsed 00:00:00.56

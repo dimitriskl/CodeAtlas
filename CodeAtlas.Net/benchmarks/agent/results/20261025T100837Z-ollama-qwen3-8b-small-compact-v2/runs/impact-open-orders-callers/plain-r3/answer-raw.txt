@@ -1,0 +1,1 @@
+["Shop.Core\Orders\InMemoryOrderRepository.cs","Shop.App\ReminderJob.cs","Shop.App\CustomerStatementService.cs"]

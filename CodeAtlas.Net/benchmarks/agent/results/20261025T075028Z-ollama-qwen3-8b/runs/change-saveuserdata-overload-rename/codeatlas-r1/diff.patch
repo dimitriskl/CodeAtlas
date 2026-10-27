@@ -1,0 +1,26 @@
+diff --git a/Emby.Server.Implementations/Library/UserDataManager.cs b/Emby.Server.Implementations/Library/UserDataManager.cs
+index 72c8d7a..b74fdf9 100644
+--- a/Emby.Server.Implementations/Library/UserDataManager.cs
++++ b/Emby.Server.Implementations/Library/UserDataManager.cs
+@@ -47,7 +47,7 @@ namespace Emby.Server.Implementations.Library
+         public event EventHandler<UserDataSaveEventArgs>? UserDataSaved;
+ 
+         /// <inheritdoc />
+-        public void SaveUserData(User user, BaseItem item, UserItemData userData, UserDataSaveReason reason, CancellationToken cancellationToken)
++        public void SaveUserItemData(User user, BaseItem item, UserItemData userData, UserDataSaveReason reason, CancellationToken cancellationToken)
+         {
+             ArgumentNullException.ThrowIfNull(userData);
+ 
+diff --git a/MediaBrowser.Controller/Library/IUserDataManager.cs b/MediaBrowser.Controller/Library/IUserDataManager.cs
+index eb46611..b3ba801 100644
+--- a/MediaBrowser.Controller/Library/IUserDataManager.cs
++++ b/MediaBrowser.Controller/Library/IUserDataManager.cs
+@@ -27,7 +27,7 @@ namespace MediaBrowser.Controller.Library
+         /// <param name="userData">The user data.</param>
+         /// <param name="reason">The reason.</param>
+         /// <param name="cancellationToken">The cancellation token.</param>
+-        void SaveUserData(User user, BaseItem item, UserItemData userData, UserDataSaveReason reason, CancellationToken cancellationToken);
++        void SaveUserItemData(User user, BaseItem item, UserItemData userData, UserDataSaveReason reason, CancellationToken cancellationToken);
+ 
+         /// <summary>
+         /// Save the provided user data for the given user.

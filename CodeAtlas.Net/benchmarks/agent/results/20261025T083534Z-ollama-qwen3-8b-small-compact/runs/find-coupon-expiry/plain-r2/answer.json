@@ -1,0 +1,8 @@
+{
+  "files": [
+    "Shop.Core\\Discounts\\Coupon.cs"
+  ],
+  "symbols": [
+    "Shop.Core.Discounts.Coupon.IsExpired"
+  ]
+}

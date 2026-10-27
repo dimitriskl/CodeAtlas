@@ -1,0 +1,14 @@
+{
+  "files": [
+    "Shop.Core/Payments/CardPaymentProcessor.cs",
+    "Shop.Core/Payments/PayPalPaymentProcessor.cs",
+    "Shop.Core/Payments/SepaPaymentProcessor.cs",
+    "Shop.Core/Payments/WirePaymentProcessor.cs"
+  ],
+  "symbols": [
+    "Shop.Core.Payments.CardPaymentProcessor",
+    "Shop.Core.Payments.PayPalPaymentProcessor",
+    "Shop.Core.Payments.SepaPaymentProcessor",
+    "Shop.Core.Payments.WirePaymentProcessor"
+  ]
+}

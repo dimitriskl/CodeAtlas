@@ -1,0 +1,45 @@
+[
+  {
+    "type": "regex",
+    "name": "Shop.Core/Discounts/DiscountCalculator.cs",
+    "passed": true,
+    "matches": [
+      "Shop.Core/Discounts/DiscountCalculator.cs"
+    ]
+  },
+  {
+    "type": "regex",
+    "name": "Shop.Core/Discounts/DiscountCalculator.cs",
+    "passed": true,
+    "matches": [
+      "Shop.Core/Discounts/DiscountCalculator.cs"
+    ]
+  },
+  {
+    "type": "regex",
+    "name": "**/*.cs",
+    "passed": true,
+    "matches": []
+  },
+  {
+    "type": "regex",
+    "name": "Shop.App/ReminderJob.cs",
+    "passed": true,
+    "matches": [
+      "Shop.App/ReminderJob.cs"
+    ]
+  },
+  {
+    "type": "regex",
+    "name": "Shop.App/LoyaltyService.cs",
+    "passed": false,
+    "matches": []
+  },
+  {
+    "type": "command",
+    "name": "build",
+    "passed": false,
+    "exitCode": 1,
+    "seconds": 0.79
+  }
+]

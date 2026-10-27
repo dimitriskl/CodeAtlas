@@ -1,0 +1,11 @@
+C:\temp\codeatlas-bench\suites\small\work\codeatlas\Shop.App\LoyaltyService.cs(10,39): error CS1503: Argument 2: cannot convert from 'Shop.Core.Discounts.Coupon' to 'decimal' [C:\temp\codeatlas-bench\suites\small\work\codeatlas\Shop.App\Shop.App.csproj]
+C:\temp\codeatlas-bench\suites\small\work\codeatlas\Shop.App\CheckoutService.cs(12,75): error CS1503: Argument 2: cannot convert from 'Shop.Core.Discounts.Coupon' to 'decimal' [C:\temp\codeatlas-bench\suites\small\work\codeatlas\Shop.App\Shop.App.csproj]
+
+Build FAILED.
+
+C:\temp\codeatlas-bench\suites\small\work\codeatlas\Shop.App\LoyaltyService.cs(10,39): error CS1503: Argument 2: cannot convert from 'Shop.Core.Discounts.Coupon' to 'decimal' [C:\temp\codeatlas-bench\suites\small\work\codeatlas\Shop.App\Shop.App.csproj]
+C:\temp\codeatlas-bench\suites\small\work\codeatlas\Shop.App\CheckoutService.cs(12,75): error CS1503: Argument 2: cannot convert from 'Shop.Core.Discounts.Coupon' to 'decimal' [C:\temp\codeatlas-bench\suites\small\work\codeatlas\Shop.App\Shop.App.csproj]
+    0 Warning(s)
+    2 Error(s)
+
+Time Elapsed 00:00:00.50

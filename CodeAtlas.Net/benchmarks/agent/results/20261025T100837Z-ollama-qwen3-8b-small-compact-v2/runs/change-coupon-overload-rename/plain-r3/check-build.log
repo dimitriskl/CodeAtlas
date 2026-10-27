@@ -1,0 +1,9 @@
+C:\temp\codeatlas-bench\suites\small\work\plain\Shop.Core\Discounts\DiscountCalculator.cs(22,35): error CS1503: Argument 2: cannot convert from 'decimal' to 'Shop.Core.Discounts.Coupon' [C:\temp\codeatlas-bench\suites\small\work\plain\Shop.Core\Shop.Core.csproj]
+
+Build FAILED.
+
+C:\temp\codeatlas-bench\suites\small\work\plain\Shop.Core\Discounts\DiscountCalculator.cs(22,35): error CS1503: Argument 2: cannot convert from 'decimal' to 'Shop.Core.Discounts.Coupon' [C:\temp\codeatlas-bench\suites\small\work\plain\Shop.Core\Shop.Core.csproj]
+    0 Warning(s)
+    1 Error(s)
+
+Time Elapsed 00:00:00.36

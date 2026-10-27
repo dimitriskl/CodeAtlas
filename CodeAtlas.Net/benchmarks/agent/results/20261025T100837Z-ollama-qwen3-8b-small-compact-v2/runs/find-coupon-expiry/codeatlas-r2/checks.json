@@ -1,0 +1,18 @@
+[
+  {
+    "type": "answer-set",
+    "name": "files",
+    "passed": true,
+    "recall": 1.0,
+    "precision": 1.0,
+    "missing": [],
+    "unexpected": [],
+    "forbidden": []
+  },
+  {
+    "type": "answer-contains",
+    "name": "symbols",
+    "passed": true,
+    "missingGroups": []
+  }
+]

@@ -1,0 +1,11 @@
+diff --git a/Shop.Core/Payments/IPaymentProcessor.cs b/Shop.Core/Payments/IPaymentProcessor.cs
+index 8aeedca..009ba60 100644
+--- a/Shop.Core/Payments/IPaymentProcessor.cs
++++ b/Shop.Core/Payments/IPaymentProcessor.cs
+@@ -6,5 +6,5 @@ public interface IPaymentProcessor
+ {
+     string Name { get; }
+ 
+-    PaymentResult Charge(Order order, decimal amount);
++    PaymentResult Charge(Order order, decimal amount, string currency);
+ }

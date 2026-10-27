@@ -1,0 +1,13 @@
+C:\temp\codeatlas-bench\work\plain\MediaBrowser.Controller\Authentication\IAuthenticationProvider.cs(19,60): error CS0246: The type or namespace name 'CancellationToken' could not be found (are you missing a using directive or an assembly reference?) [C:\temp\codeatlas-bench\work\plain\MediaBrowser.Controller\MediaBrowser.Controller.csproj]
+C:\temp\codeatlas-bench\work\plain\MediaBrowser.Controller\Library\IUserManager.cs(112,62): error CS0246: The type or namespace name 'CancellationToken' could not be found (are you missing a using directive or an assembly reference?) [C:\temp\codeatlas-bench\work\plain\MediaBrowser.Controller\MediaBrowser.Controller.csproj]
+
+Build FAILED.
+
+C:\temp\codeatlas-bench\work\plain\MediaBrowser.Controller\Authentication\IAuthenticationProvider.cs(19,60): error CS0246: The type or namespace name 'CancellationToken' could not be found (are you missing a using directive or an assembly reference?) [C:\temp\codeatlas-bench\work\plain\MediaBrowser.Controller\MediaBrowser.Controller.csproj]
+C:\temp\codeatlas-bench\work\plain\MediaBrowser.Controller\Library\IUserManager.cs(112,62): error CS0246: The type or namespace name 'CancellationToken' could not be found (are you missing a using directive or an assembly reference?) [C:\temp\codeatlas-bench\work\plain\MediaBrowser.Controller\MediaBrowser.Controller.csproj]
+    0 Warning(s)
+    2 Error(s)
+
+Time Elapsed 00:00:01.72
+
+Workload updates are available. Run `dotnet workload list` for more information.

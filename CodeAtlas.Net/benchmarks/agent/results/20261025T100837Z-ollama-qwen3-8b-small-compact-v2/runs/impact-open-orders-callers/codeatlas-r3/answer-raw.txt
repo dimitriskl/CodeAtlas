@@ -1,0 +1,1 @@
+{\n  "files": [\n    "Shop.Core\Orders\InMemoryOrderRepository.cs"\n  ],\n  "symbols": [\n    "Shop.Core.Orders.IOrderRepository.GetOpenOrders"\n  ]\n}

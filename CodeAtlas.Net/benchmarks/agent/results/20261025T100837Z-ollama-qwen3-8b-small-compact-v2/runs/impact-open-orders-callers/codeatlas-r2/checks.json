@@ -1,0 +1,16 @@
+[
+  {
+    "type": "answer-set",
+    "name": "files",
+    "passed": false,
+    "recall": 0.0,
+    "precision": 0.0,
+    "missing": [
+      "shop.app/customerstatementservice.cs",
+      "shop.app/reminderjob.cs",
+      "shop.core/orders/inmemoryorderrepository.cs"
+    ],
+    "unexpected": [],
+    "forbidden": []
+  }
+]

@@ -1,0 +1,12 @@
+[
+  {
+    "type": "answer-set",
+    "name": "symbols",
+    "passed": true,
+    "recall": 1.0,
+    "precision": 1.0,
+    "missing": [],
+    "unexpected": [],
+    "forbidden": []
+  }
+]

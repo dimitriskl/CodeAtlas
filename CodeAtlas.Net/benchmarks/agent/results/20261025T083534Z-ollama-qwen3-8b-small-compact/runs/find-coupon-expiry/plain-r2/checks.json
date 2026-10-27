@@ -1,0 +1,26 @@
+[
+  {
+    "type": "answer-set",
+    "name": "files",
+    "passed": false,
+    "recall": 0.0,
+    "precision": 0.0,
+    "missing": [
+      "shop.core/discounts/couponvalidator.cs"
+    ],
+    "unexpected": [
+      "shop.core/discounts/coupon.cs"
+    ],
+    "forbidden": []
+  },
+  {
+    "type": "answer-contains",
+    "name": "symbols",
+    "passed": false,
+    "missingGroups": [
+      [
+        "CouponValidator.IsExpired"
+      ]
+    ]
+  }
+]

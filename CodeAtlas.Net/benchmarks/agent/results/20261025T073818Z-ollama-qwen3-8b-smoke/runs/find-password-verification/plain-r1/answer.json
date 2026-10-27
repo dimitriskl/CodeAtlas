@@ -1,0 +1,8 @@
+{
+  "files": [
+    "Emby.Server.Implementations/Cryptography/CryptographyProvider.cs"
+  ],
+  "symbols": [
+    "CryptographyProvider.Verify"
+  ]
+}

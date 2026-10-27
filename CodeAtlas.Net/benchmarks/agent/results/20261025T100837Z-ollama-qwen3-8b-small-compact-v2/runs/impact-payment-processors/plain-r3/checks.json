@@ -1,0 +1,15 @@
+[
+  {
+    "type": "answer-set",
+    "name": "symbols",
+    "passed": false,
+    "recall": 0.5,
+    "precision": 1.0,
+    "missing": [
+      "SepaPaymentProcessor",
+      "WirePaymentProcessor"
+    ],
+    "unexpected": [],
+    "forbidden": []
+  }
+]

@@ -1,0 +1,29 @@
+[
+  {
+    "type": "regex",
+    "name": "Shop.Core/Payments/IPaymentProcessor.cs",
+    "passed": false,
+    "matches": []
+  },
+  {
+    "type": "regex",
+    "name": "Shop.Core/Payments/FakeGatewayClient.cs",
+    "passed": true,
+    "matches": [
+      "Shop.Core/Payments/FakeGatewayClient.cs"
+    ]
+  },
+  {
+    "type": "regex",
+    "name": "Shop.App/CheckoutService.cs",
+    "passed": false,
+    "matches": []
+  },
+  {
+    "type": "command",
+    "name": "build",
+    "passed": false,
+    "exitCode": 1,
+    "seconds": 0.56
+  }
+]

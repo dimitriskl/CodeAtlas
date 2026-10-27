@@ -1,0 +1,1 @@
+{"files": ["Shop.Core\Discounts\CouponValidator.cs"], "symbols": ["Shop.Core.Discounts.CouponValidator.IsExpired"]}

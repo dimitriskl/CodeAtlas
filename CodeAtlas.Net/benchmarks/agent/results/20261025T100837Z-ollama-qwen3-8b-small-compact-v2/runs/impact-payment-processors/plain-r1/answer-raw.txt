@@ -1,0 +1,1 @@
+{"files": ["Shop.Core\/Payments\/PayPalPaymentProcessor.cs","Shop.Core\/Payments\/CardPaymentProcessor.cs"], "symbols": ["PayPalPaymentProcessor","CardPaymentProcessor"]}

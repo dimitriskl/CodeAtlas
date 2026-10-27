@@ -1,0 +1,131 @@
+diff --git a/Jellyfin.Api/Controllers/StartupController.cs b/Jellyfin.Api/Controllers/StartupController.cs
+index 9378cfe..b13bc56 100644
+--- a/Jellyfin.Api/Controllers/StartupController.cs
++++ b/Jellyfin.Api/Controllers/StartupController.cs
+@@ -151,7 +151,7 @@ public class StartupController : BaseJellyfinApiController
+ 
+         if (!string.IsNullOrEmpty(startupUserDto.Password))
+         {
+-            await _userManager.ChangePassword(user.Id, startupUserDto.Password).ConfigureAwait(false);
++            await _userManager.ChangePassword(user.Id, startupUserDto.Password, CancellationToken.None).ConfigureAwait(false);
+         }
+ 
+         return NoContent();
+diff --git a/Jellyfin.Api/Controllers/UserController.cs b/Jellyfin.Api/Controllers/UserController.cs
+index 4e1a067..324b080 100644
+--- a/Jellyfin.Api/Controllers/UserController.cs
++++ b/Jellyfin.Api/Controllers/UserController.cs
+@@ -306,7 +306,7 @@ public class UserController : BaseJellyfinApiController
+                 }
+             }
+ 
+-            await _userManager.ChangePassword(user.Id, request.NewPw ?? string.Empty).ConfigureAwait(false);
++            await _userManager.ChangePassword(user.Id, request.NewPw ?? string.Empty, CancellationToken.None).ConfigureAwait(false);
+ 
+             var currentToken = User.GetToken();
+ 
+diff --git a/Jellyfin.Server.Implementations/Users/DefaultAuthenticationProvider.cs b/Jellyfin.Server.Implementations/Users/DefaultAuthenticationProvider.cs
+index 35c43b1..0bbd680 100644
+--- a/Jellyfin.Server.Implementations/Users/DefaultAuthenticationProvider.cs
++++ b/Jellyfin.Server.Implementations/Users/DefaultAuthenticationProvider.cs
+@@ -98,7 +98,7 @@ namespace Jellyfin.Server.Implementations.Users
+             => !string.IsNullOrEmpty(user?.Password);
+ 
+         /// <inheritdoc />
+-        public Task ChangePassword(User user, string newPassword)
++        public Task ChangePassword(User user, string newPassword, CancellationToken cancellationToken)
+         {
+             if (string.IsNullOrEmpty(newPassword))
+             {
+diff --git a/Jellyfin.Server.Implementations/Users/InvalidAuthProvider.cs b/Jellyfin.Server.Implementations/Users/InvalidAuthProvider.cs
+index caf9d5b..71a9a2a 100644
+--- a/Jellyfin.Server.Implementations/Users/InvalidAuthProvider.cs
++++ b/Jellyfin.Server.Implementations/Users/InvalidAuthProvider.cs
+@@ -28,7 +28,7 @@ namespace Jellyfin.Server.Implementations.Users
+         }
+ 
+         /// <inheritdoc />
+-        public Task ChangePassword(User user, string newPassword)
++        public Task ChangePassword(User user, string newPassword, CancellationToken cancellationToken)
+         {
+             return Task.CompletedTask;
+         }
+diff --git a/Jellyfin.Server.Implementations/Users/UserManager.cs b/Jellyfin.Server.Implementations/Users/UserManager.cs
+index 9fc6f2f..2e39c12 100644
+--- a/Jellyfin.Server.Implementations/Users/UserManager.cs
++++ b/Jellyfin.Server.Implementations/Users/UserManager.cs
+@@ -182,7 +182,7 @@ namespace Jellyfin.Server.Implementations.Users
+             }
+ 
+             User user = null!; // user is never actually null where its used afterwards so we can just ignore.
+-            using (await _userLock.LockAsync(userId).ConfigureAwait(false))
++            await using (await _userLock.LockAsync(userId, cancellationToken).ConfigureAwait(false))
+             {
+                 var dbContext = await _dbProvider.CreateDbContextAsync().ConfigureAwait(false);
+                 await using (dbContext.ConfigureAwait(false))
+@@ -289,7 +289,7 @@ namespace Jellyfin.Server.Implementations.Users
+         public async Task DeleteUserAsync(Guid userId)
+         {
+             User? user;
+-            using (await _userLock.LockAsync(userId).ConfigureAwait(false))
++            await using (await _userLock.LockAsync(userId, cancellationToken).ConfigureAwait(false))
+             {
+                 var dbContext = await _dbProvider.CreateDbContextAsync().ConfigureAwait(false);
+                 await using (dbContext.ConfigureAwait(false))
+@@ -341,10 +341,10 @@ namespace Jellyfin.Server.Implementations.Users
+         }
+ 
+         /// <inheritdoc/>
+-        public async Task ChangePassword(Guid userId, string newPassword)
++        public async Task ChangePassword(Guid userId, string newPassword, CancellationToken cancellationToken)
+         {
+             User dbUser = null!;
+-            using (await _userLock.LockAsync(userId).ConfigureAwait(false))
++            await using (await _userLock.LockAsync(userId, cancellationToken).ConfigureAwait(false))
+             {
+                 var dbContext = await _dbProvider.CreateDbContextAsync().ConfigureAwait(false);
+                 await using (dbContext.ConfigureAwait(false))
+@@ -678,7 +678,7 @@ namespace Jellyfin.Server.Implementations.Users
+         /// <inheritdoc/>
+         public async Task UpdateConfigurationAsync(Guid userId, UserConfiguration config)
+         {
+-            using (await _userLock.LockAsync(userId).ConfigureAwait(false))
++            await using (await _userLock.LockAsync(userId, cancellationToken).ConfigureAwait(false))
+             {
+                 var dbContext = await _dbProvider.CreateDbContextAsync().ConfigureAwait(false);
+                 await using (dbContext.ConfigureAwait(false))
+@@ -721,7 +721,7 @@ namespace Jellyfin.Server.Implementations.Users
+         /// <inheritdoc/>
+         public async Task UpdatePolicyAsync(Guid userId, UserPolicy policy)
+         {
+-            using (await _userLock.LockAsync(userId).ConfigureAwait(false))
++            await using (await _userLock.LockAsync(userId, cancellationToken).ConfigureAwait(false))
+             {
+                 var dbContext = await _dbProvider.CreateDbContextAsync().ConfigureAwait(false);
+                 await using (dbContext.ConfigureAwait(false))
+diff --git a/MediaBrowser.Controller/Authentication/IAuthenticationProvider.cs b/MediaBrowser.Controller/Authentication/IAuthenticationProvider.cs
+index 976a667..9af68f8 100644
+--- a/MediaBrowser.Controller/Authentication/IAuthenticationProvider.cs
++++ b/MediaBrowser.Controller/Authentication/IAuthenticationProvider.cs
+@@ -16,7 +16,7 @@ namespace MediaBrowser.Controller.Authentication
+ 
+         bool HasPassword(User user);
+ 
+-        Task ChangePassword(User user, string newPassword);
++        Task ChangePassword(User user, string newPassword, CancellationToken cancellationToken);
+     }
+ 
+     public interface IRequiresResolvedUser
+diff --git a/MediaBrowser.Controller/Library/IUserManager.cs b/MediaBrowser.Controller/Library/IUserManager.cs
+index e2b54ea..2d3e8f3 100644
+--- a/MediaBrowser.Controller/Library/IUserManager.cs
++++ b/MediaBrowser.Controller/Library/IUserManager.cs
+@@ -109,7 +109,7 @@ namespace MediaBrowser.Controller.Library
+         /// <param name="userId">The users id.</param>
+         /// <param name="newPassword">New password to use.</param>
+         /// <returns>Awaitable task.</returns>
+-        Task ChangePassword(Guid userId, string newPassword);
++        Task ChangePassword(Guid userId, string newPassword, CancellationToken cancellationToken);
+ 
+         /// <summary>
+         /// Gets the user dto.
