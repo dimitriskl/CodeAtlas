@@ -164,6 +164,32 @@ public sealed class SqliteFileUpdateTests
     }
 
     [Fact]
+    public async Task PublishingWhenDiskDiffersFromTheAppliedTextIsStale()
+    {
+        // Arrange
+        using var fixture = await SampleCopy.CreateAsync();
+        var published = await IndexStore.PublishAsync(await SolutionAnalysis.CreateIndexAsync(fixture.Solution));
+        var previousBytes = await File.ReadAllBytesAsync(published.IndexPath);
+        var workingCopy = Path.Combine(fixture.Root, "working.db");
+        File.Copy(published.IndexPath, workingCopy);
+        var original = await File.ReadAllTextAsync(fixture.Calculator);
+        var edited = EditedCalculator(original);
+        using (var analysis = await SolutionAnalysis.LoadAsync(fixture.Solution))
+            await analysis.UpdateWorkingCopyAsync(workingCopy, fixture.Calculator, edited);
+        await File.WriteAllTextAsync(fixture.Calculator, original);
+
+        // Act
+        var failure = await Record.ExceptionAsync(() => IndexStore.PublishWorkingCopyAsync(fixture.Solution, workingCopy));
+
+        // Assert
+        Assert.Contains(CalculatorFile, Assert.IsType<StaleIndexException>(failure).Diagnostics);
+        Assert.Equal(previousBytes, await File.ReadAllBytesAsync(published.IndexPath));
+        var opened = await IndexStore.OpenSnapshotAsync(IndexStore.DefaultPath(fixture.Solution));
+        Assert.Equal(published.Index.IndexId, opened.Index.IndexId);
+        Assert.Equal(IndexStore.FindReferences(published.Index, Calculate), SnapshotQueries.FindReferences(opened, Calculate, new QueryRequest()).Items);
+    }
+
+    [Fact]
     public async Task FailedPublicationLeavesTheCurrentGenerationUnchanged()
     {
         // Arrange

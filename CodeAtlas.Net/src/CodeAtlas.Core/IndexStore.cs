@@ -307,7 +307,7 @@ public static class IndexStore
             new(SqliteIndexSchema.ArtifactName, null, (path, _) =>
             {
                 File.Copy(workingCopy, path);
-                SqliteIndexWriter.PreparePublishedCopy(path, indexId, fullSolution);
+                SqliteIndexWriter.PreparePublishedCopy(path, indexId);
                 return Task.CompletedTask;
             }),
             CopiedArtifact(current, "overview.md"),

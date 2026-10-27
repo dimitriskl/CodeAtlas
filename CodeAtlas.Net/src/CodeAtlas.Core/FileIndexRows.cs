@@ -39,8 +39,7 @@ public sealed partial class SolutionAnalysis
 
     /// <summary>
     /// Applies one file's text in memory, builds that file's rows, and replaces them in a private working copy.
-    /// A path that is not an open document throws <see cref="AnalysisException"/> and does not write.
-    /// The file hash, manifest, and generation header stay as copied.
+    /// The stored file hash is the applied text. A path that is not an open document throws <see cref="AnalysisException"/> and does not write.
     /// </summary>
     public async Task UpdateWorkingCopyAsync(string workingCopy, string path, string text, CancellationToken cancellationToken = default)
     {
@@ -49,6 +48,7 @@ public sealed partial class SolutionAnalysis
             throw new AnalysisException($"The path is not an open source document: {path}");
         var rows = await FileRowsAsync(path, cancellationToken);
         SqliteIndexWriter.ReplaceFileRows(workingCopy, updated[0], rows.Methods, rows.References);
+        SqliteIndexWriter.RecordAppliedText(workingCopy, Path.GetFullPath(path, directory), updated[0], text);
     }
 
     private string OneRelativePath(Document[] documents, string path)

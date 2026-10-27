@@ -1,4 +1,5 @@
 using System.Security.Cryptography;
+using System.Text;
 using System.Text.Json;
 using Microsoft.Data.Sqlite;
 
@@ -35,16 +36,36 @@ internal sealed partial class SqliteIndexWriter
     }
 
     /// <summary>
-    /// Prepares a generation copy: new id, and tracked file hashes set to the bytes now on disk.
-    /// Freshness compares those hashes with disk, so a generation left on the old hashes is refused.
+    /// Records the SHA-256 of the text the file's rows were built from.
+    /// Publication keeps this hash; freshness then reports stale when disk bytes differ.
     /// </summary>
-    internal static void PreparePublishedCopy(string path, string indexId, string solution)
+    internal static void RecordAppliedText(string database, string absolutePath, string relativeFile, string text)
+    {
+        var hash = Convert.ToHexString(SHA256.HashData(Utf8.GetBytes(text)));
+        using var connection = OpenWorkingCopy(database);
+        Execute(connection, "PRAGMA journal_mode=DELETE;");
+        using var transaction = connection.BeginTransaction();
+        var recorded = false;
+        foreach (var (path, _) in ReadInputHashes(connection, transaction))
+        {
+            if (!SnapshotInputModel.PathComparer.Equals(path, absolutePath)) continue;
+            Execute("UPDATE input_files SET sha256 = $hash, present = 1 WHERE path = $path", connection, transaction, ("$hash", hash), ("$path", path));
+            Execute("UPDATE fingerprints SET sha256 = $hash WHERE path = $path", connection, transaction, ("$hash", hash), ("$path", path));
+            recorded = true;
+        }
+        if (!recorded)
+            throw new IndexFormatException("invalid_index", "The working copy has no input row for " + absolutePath + ".");
+        Execute("UPDATE files SET content_hash = $hash WHERE path = $path", connection, transaction, ("$hash", hash), ("$path", relativeFile));
+        transaction.Commit();
+    }
+
+    /// <summary>Gives a generation copy a new id. Tracked file hashes stay as recorded for the text that was indexed.</summary>
+    internal static void PreparePublishedCopy(string path, string indexId)
     {
         using var connection = OpenWorkingCopy(path);
         Execute(connection, "PRAGMA journal_mode=DELETE;");
         using var transaction = connection.BeginTransaction();
         SetGenerationId(connection, transaction, indexId);
-        RefreshTrackedHashes(connection, transaction, Path.GetDirectoryName(solution)!);
         transaction.Commit();
     }
 
@@ -58,19 +79,7 @@ internal sealed partial class SqliteIndexWriter
             throw new IndexFormatException("invalid_index", "The working copy has no generation id.");
     }
 
-    private static void RefreshTrackedHashes(SqliteConnection connection, SqliteTransaction transaction, string solutionDirectory)
-    {
-        foreach (var (path, stored) in ReadInputHashes(connection, transaction))
-        {
-            if (!File.Exists(path)) continue;
-            var hash = FileHash(path);
-            if (string.Equals(stored, hash, StringComparison.OrdinalIgnoreCase)) continue;
-            Execute("UPDATE input_files SET sha256 = $hash WHERE path = $path", connection, transaction, ("$hash", hash), ("$path", path));
-            Execute("UPDATE fingerprints SET sha256 = $hash WHERE path = $path", connection, transaction, ("$hash", hash), ("$path", path));
-            var relative = Path.GetRelativePath(solutionDirectory, path).Replace('\\', '/');
-            Execute("UPDATE files SET content_hash = $hash WHERE path = $path", connection, transaction, ("$hash", hash), ("$path", relative));
-        }
-    }
+    private static readonly Encoding Utf8 = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false);
 
     private static List<(string Path, string? Hash)> ReadInputHashes(SqliteConnection connection, SqliteTransaction transaction)
     {
@@ -81,12 +90,6 @@ internal sealed partial class SqliteIndexWriter
         using var reader = command.ExecuteReader();
         while (reader.Read()) result.Add((reader.GetString(0), reader.IsDBNull(1) ? null : reader.GetString(1)));
         return result;
-    }
-
-    private static string FileHash(string path)
-    {
-        using var stream = File.OpenRead(path);
-        return Convert.ToHexString(SHA256.HashData(stream));
     }
 
     private static void RequireFileRows(string relativeFile, MethodInfo[] methods,
