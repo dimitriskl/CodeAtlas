@@ -12,7 +12,10 @@ export function readPackageVersion(): string {
   return manifest.version;
 }
 
-export function runCli(args: readonly string[]): Promise<{
+export function runCli(
+  args: readonly string[],
+  cwd: string = packageRoot,
+): Promise<{
   exitCode: number;
   stdout: string;
   stderr: string;
@@ -20,7 +23,7 @@ export function runCli(args: readonly string[]): Promise<{
   const cli = path.join(packageRoot, "dist", "cli.js");
   return new Promise((resolve, reject) => {
     const child = spawn(process.execPath, [cli, ...args], {
-      cwd: packageRoot,
+      cwd,
       stdio: ["ignore", "pipe", "pipe"],
     });
     const stdout: Buffer[] = [];
