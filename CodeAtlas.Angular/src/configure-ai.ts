@@ -1,7 +1,8 @@
 import { spawnSync } from "node:child_process";
-import { readFileSync } from "node:fs";
+import { fstatSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import path from "node:path";
+import type { Readable } from "node:stream";
 import { testAiConnection } from "./ai-provider.js";
 import {
   defaultSettingsPath,
@@ -9,7 +10,7 @@ import {
   saveAiSettings,
   type AiPreferences,
 } from "./ai-settings.js";
-import { configureAiSuccessEnvelope } from "./envelope.js";
+import { configureAiSuccessEnvelope, type ConfigureAiSuccessEnvelope } from "./envelope.js";
 import { CommandError } from "./errors.js";
 import { defaultCredentialsPath, findCredential } from "./credentials.js";
 import { createKeychain, CredentialStoreError, type Keychain } from "./keychain.js";
@@ -80,31 +81,66 @@ export function assertAiEndpoint(endpoint: string): URL {
   return url;
 }
 
-export async function runConfigureAi(args: readonly string[]): Promise<unknown> {
+export type ConfigureAiDependencies = {
+  cwd?: string;
+  env?: NodeJS.ProcessEnv;
+  platform?: NodeJS.Platform;
+  stdin?: SecretInput;
+  stderr?: NodeJS.WritableStream;
+  keychain?: Keychain;
+  fetchImpl?: typeof fetch;
+  home?: string;
+};
+
+/** A terminal or pipe the command can read a key from. Tests pass a simulated TTY. */
+export type SecretInput = Readable & {
+  isTTY?: boolean;
+  fd?: number;
+  setRawMode?: (mode: boolean) => void;
+  unref?: () => void;
+};
+
+const secretLimit = 8192;
+
+export async function runConfigureAi(
+  args: readonly string[],
+  dependencies: ConfigureAiDependencies = {},
+): Promise<ConfigureAiSuccessEnvelope> {
+  const cwd = dependencies.cwd ?? process.cwd();
+  const env = dependencies.env ?? process.env;
+  const platform = dependencies.platform ?? process.platform;
+  const stdin = dependencies.stdin ?? (process.stdin as SecretInput);
+  const stderr = dependencies.stderr ?? process.stderr;
+  stdin.unref?.();
   const options = parseConfigureAiArgs(args);
-  const settingsPath = path.resolve(
-    options.get("--settings") ?? defaultSettingsPath(process.cwd()),
-  );
+  const settingsPath = path.resolve(options.get("--settings") ?? defaultSettingsPath(cwd));
   const saved = loadAiSettings(settingsPath).ai;
   const selected = selectPreferences(options, saved);
   const variable = `CODEATLAS_AI_${selected.provider.toUpperCase()}_KEY`;
-  const keychain = createKeychain({
-    platform: process.platform,
-    runner: createProcessRunner(process.env, process.platform),
-    env: process.env,
-  });
+  const keychain =
+    dependencies.keychain ??
+    createKeychain({
+      platform,
+      runner: createProcessRunner(env, platform),
+      env,
+    });
   const credentialsPath = defaultCredentialsPath({
-    platform: process.platform,
-    env: process.env,
-    home: homedir(),
+    platform,
+    env,
+    home: dependencies.home ?? homedir(),
   });
+  const readScopedEnvironment = (name: string, scope: "process" | "user"): string | undefined => {
+    if (scope === "process") return env[name];
+    if (platform !== "win32") return undefined;
+    return readWindowsUserEnvironment(name, env, cwd);
+  };
   let key: string | null = null;
   let location: string | null = null;
   let entered = false;
   if (selected.provider !== "ollama") {
     const found = findCredential(selected.provider, {
-      platform: process.platform,
-      readEnvironment: readEnvironment,
+      platform,
+      readEnvironment: readScopedEnvironment,
       keychain,
       credentialsPath,
     });
@@ -112,11 +148,17 @@ export async function runConfigureAi(args: readonly string[]): Promise<unknown> 
       key = found.value;
       location = found.location;
     } else {
-      const typed = readEnteredKey();
-      if (typed === null) {
+      const typed = await resolveMissingKey(variable, keychain, stdin, stderr);
+      if (typed === null || typed.length === 0) {
+        if (!keychain.isAvailable()) {
+          saveAiSettings(settingsPath, selected);
+          throw new CommandError("ai_configuration_invalid", noKeychainMessage(variable), 1);
+        }
         throw new CommandError(
           "ai_configuration_invalid",
-          `An API key is required. Run configure-ai in an interactive terminal or set ${variable}.`,
+          stdin.isTTY === true
+            ? `An API key is required. Set ${variable}.`
+            : `An API key is required. Run configure-ai in an interactive terminal or set ${variable}.`,
           1,
         );
       }
@@ -126,21 +168,20 @@ export async function runConfigureAi(args: readonly string[]): Promise<unknown> 
     assertKey(key);
   }
   assertModel(selected.model);
-  await testAiConnection({
-    provider: selected.provider,
-    model: selected.model,
-    endpoint: selected.endpoint,
-    effort: selected.effort,
-    apiKey: key,
-  });
+  await testAiConnection(
+    {
+      provider: selected.provider,
+      model: selected.model,
+      endpoint: selected.endpoint,
+      effort: selected.effort,
+      apiKey: key,
+    },
+    dependencies.fetchImpl,
+  );
   if (entered && key !== null) {
     if (!keychain.isAvailable()) {
       saveAiSettings(settingsPath, selected);
-      throw new CommandError(
-        "ai_configuration_invalid",
-        `No OS keychain is available, so the API key was not saved. Set ${variable}.`,
-        1,
-      );
+      throw new CommandError("ai_configuration_invalid", noKeychainMessage(variable), 1);
     }
     location = saveKey(keychain, selected.provider, key);
   }
@@ -154,6 +195,28 @@ export async function runConfigureAi(args: readonly string[]): Promise<unknown> 
     credentialEnvironmentVariable: selected.provider === "ollama" ? null : variable,
     credentialStore: location,
   });
+}
+
+function noKeychainMessage(variable: string): string {
+  return `No OS keychain is available, so the API key was not saved. Set ${variable}.`;
+}
+
+/**
+ * A missing key is prompted only when it can be saved.
+ * Non-interactive input is taken only when it is already available, and never waited on.
+ */
+async function resolveMissingKey(
+  variable: string,
+  keychain: Keychain,
+  stdin: SecretInput,
+  stderr: NodeJS.WritableStream,
+): Promise<string | null> {
+  if (!keychain.isAvailable()) {
+    if (stdin.isTTY === true) return null;
+    return readPipedKey(stdin);
+  }
+  if (stdin.isTTY === true) return readSecret(variable, stdin, stderr);
+  return readPipedKey(stdin);
 }
 
 function selectPreferences(
@@ -268,38 +331,145 @@ function saveKey(keychain: Keychain, provider: string, secret: string): string {
   return keychain.name;
 }
 
-function readEnvironment(name: string, scope: "process" | "user"): string | undefined {
-  if (scope === "process") return process.env[name];
-  if (process.platform !== "win32") return undefined;
-  return readWindowsUserEnvironment(name);
-}
-
-function readWindowsUserEnvironment(name: string): string | undefined {
+function readWindowsUserEnvironment(
+  name: string,
+  env: NodeJS.ProcessEnv,
+  cwd: string,
+): string | undefined {
   if (!/^[A-Za-z0-9_]+$/.test(name)) return undefined;
-  const result = spawnSync("reg", ["query", "HKCU\\Environment", "/v", name], {
+  const executable = windowsRegExecutable(env);
+  if (executable === null) return undefined;
+  const result = spawnSync(executable, ["query", "HKCU\\Environment", "/v", name], {
     encoding: "utf8",
     windowsHide: true,
     timeout: 10_000,
+    cwd,
+    env,
+    shell: false,
   });
-  if (result.status !== 0 || result.stdout === null || result.stdout.length === 0) return undefined;
-  const match = new RegExp(String.raw`^\s+${name}\s+REG_(SZ|EXPAND_SZ)\s+(.*)$`, "im").exec(
-    result.stdout,
-  );
+  const stdout = result.stdout ?? "";
+  if (result.error !== undefined || result.status !== 0 || stdout.length === 0) return undefined;
+  const match = new RegExp(String.raw`^\s+${name}\s+REG_(SZ|EXPAND_SZ)\s+(.*)$`, "im").exec(stdout);
   if (match === null) return undefined;
   const value = match[2] ?? "";
   if (match[1] !== "EXPAND_SZ") return value;
-  return value.replace(/%([^%]+)%/g, (_match, variable: string) => process.env[variable] ?? "");
+  return value.replace(/%([^%]+)%/g, (_match, variable: string) => env[variable] ?? "");
 }
 
-function readEnteredKey(): string | null {
-  if (process.stdin.isTTY) return null;
-  let data: string;
+/** Absolute System32 reg.exe from %SystemRoot%. A bare name would be found in the workspace first. */
+function windowsRegExecutable(env: NodeJS.ProcessEnv): string | null {
+  const root = env.SystemRoot ?? env.SYSTEMROOT;
+  if (typeof root !== "string" || root.length === 0) return null;
+  const executable = path.join(root, "System32", "reg.exe");
+  return path.isAbsolute(executable) ? executable : null;
+}
+
+async function readPipedKey(stdin: SecretInput): Promise<string | null> {
+  if (stdin.isTTY === true) return null;
+  const fd = stdin.fd;
+  if (fd === undefined) return null;
+  let stat: ReturnType<typeof fstatSync>;
   try {
-    data = readFileSync(0, "utf8");
+    stat = fstatSync(fd);
   } catch {
     return null;
   }
-  if (data.endsWith("\r\n")) data = data.slice(0, -2);
-  else if (data.endsWith("\n")) data = data.slice(0, -1);
-  return data.length === 0 ? null : data;
+  if (!stat.isFIFO() && !stat.isSocket()) {
+    try {
+      return normalizeStreamedKey(readFileSync(fd, "utf8"));
+    } catch {
+      return null;
+    }
+  }
+  stdin.setEncoding("utf8");
+  return new Promise((resolve) => {
+    let settled = false;
+    let data = "";
+    const finish = (value: string | null) => {
+      if (settled) return;
+      settled = true;
+      stdin.off("readable", onReadable);
+      stdin.off("end", onEnd);
+      stdin.pause();
+      resolve(value);
+    };
+    const take = (): boolean => {
+      let chunk = stdin.read() as string | null;
+      while (chunk !== null) {
+        data += chunk;
+        if (data.includes("\n") || data.includes("\r")) {
+          finish(normalizeStreamedKey(data));
+          return true;
+        }
+        chunk = stdin.read() as string | null;
+      }
+      return false;
+    };
+    const onReadable = () => {
+      take();
+    };
+    const onEnd = () => {
+      finish(normalizeStreamedKey(data));
+    };
+    stdin.on("readable", onReadable);
+    stdin.on("end", onEnd);
+    if (!take()) {
+      setImmediate(() => {
+        if (settled) return;
+        if (!take()) finish(data.length === 0 ? null : normalizeStreamedKey(data));
+      });
+    }
+  });
+}
+
+function normalizeStreamedKey(data: string): string | null {
+  let text = data;
+  if (text.endsWith("\r\n")) text = text.slice(0, -2);
+  else if (text.endsWith("\n")) text = text.slice(0, -1);
+  else if (text.endsWith("\r")) text = text.slice(0, -1);
+  return text.length === 0 ? null : text;
+}
+
+/** .NET AiSetup.ReadSecret: prompt on stderr, no echo, Enter submits, Esc cancels, 8192-character cap. */
+function readSecret(
+  variable: string,
+  stdin: SecretInput,
+  stderr: NodeJS.WritableStream,
+): Promise<string | null> {
+  stderr.write(`Enter the API key, or set ${variable} (hidden; Esc cancels): `);
+  stdin.setRawMode?.(true);
+  return new Promise((resolve) => {
+    const chars: string[] = [];
+    const cleanup = () => {
+      stdin.off("data", onData);
+      stdin.setRawMode?.(false);
+      stdin.pause();
+    };
+    const onData = (chunk: Buffer | string) => {
+      const text = typeof chunk === "string" ? chunk : chunk.toString("utf8");
+      for (const char of text) {
+        if (char === "\u001b") {
+          stderr.write("\n");
+          cleanup();
+          resolve(null);
+          return;
+        }
+        if (char === "\r" || char === "\n") {
+          stderr.write("\n");
+          cleanup();
+          resolve(chars.join(""));
+          return;
+        }
+        if (char === "\u007f" || char === "\b") {
+          chars.pop();
+          continue;
+        }
+        const code = char.codePointAt(0) ?? 0;
+        if (code < 32 || code === 127) continue;
+        if (chars.length < secretLimit) chars.push(char);
+      }
+    };
+    stdin.on("data", onData);
+    stdin.resume();
+  });
 }

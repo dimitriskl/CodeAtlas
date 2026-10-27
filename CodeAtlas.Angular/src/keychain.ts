@@ -285,6 +285,8 @@ class WindowsKeychain implements Keychain {
     return [
       "-NoProfile",
       "-NonInteractive",
+      "-ExecutionPolicy",
+      "Bypass",
       "-File",
       windowsCredentialScriptPath(),
       operation,

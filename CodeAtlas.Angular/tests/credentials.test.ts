@@ -310,6 +310,13 @@ describe("keychain entry names", () => {
     const write = calls.find((call) => call.stdin !== null);
     expect(write?.command).toBe("powershell");
     expect(write?.stdin).toBe(secret);
+    expect(write?.args.slice(0, 5)).toEqual([
+      "-NoProfile",
+      "-NonInteractive",
+      "-ExecutionPolicy",
+      "Bypass",
+      "-File",
+    ]);
     expect(write?.args).toContain("CodeAtlas:ai:azure");
     expect(write?.args).toContain("codeatlas");
     expect(write?.args.join("\n")).not.toContain(secret);
@@ -330,6 +337,13 @@ describe("keychain entry names", () => {
     // Assert
     expect(value).toBe(secret);
     expect(calls[0]?.command).toBe("powershell");
+    expect(calls[0]?.args.slice(0, 5)).toEqual([
+      "-NoProfile",
+      "-NonInteractive",
+      "-ExecutionPolicy",
+      "Bypass",
+      "-File",
+    ]);
     expect(calls[0]?.args).toContain("CodeAtlas:ai:azure");
     expect(calls[0]?.args).toContain("codeatlas");
     expect(calls[0]?.stdin).toBeNull();

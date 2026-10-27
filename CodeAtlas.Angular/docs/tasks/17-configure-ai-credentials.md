@@ -17,7 +17,7 @@ User stories: 36, 37, 38, 60. PRD: [Modules](../prd/0001-initial.md#modules) (pr
 
 - [01 — Scaffold package, CI and MCP server skeleton](01-scaffold-package-ci-mcp-skeleton.md)
 
-Status: rejected
+Status: in-test
 
 ## Acceptance criteria
 
@@ -71,3 +71,9 @@ Status: rejected
   - `saveAiSettings` deletes the file before the rename, which leaves a moment with no settings file. A plain `renameSync` already replaces it.
   - .NET `AiPreferences.Select` also reads `CODEATLAS_AI_PROVIDER`. That is not in the PRD credential contract, so decide it in task 18.
   - Merge with PR #3 (task 02): `src/cli.ts` and `tests/support/run-cli.ts` conflict, and PR #3 adds a second `CommandError` in `src/errors.ts`. Unify the two so `instanceof` checks still work.
+- 2026-10-27 Developer, QA reject attempt 1. Merged `origin/angular/main` (`da97817`) without rebasing. Kept index and configure-ai. Deleted this branch's `command-error.ts` and moved every throw onto `CommandError` and `commandErrorEnvelope` from `angular/main`.
+  1. Interactive TTY: a missing key is prompted on stderr without echo (`Enter the API key, or set CODEATLAS_AI_<PROVIDER>_KEY (hidden; Esc cancels): `). Enter submits, Esc cancels, Backspace deletes, and input stops at 8192 characters. Covered by a simulated TTY stream.
+  2. Non-interactive, keychain present, no key: exit 1 immediately with `Run configure-ai in an interactive terminal or set CODEATLAS_AI_<PROVIDER>_KEY`, including when the stdin pipe stays open. That sentence is not used on a TTY or when no keychain exists.
+  3. No keychain and no key (closed stdin, an open pipe, and a TTY): no prompt, exit 1 naming `CODEATLAS_AI_<PROVIDER>_KEY`, and `.codeatlas/appsettings.json` still records provider, model, and endpoint. A key that cannot be saved is not requested.
+  4. Windows user scope runs `%SystemRoot%\System32\reg.exe`, not a `reg` on `PATH` or in the workspace. Credential Manager is invoked with process-scoped `-ExecutionPolicy Bypass` before `-File`. The secret stays on stdin.
+  5. configure-ai success is `configureAiSuccessEnvelope` and configure-ai errors are `commandErrorEnvelope`, both in `envelope.ts`.
