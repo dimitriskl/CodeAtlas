@@ -12,18 +12,25 @@ export function readPackageVersion(): string {
   return manifest.version;
 }
 
+export type RunCliOptions = {
+  cwd?: string;
+  env?: NodeJS.ProcessEnv;
+  stdin?: string;
+  /** Keep the stdin pipe open so a missing key must not wait for it. */
+  holdStdin?: boolean;
+  timeoutMs?: number;
+};
+
 export function runCli(
   args: readonly string[],
-  options: {
-    cwd?: string;
-    env?: NodeJS.ProcessEnv;
-    stdin?: string;
-  } = {},
+  cwdOrOptions: string | RunCliOptions = {},
 ): Promise<{
   exitCode: number;
   stdout: string;
   stderr: string;
 }> {
+  const options: RunCliOptions =
+    typeof cwdOrOptions === "string" ? { cwd: cwdOrOptions } : cwdOrOptions;
   const cli = path.join(packageRoot, "dist", "cli.js");
   return new Promise((resolve, reject) => {
     const child = spawn(process.execPath, [cli, ...args], {
@@ -40,7 +47,14 @@ export function runCli(
       stderr.push(chunk);
     });
     child.on("error", reject);
+    let timer: NodeJS.Timeout | undefined;
+    if (options.timeoutMs !== undefined) {
+      timer = setTimeout(() => {
+        child.kill();
+      }, options.timeoutMs);
+    }
     child.on("close", (code) => {
+      if (timer !== undefined) clearTimeout(timer);
       resolve({
         exitCode: code ?? 1,
         stdout: Buffer.concat(stdout).toString("utf8"),
@@ -50,6 +64,7 @@ export function runCli(
     child.stdin.on("error", () => {
       // The process can exit before the pipe is read.
     });
+    if (options.holdStdin === true) return;
     if (options.stdin === undefined) child.stdin.end();
     else child.stdin.end(options.stdin);
   });

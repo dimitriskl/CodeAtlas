@@ -1,4 +1,4 @@
-import { CommandError } from "./command-error.js";
+import { CommandError } from "./errors.js";
 
 const instructions = 'Return only a JSON object: {"ok":true}.';
 const connectionPrompt = "Connection test. Do not use tools or obtain any external context.";

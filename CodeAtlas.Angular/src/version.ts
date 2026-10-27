@@ -17,7 +17,7 @@ export const contractVersion = 1;
 
 /**
  * Persisted index schema. Independent of {@link contractVersion} and {@link appVersion}.
- * No index is written yet. This is the first schema number.
+ * `index` writes this schema into each generation.
  */
 export const schemaVersion = 1;
 

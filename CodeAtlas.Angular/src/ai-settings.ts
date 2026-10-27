@@ -8,7 +8,7 @@ import {
   writeFileSync,
 } from "node:fs";
 import path from "node:path";
-import { CommandError } from "./command-error.js";
+import { CommandError } from "./errors.js";
 
 export type AiPreferences = {
   provider: string;

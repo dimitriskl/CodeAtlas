@@ -9,11 +9,11 @@ import {
   saveAiSettings,
   type AiPreferences,
 } from "./ai-settings.js";
-import { CommandError } from "./command-error.js";
+import { configureAiSuccessEnvelope } from "./envelope.js";
+import { CommandError } from "./errors.js";
 import { defaultCredentialsPath, findCredential } from "./credentials.js";
 import { createKeychain, CredentialStoreError, type Keychain } from "./keychain.js";
 import { createProcessRunner } from "./process-runner.js";
-import { appVersion, contractVersion } from "./version.js";
 
 const selectionFlags = ["--provider", "--model", "--effort", "--endpoint", "--settings"] as const;
 
@@ -145,9 +145,7 @@ export async function runConfigureAi(args: readonly string[]): Promise<unknown> 
     location = saveKey(keychain, selected.provider, key);
   }
   saveAiSettings(settingsPath, selected);
-  return {
-    ai: "enabled",
-    connection: "tested",
+  return configureAiSuccessEnvelope({
     provider: selected.provider,
     model: selected.model,
     effort: selected.effort,
@@ -155,16 +153,7 @@ export async function runConfigureAi(args: readonly string[]): Promise<unknown> 
     settings: settingsPath,
     credentialEnvironmentVariable: selected.provider === "ollama" ? null : variable,
     credentialStore: location,
-    credentialWarning: null,
-    message: "Connection passed and options saved. No project source was sent.",
-    contractVersion,
-    command: "configure-ai",
-    success: true,
-    responseToolVersion: appVersion,
-    warningCount: 0,
-    freshness: null,
-    coverage: null,
-  };
+  });
 }
 
 function selectPreferences(
