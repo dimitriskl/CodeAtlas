@@ -23,7 +23,7 @@ Status: in-test
 ## Acceptance criteria
 
 - [x] CLI seam test: `index` on the fixture exits 0 and prints an envelope with `command: "index"`. A generation and `current.json` exist under `.codeatlas/workspaces/<workspace-name>-<path-hash>/`.
-- [ ] The same workspace path always yields the same folder name, on Windows and Ubuntu.
+- [x] The same workspace path always yields the same folder name, on Windows and Ubuntu.
 - [x] MCP seam test: `index_status` returns the generation id, the schema, contract and app versions, and project, file and symbol counts.
 - [x] MCP seam test: `index_status` on a workspace with no index returns a defined, documented result (specified in `MCP-CONTRACT.md`).
 - [x] A second concurrent `index` is refused by the writer lock with a documented error. The first index's generation stays intact.
@@ -32,4 +32,5 @@ Status: in-test
 
 ## Review log
 
-- 2026-10-27: `codeatlas-ng index` on the minimal `shop` fixture (one project, class `Cart`) reads `angular.json`, publishes an immutable SQLite generation, and writes `current.json` under a writer lock. The success envelope uses `command: "index"`. MCP `index_status` returns the generation id, schema, contract and app versions, and project, file and symbol counts; with no index it returns the documented empty result and does not create `.codeatlas`. A second `index` while `.write.lock` is held exits 1 with `index_busy` and leaves the published generation unchanged. Stored paths are workspace-relative with forward slashes. Storage naming and the tool contract are in `docs/MCP-CONTRACT.md`. Local checks on Node 24.22.1: `npm run lint`, `npm run typecheck`, and `npm test` (17 passed). The cross-OS folder-name criterion stays open until the workflow is green on Windows and Ubuntu.
+- 2026-10-27: `codeatlas-ng index` on the minimal `shop` fixture (one project, class `Cart`) reads `angular.json`, publishes an immutable SQLite generation, and writes `current.json` under a writer lock. The success envelope uses `command: "index"`. MCP `index_status` returns the generation id, schema, contract and app versions, and project, file and symbol counts; with no index it returns the documented empty result and does not create `.codeatlas`. A second `index` while `.write.lock` is held exits 1 with `index_busy` and leaves the published generation unchanged. Stored paths are workspace-relative with forward slashes. Storage naming and the tool contract are in `docs/MCP-CONTRACT.md`. Local checks on Node 24.22.1: `npm run lint`, `npm run typecheck`, and `npm test` (17 passed).
+- 2026-10-27: CodeAtlas Angular workflow run https://github.com/dimitriskl/CodeAtlas/actions/runs/40517088041 on commit `bdac8b3` is green. Job conclusions: `lint, type-check, test, pack (windows-2025)` success; `lint, type-check, test, pack (ubuntu-24.04)` success; `pack contents match on Windows and Ubuntu` success. The same workspace path yields the same folder name on both operating systems, so that acceptance criterion is met.
