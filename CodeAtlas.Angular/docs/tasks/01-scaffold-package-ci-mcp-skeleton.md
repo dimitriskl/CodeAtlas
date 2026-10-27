@@ -14,7 +14,7 @@ User stories: 1, 23, 31, 53, 56, 59. PRD: [Packaging and entry points](../prd/00
 
 None
 
-Status: in-test
+Status: in-qa
 
 ## Acceptance criteria
 
@@ -29,3 +29,4 @@ Status: in-test
 ## Review log
 
 - 2026-10-27: Scaffolded `codeatlas-ng` (Node 24, strict TypeScript, ESM, ESLint, Prettier, Vitest, lockfile) with bins `codeatlas-ng` and `codeatlas-ng-mcp`. CLI `--version` prints `0.00.01`; an unknown command exits 2 with `invalid_arguments` JSON on stderr. The MCP server registers only `coverage`, which returns the shared envelope, freshness `unknown`, and the static coverage boundary from `docs/MCP-CONTRACT.md`. Contract, schema, and app versions are separate constants. Workflow `.github/workflows/codeatlas-angular.yml` runs lint, type-check, tests, and pack on Windows Server 2025 and Ubuntu 24.04 for `angular/main` and PRs to it, then diffs the packed file hashes. Run [40510458967](https://github.com/dimitriskl/CodeAtlas/actions/runs/40510458967) is green on both operating systems, and the packed file hashes match. Git's tar on Windows treats `C:` as a remote host, so the manifest step reads the ustar archive in Node.
+- 2026-10-27 Tester PASS, attempt 1. HEAD tested `19b30a2` (tests added in `b86d8e7`). Commands: `npm ci`, lint, typecheck, test (10/10 passed on Node 24.22.1); pack manifest identical to both CI artifacts. Non-blocking notes for QA: tautological `not.toBe` lines in `tests/versions.test.ts`; in-process coverage test accepts any ISO `checkedAtUtc`; unknown MCP tool returns SDK error not shared envelope; coverage accepts unknown args; `--help`/`-h` treated as unknown command; workflow path filters; unused direct dependency `zod`; root `AGENTS.md` absent on task branch, `angular/main` and `codex/production-roadmap` and is gitignored.
