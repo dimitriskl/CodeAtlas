@@ -12,7 +12,19 @@ public sealed class IndexedSolution : IAsyncLifetime
     public string IndexPath => IndexStore.DefaultPath(Path.Combine(Root, "Sample.slnx"));
     public CodebaseIndex Index { get; private set; } = null!;
     public string GenerationDirectory => IndexStore.LoadSnapshotAsync(IndexPath).GetAwaiter().GetResult().GenerationDirectory!;
-    public string IndexArtifactPath => Path.Combine(GenerationDirectory, "index.json");
+    /// <summary>The active generation exported in the legacy JSON layout (index.json without catalogs),
+    /// for tests that edit raw legacy JSON. Generations themselves store index.db.</summary>
+    public string IndexArtifactPath
+    {
+        get
+        {
+            var snapshot = IndexStore.OpenSnapshotAsync(IndexPath).GetAwaiter().GetResult();
+            var export = Path.Combine(Parent, "legacy-json-" + snapshot.Index.IndexId);
+            if (!Directory.Exists(export))
+                IndexStore.ExportJsonAsync(IndexPath, export).GetAwaiter().GetResult();
+            return Path.Combine(export, "index.json");
+        }
+    }
     public string OverviewPath => Path.Combine(GenerationDirectory, "overview.md");
 
     public async Task InitializeAsync()

@@ -10,14 +10,15 @@ public static class PurposeSnapshotQueries
     {
         PurposeSearch.Validate(query, mode, kind, language);
         request.ValidateOptions(supportsType: true, indexed: true);
-        var symbols = snapshot.Index.Symbols
-            ?? throw new QueryException("rebuild_required", "Rebuild to extract symbol documentation.");
-        var facts = snapshot.Index.StructuralCatalog
-            ?? throw new QueryException("rebuild_required", "Rebuild to extract structural facts.");
+        var rows = snapshot.Rows;
+        if (!rows.HasSymbols)
+            throw new QueryException("rebuild_required", "Rebuild to extract symbol documentation.");
+        if (rows.StructuralCoverage is null)
+            throw new QueryException("rebuild_required", "Rebuild to extract structural facts.");
         IReadOnlyDictionary<string, Explanations.AcceptedExplanation>? accepted = null;
         if (mode == "assisted" && snapshot.VerifiedGeneration && snapshot.Index.InputManifest is not null
             && snapshot.Index.DocumentationCoverage?.Version == DocumentationCoverage.Current.Version)
-            accepted = await Explanations.ExplanationSnapshotAdapter.ForSnapshot(snapshot)
+            accepted = await Explanations.ExplanationSnapshotAdapter.ForSearch(snapshot)
                 .GetSearchableAsync(cancellationToken);
         else
             await IndexStore.RequireFreshAsync(snapshot.Index, cancellationToken);
@@ -36,7 +37,8 @@ public static class PurposeSnapshotQueries
             }
             viewToken += ":ai:" + Convert.ToHexString(hash.GetHashAndReset());
         }
-        return PurposeSearch.Search(symbols, facts, query, mode, kind, request,
+        using var corpus = rows.SearchCorpus();
+        return PurposeSearch.Search(corpus, query, mode, kind, request,
             viewToken, language, cancellationToken, accepted);
     }
 
@@ -47,13 +49,14 @@ public static class PurposeSnapshotQueries
         request.Validate(snapshot.Index.IndexId, supportsType: false);
         if (request.Project is not null)
             throw new ArgumentException("get-facts selects one symbol; --project is not supported.");
-        var symbols = snapshot.Index.Symbols
-            ?? throw new QueryException("rebuild_required", "Rebuild to extract symbol documentation.");
-        var facts = snapshot.Index.StructuralCatalog
-            ?? throw new QueryException("rebuild_required", "Rebuild to extract structural facts.");
+        var rows = snapshot.Rows;
+        if (!rows.HasSymbols)
+            throw new QueryException("rebuild_required", "Rebuild to extract symbol documentation.");
+        if (rows.StructuralCoverage is null)
+            throw new QueryException("rebuild_required", "Rebuild to extract structural facts.");
         await IndexStore.RequireFreshAsync(snapshot.Index, cancellationToken);
-        if (!symbols.Any(s => s.Id == id)) throw new QueryException("symbol_not_found", "Source symbol not found.");
-        var ordered = facts.Facts.Where(f => f.OwnerId == id)
+        if (!rows.HasSymbol(id)) throw new QueryException("symbol_not_found", "Source symbol not found.");
+        var ordered = rows.FactsOwnedBy(id)
             .OrderBy(f => f.Kind, StringComparer.Ordinal)
             .ThenBy(f => f.Evidence.Location.Start.File, StringComparer.Ordinal)
             .ThenBy(f => f.Evidence.Location.Start.Line).ThenBy(f => f.Evidence.Location.Start.Column)

@@ -15,10 +15,23 @@ public sealed class ExplanationService
     internal const int MaximumRequestBytes = 524_288;
 
     internal ExplanationService(LoadedSnapshot snapshot, IReadOnlyList<DocumentedSymbol> symbols)
+        : this(snapshot, symbols, symbols.Select(symbol => symbol.Id))
+    {
+    }
+
+    /// <summary>Search-only service: identities without symbol records (header-only snapshots).</summary>
+    internal ExplanationService(LoadedSnapshot snapshot, IEnumerable<string> symbolIds) : this(snapshot, [], symbolIds)
+    {
+        searchOnly = true;
+    }
+
+    private readonly bool searchOnly;
+
+    private ExplanationService(LoadedSnapshot snapshot, IReadOnlyList<DocumentedSymbol> symbols, IEnumerable<string> ids)
     {
         this.snapshot = snapshot;
         this.symbols = symbols;
-        symbolIds = symbols.Select(symbol => symbol.Id).ToHashSet(StringComparer.Ordinal);
+        symbolIds = ids.ToHashSet(StringComparer.Ordinal);
         var root = Path.GetDirectoryName(snapshot.Index.Solution)!;
         var solutionKey = Path.GetFileName(Path.GetDirectoryName(IndexStore.DefaultPath(snapshot.Index.Solution)))!;
         home = ExplanationFiles.InsideRoot(root, ".codeatlas/explanations/" + solutionKey);
@@ -28,6 +41,7 @@ public sealed class ExplanationService
         ExplanationLimits? limits = null, string[]? suppliedContextFiles = null, string? localName = null,
         int referenceLimit = 2, CancellationToken cancellationToken = default)
     {
+        if (searchOnly) throw new InvalidOperationException("This explanation service is limited to search.");
         var request = await new ExplanationRequestBuilder(snapshot, symbols).BuildAsync(symbolId,
             limits ?? new(), suppliedContextFiles, localName, referenceLimit, cancellationToken);
         output = Path.GetFullPath(output);
@@ -111,7 +125,7 @@ public sealed class ExplanationService
 
     public async Task<ExplanationView> GetForSymbolAsync(string symbolId, CancellationToken cancellationToken = default)
     {
-        if (!symbols.Any(symbol => symbol.Id == symbolId))
+        if (!symbolIds.Contains(symbolId))
             throw new QueryException("symbol_not_found", "Source symbol ID was not found in this snapshot.");
         var freshness = await IndexStore.CheckFreshnessAsync(snapshot.Index, cancellationToken);
         if (freshness.IsStale) throw new StaleIndexException(freshness.ChangedFiles);

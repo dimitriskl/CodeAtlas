@@ -77,13 +77,14 @@ Schema-1 indexes created before declaring-type metadata was added remain usable 
 | `snapshot_mismatch` | 3 | Snapshot was replaced; restart pagination |
 | `rebuild_required` | 1 | Required metadata is absent in a legacy index |
 | `unsupported_index` | 1 | Persisted index schema is unsupported |
-| `invalid_index` | 1 | Invalid JSON or rejected index contents |
+| `invalid_index` | 1 | Invalid JSON or rejected index contents, or a damaged, truncated or incomplete index database |
+| `sqlite_unavailable` | 1 | The SQLite library cannot load or lacks FTS5; `error.diagnostics` lists platform instructions. Nothing is installed automatically |
 | `analysis_failed` | 1 | Other analysis, IO or unknown-symbol failure |
 | `cancelled` | 130 | Operation cancelled |
 
 Errors retain `error.code`, `error.message`, and `error.diagnostics`. If an index loaded successfully, its identity and available freshness/coverage are retained in the error envelope. Index-status succeeds with exit zero when reporting a stale snapshot; result queries refuse that snapshot.
 
-Queries and index-status accept `--profile`. Only then is `queryTimings` included: approximate OS-process-creation to managed-entry startup, measured managed duration, and independent phase durations. `jsonLoading` includes deserialization and structural validation; `freshnessHashing` includes input enumeration and full content hashes; `lookup` includes filtering, ordering and paging; `warningSaving` and `resultNodeCreation` are separate. Result-node creation measures constructing the result JSON tree; adding envelope/profile fields, final text formatting, stdout publication and process exit are outside that phase. External benchmark wall time includes the complete process. Index commands already save stage timing reports and reject `--profile`.
+Queries and index-status accept `--profile`. Only then is `queryTimings` included: approximate OS-process-creation to managed-entry startup, measured managed duration, and independent phase durations. `jsonLoading` (historical name) is snapshot opening: for a SQLite generation, manifest resolution and the database header; for a legacy JSON generation, deserialization and structural validation. Row reads happen inside `lookup`. `storeVerification` (index-status only) is the full database hash; `freshnessHashing` includes input enumeration and full content hashes; `lookup` includes filtering, ordering and paging; `warningSaving` and `resultNodeCreation` are separate. Result-node creation measures constructing the result JSON tree; adding envelope/profile fields, final text formatting, stdout publication and process exit are outside that phase. External benchmark wall time includes the complete process. Index commands already save stage timing reports and reject `--profile`.
 
 ## Snapshot integrity and coverage (milestone 4)
 
@@ -92,6 +93,12 @@ Pass the index command's `index` value (`current.json`) to saved queries. A comm
 `freshness.state` is `stale`, `fresh`, or `unknown`; `checkedAtUtc` records the check. `inputCoverage` identifies the supported model, complete/partial status, issue count and distinct reason codes. Full per-project coverage details are in `warningsFile`, with `coverageIssueCount` separate from MSBuild `warningCount`. Partial generator, multi-target or dynamic build evidence yields `unknown` even when observed files match. `isStale: false` alone does not prove complete freshness. File/environment/SDK changes set `isStale: true`; saved queries reject those changes as before. Legacy input models remain unknown until rebuilt.
 
 Additional stable errors: `index_busy` means another writer holds the per-solution publication lock; `snapshot_io_failed` means an artifact could not be read/published. `invalid_index` includes missing, truncated, checksum-mismatched or identity-mismatched generations; `unsupported_index` includes incompatible manifests. Rebuild explicitly; there is no automatic fallback to older data. See [reliability and recovery](SNAPSHOT-RELIABILITY.md).
+
+## SQLite store and legacy JSON
+
+From 0.00.35 a generation stores `index.db` (manifest version 2) instead of `index.json`/`catalog.json` (manifest version 1). Every command keeps the same fields, filters, ordering, paging and error codes; for the same analysis the responses are identical except the documented volatile fields (`freshness.checkedAtUtc`, and `warningsFile`, `warningMessage`, `coverageMessage`, which name the answering generation's directory). The index command's `snapshotIndex` now names `index.db`; it remains the immutable retained path. Older JSON generations are still read through the previous full-load path, with the same integrity checks as before.
+
+`export-json --index <current.json|retained index.db> --output <new-directory>` (addition) verifies the database completely and writes a legacy generation: `index.json` and `catalog.json` byte-for-byte as the JSON store wrote them, the three reports and a version-1 `generation.json`. `scripts/compare-indexes.py`, `benchmark-query.py` and older CLI builds accept that directory's `index.json`. The response adds `output`, `indexJson`, `catalogJson` and `manifest`. See [SQLite store](SQLITE-STORE.md).
 
 ## Refresh metadata
 

@@ -89,7 +89,7 @@ public sealed class SplitCatalogStorageTests : IDisposable
     public async Task OrdinaryMethodLoadSkipsCatalogDeserializationButFullLoadRejectsCorruption()
     {
         // Arrange
-        var published = await IndexStore.PublishAsync(await CreateAsync());
+        var published = await LegacyJsonPublication.PublishAsync(await CreateAsync());
         var catalog = Path.Combine(published.GenerationDirectory!, "catalog.json");
         var bytes = await File.ReadAllBytesAsync(catalog);
         bytes[0] = (byte)'!';
@@ -109,7 +109,7 @@ public sealed class SplitCatalogStorageTests : IDisposable
     public async Task CatalogIdentityMustAgreeEvenWhenManifestDigestMatches()
     {
         // Arrange
-        var published = await IndexStore.PublishAsync(await CreateAsync());
+        var published = await LegacyJsonPublication.PublishAsync(await CreateAsync());
         var catalogPath = Path.Combine(published.GenerationDirectory!, "catalog.json");
         var catalog = JsonNode.Parse(await File.ReadAllTextAsync(catalogPath))!;
         catalog["indexId"] = Guid.NewGuid().ToString("N");
@@ -134,7 +134,7 @@ public sealed class SplitCatalogStorageTests : IDisposable
     public async Task PartialOrNullCatalogIdentityHeadersAreRejected(string missing)
     {
         // Arrange
-        var published = await IndexStore.PublishAsync(await CreateAsync());
+        var published = await LegacyJsonPublication.PublishAsync(await CreateAsync());
         var catalogPath = Path.Combine(published.GenerationDirectory!, "catalog.json");
         var catalog = JsonNode.Parse(await File.ReadAllTextAsync(catalogPath))!.AsObject();
         if (missing == "both-null") { catalog["indexId"] = null; catalog["solution"] = null; }
@@ -152,7 +152,7 @@ public sealed class SplitCatalogStorageTests : IDisposable
     public async Task LegacyManifestCatalogRemainsVerifiedButRawSplitInspectionIsExplicitlyUnverified()
     {
         // Arrange
-        var published = await IndexStore.PublishAsync(await CreateAsync());
+        var published = await LegacyJsonPublication.PublishAsync(await CreateAsync());
         var catalogPath = Path.Combine(published.GenerationDirectory!, "catalog.json");
         var catalog = JsonNode.Parse(await File.ReadAllTextAsync(catalogPath))!.AsObject();
         catalog.Remove("indexId");

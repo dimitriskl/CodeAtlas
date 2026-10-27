@@ -31,7 +31,7 @@ public sealed class ReadOnlySnapshotQualificationTests(IndexedSolution fixture) 
         denied.AddAccessRule(new FileSystemAccessRule(WindowsIdentity.GetCurrent().User!,
             FileSystemRights.ReadData, AccessControlType.Deny));
         var generationDirectory = Path.Combine(Path.GetDirectoryName(fixture.IndexPath)!, "generations", attemptedIndex.IndexId);
-        var precedingArtifacts = new[] { "index.json", "overview.md", "warnings.txt" };
+        var precedingArtifacts = new[] { "index.db", "overview.md", "warnings.txt" };
         var callbackReached = false;
         string[] stagedArtifacts = [];
         async Task WriteTimingsAndDenySourceRead(Stream stream, CancellationToken token)

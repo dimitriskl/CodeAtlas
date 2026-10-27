@@ -44,12 +44,22 @@ public static class PurposeSearch
         string language = "csharp", CancellationToken cancellationToken = default,
         IReadOnlyDictionary<string, Explanations.AcceptedExplanation>? acceptedExplanations = null)
     {
+        using var corpus = new MemorySearchCorpus(symbols, catalog);
+        return Search(corpus, query, mode, kind, request, snapshotId, language, cancellationToken, acceptedExplanations);
+    }
+
+    /// <summary>Ranks over any corpus. A stored corpus may supply only documents containing a query
+    /// token, provided corpus-wide counts, frequencies and field-length means are identical.</summary>
+    internal static SearchResult Search(ISearchCorpus corpus,
+        string query, string mode, string kind, QueryRequest request, string? snapshotId,
+        string language, CancellationToken cancellationToken,
+        IReadOnlyDictionary<string, Explanations.AcceptedExplanation>? acceptedExplanations)
+    {
         Validate(query, mode, kind, language);
         request.Validate(snapshotId, supportsType: true);
-        if (catalog.Coverage.Version != StructuralCoverage.Current.Version)
+        var catalogCoverage = corpus.Coverage;
+        if (catalogCoverage.Version != StructuralCoverage.Current.Version)
             throw new QueryException("rebuild_required", "Rebuild with the supported structural-fact model.");
-        var byId = symbols.ToDictionary(s => s.Id, StringComparer.Ordinal);
-        var byOwner = catalog.Facts.ToLookup(f => f.OwnerId, StringComparer.Ordinal);
         var queryTokens = SearchTokens(query);
         // Identifier splitting turns "TypeScript" into "type" + "script".
         // Check explicit language words before that normalization as well.
@@ -57,18 +67,14 @@ public static class PurposeSearch
             word.Value.Equals("angular", StringComparison.OrdinalIgnoreCase)
             || word.Value.Equals("typescript", StringComparison.OrdinalIgnoreCase));
         if (outsideLanguage || queryTokens.Any(token => token is "angular" or "typescript"))
-            return Abstain(request, snapshotId, catalog, mode, queryTokens, "abstained-outside-supported-language", 0,
+            return Abstain(request, snapshotId, catalogCoverage, mode, queryTokens, "abstained-outside-supported-language", 0,
                 "Only C# source is indexed. Angular and TypeScript are not these symbols.");
         // Calculate IDF over the whole selected-kind corpus, independently of page/filter.
         // Exact project/type filters cannot change a symbol's relevance score in this generation.
-        var documents = new List<SearchDocument>();
-        foreach (var symbol in symbols)
-        {
-            cancellationToken.ThrowIfCancellationRequested();
-            if (kind == "all" || symbol.Kind == kind)
-                documents.Add(new(symbol, Fields(symbol, byId, byOwner, mode, acceptedExplanations).ToArray()));
-        }
-        var averageLengths = AverageFieldLengths(documents, cancellationToken);
+        var selection = corpus.Select(queryTokens, mode, kind, acceptedExplanations, cancellationToken);
+        var documents = selection.Documents;
+        var documentCount = selection.DocumentCount;
+        var averageLengths = selection.AverageLengths;
         double Weight(SearchField field)
         {
             var b = field.LengthFamily.StartsWith("xml:", StringComparison.Ordinal) ? 0.75
@@ -78,11 +84,10 @@ public static class PurposeSearch
             return field.Weight * (k1 + 1)
                 / (1 + k1 * (1 - b + b * field.Tokens.Count / averageLengths[field.LengthFamily]));
         }
-        var documentFrequency = queryTokens.ToDictionary(token => token,
-            token => documents.Count(d => d.Fields.Any(f => f.Tokens.Contains(token))), StringComparer.Ordinal);
+        var documentFrequency = selection.DocumentFrequency;
         var matches = new List<RankedSymbol>();
         var weakMatches = 0;
-        var rareDocumentLimit = Math.Max(1, documents.Count / 5);
+        var rareDocumentLimit = Math.Max(1, documentCount / 5);
         foreach (var document in documents)
         {
             cancellationToken.ThrowIfCancellationRequested();
@@ -98,7 +103,7 @@ public static class PurposeSearch
                     .ThenBy(f => f.Location.Start.File, StringComparer.Ordinal)
                     .ThenBy(f => f.Location.Start.Line).ThenBy(f => f.Location.Start.Column).FirstOrDefault();
                 if (field is null) continue;
-                var idf = 1 + Math.Log((documents.Count + 1.0) / (documentFrequency[token] + 1.0));
+                var idf = 1 + Math.Log((documentCount + 1.0) / (documentFrequency[token] + 1.0));
                 reasons.Add(new(field.Name, [token], Weight(field) * idf / queryTokens.Length,
                     field.SourceSymbolId, field.Location, field.FactKind,
                     field.DocumentationEvidence, field.RelationshipEvidence)
@@ -127,7 +132,7 @@ public static class PurposeSearch
                 queryTokens.Except(reasons.SelectMany(r => r.MatchedTokens), StringComparer.Ordinal).ToArray(), grouped));
         }
         var asksForTests = queryTokens.Contains("test") || queryTokens.Contains("tests");
-        var deferredContracts = DeferredContracts(matches, byId, byOwner, query, cancellationToken);
+        var deferredContracts = DeferredContracts(matches, corpus, query, cancellationToken);
         var ordered = matches.OrderByDescending(m => asksForTests || !IsTestProject(m.Symbol.Project))
             .ThenBy(m => deferredContracts.Contains(m.Symbol.Id))
             .ThenByDescending(m => m.Score)
@@ -137,7 +142,7 @@ public static class PurposeSearch
         var more = end < ordered.Length;
         return new(new(items, new(request.Offset, request.Limit, items.Length, ordered.Length, more,
                 more && snapshotId is not null ? checked((int)end) : null, snapshotId, snapshotId is not null)),
-            RankingVersion, mode, "C#", catalog.Coverage, queryTokens,
+            RankingVersion, mode, "C#", catalogCoverage, queryTokens,
             queryTokens.Where(t => documentFrequency[t] == 0).ToArray(),
             EvidencePolicy, ordered.Length != 0 ? "lexical-candidates"
                 : weakMatches != 0 ? "abstained-insufficient-evidence" : "abstained-no-token-overlap", weakMatches,
@@ -148,8 +153,47 @@ public static class PurposeSearch
              "Empty matches do not establish absence outside the supported loaded C# snapshot."]);
     }
 
-    private static IEnumerable<SearchField> Fields(DocumentedSymbol symbol,
-        Dictionary<string, DocumentedSymbol> byId, ILookup<string, StructuralFact> byOwner, string mode,
+    internal const int NameFieldCount = 3;
+    internal static readonly string[] KindSelections = ["method", "type", "property", "field", "all"];
+
+    /// <summary>Generation-time search evidence for a stored corpus: per symbol, the distinct tokens of
+    /// all assisted fields (flagged when a name field holds them), and per kind selection the field-length
+    /// totals used for normalization. Accepted AI descriptions are derived later and never stored here.</summary>
+    internal static Dictionary<string, Dictionary<string, (long Length, int Count)>> BuildStoreIndex(
+        DocumentedSymbol[] symbols, StructuralCatalog catalog,
+        Action<int, IReadOnlyCollection<KeyValuePair<string, bool>>> postings, CancellationToken cancellationToken = default)
+    {
+        var byId = symbols.ToDictionary(s => s.Id, StringComparer.Ordinal);
+        var byOwner = catalog.Facts.ToLookup(f => f.OwnerId, StringComparer.Ordinal);
+        DocumentedSymbol? Lookup(string id) => byId.GetValueOrDefault(id);
+        IEnumerable<StructuralFact> Owned(string id) => byOwner[id];
+        var seen = KindSelections.ToDictionary(kind => kind,
+            _ => new HashSet<(string Family, string Source, DocumentationRange Location, string Text)>(), StringComparer.Ordinal);
+        var totals = KindSelections.ToDictionary(kind => kind,
+            _ => new Dictionary<string, (long Length, int Count)>(StringComparer.Ordinal), StringComparer.Ordinal);
+        for (var ordinal = 0; ordinal < symbols.Length; ordinal++)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var symbol = symbols[ordinal];
+            var fields = Fields(symbol, Lookup, Owned, "assisted", null).ToArray();
+            var tokens = new Dictionary<string, bool>(StringComparer.Ordinal);
+            for (var position = 0; position < fields.Length; position++)
+                foreach (var token in fields[position].Tokens)
+                    tokens[token] = tokens.GetValueOrDefault(token) || position < NameFieldCount;
+            postings(ordinal, tokens);
+            foreach (var kind in new[] { symbol.Kind, "all" })
+                if (totals.TryGetValue(kind, out var familyTotals))
+                    AddFieldLengths(fields, seen[kind], familyTotals);
+        }
+        return totals;
+    }
+
+    internal static string[] QueryTokens(string query) => SearchTokens(query);
+
+    internal static HashSet<string> TokenSet(string text) => SearchTokens(text).ToHashSet(StringComparer.Ordinal);
+
+    internal static IEnumerable<SearchField> Fields(DocumentedSymbol symbol,
+        Func<string, DocumentedSymbol?> byId, Func<string, IEnumerable<StructuralFact>> byOwner, string mode,
         IReadOnlyDictionary<string, Explanations.AcceptedExplanation>? acceptedExplanations)
     {
         var point = new DocumentationRange(symbol.Location, symbol.Location);
@@ -165,7 +209,7 @@ public static class PurposeSearch
                         accepted.IndexId, accepted.ProvenanceTrust, accepted.Response.Provenance, claim));
         foreach (var section in symbol.Documentation.Sections)
             yield return DocField("developer-documentation", 6, section, null);
-        foreach (var fact in byOwner[symbol.Id])
+        foreach (var fact in byOwner(symbol.Id))
         {
             // Callee parameter/return types are not words in the caller's own signature.
             // Keep their semantic relationship visible without allowing a large external
@@ -175,7 +219,7 @@ public static class PurposeSearch
                 symbol.Id, fact.Evidence.Location, fact.Kind, relationship: fact.Evidence);
             // Exact semantic one-hop links only. Do not turn a class summary into a member summary.
             if (fact.Kind is not ("containing-type" or "implements-member" or "overrides-member" or "resolved-invocation")) continue;
-            if (fact.Target.SourceSymbolId is not { } id || !byId.TryGetValue(id, out var related)) continue;
+            if (fact.Target.SourceSymbolId is not { } id || byId(id) is not { } related) continue;
             var weight = fact.Kind is "implements-member" or "overrides-member" ? 2.5
                 : fact.Kind == "containing-type" ? 2 : 1;
             foreach (var section in related.Documentation.Sections)
@@ -183,7 +227,7 @@ public static class PurposeSearch
         }
     }
 
-    private static Dictionary<string, double> AverageFieldLengths(IEnumerable<SearchDocument> documents,
+    internal static Dictionary<string, double> AverageFieldLengths(IEnumerable<SearchDocument> documents,
         CancellationToken cancellationToken)
     {
         // The same authored section can be linked from many callers. Count its
@@ -194,23 +238,32 @@ public static class PurposeSearch
         foreach (var document in documents)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            foreach (var field in document.Fields)
-            {
-                if (field.Name is not ("name-signature" or "containing-type-name")
-                    && !field.LengthFamily.StartsWith("xml:", StringComparison.Ordinal)) continue;
-                if (field.Tokens.Count == 0
-                    || !seen.Add((field.LengthFamily, field.SourceSymbolId, field.Location, field.Text))) continue;
-                var total = totals.GetValueOrDefault(field.LengthFamily);
-                totals[field.LengthFamily] = (total.Length + field.Tokens.Count, total.Count + 1);
-            }
+            AddFieldLengths(document.Fields, seen, totals);
         }
-        return totals.ToDictionary(pair => pair.Key,
+        return Averages(totals);
+    }
+
+    internal static Dictionary<string, double> Averages(IReadOnlyDictionary<string, (long Length, int Count)> totals) =>
+        totals.ToDictionary(pair => pair.Key,
             pair => pair.Value.Length / (double)pair.Value.Count, StringComparer.Ordinal);
+
+    private static void AddFieldLengths(IEnumerable<SearchField> fields,
+        HashSet<(string Family, string Source, DocumentationRange Location, string Text)> seen,
+        Dictionary<string, (long Length, int Count)> totals)
+    {
+        foreach (var field in fields)
+        {
+            if (field.Name is not ("name-signature" or "containing-type-name")
+                && !field.LengthFamily.StartsWith("xml:", StringComparison.Ordinal)) continue;
+            if (field.Tokens.Count == 0
+                || !seen.Add((field.LengthFamily, field.SourceSymbolId, field.Location, field.Text))) continue;
+            var total = totals.GetValueOrDefault(field.LengthFamily);
+            totals[field.LengthFamily] = (total.Length + field.Tokens.Count, total.Count + 1);
+        }
     }
 
     private static HashSet<string> DeferredContracts(IReadOnlyCollection<RankedSymbol> matches,
-        Dictionary<string, DocumentedSymbol> byId, ILookup<string, StructuralFact> byOwner,
-        string query, CancellationToken cancellationToken)
+        ISearchCorpus corpus, string query, CancellationToken cancellationToken)
     {
         var candidates = matches.Select(match => match.Symbol.Id).ToHashSet(StringComparer.Ordinal);
         var identifiers = Words.Matches(query).Select(word => word.Value).ToHashSet(StringComparer.OrdinalIgnoreCase);
@@ -218,14 +271,14 @@ public static class PurposeSearch
         foreach (var match in matches)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            foreach (var implementation in byOwner[match.Symbol.Id].Where(fact => fact.Kind == "implements-member"))
+            foreach (var implementation in corpus.FactsOwnedBy(match.Symbol.Id).Where(fact => fact.Kind == "implements-member"))
             {
                 if (implementation.Target.SourceSymbolId is not { } contractId
                     || !candidates.Contains(contractId) || query.Contains(contractId, StringComparison.Ordinal)) continue;
                 // Exact semantic source links only: neither matching names nor an
                 // I-prefixed class establish an interface/implementation relation.
-                var interfaceTypes = byOwner[contractId].Where(fact => fact.Kind == "containing-type")
-                    .Select(fact => fact.Target.SourceSymbolId is { } id && byId.TryGetValue(id, out var type) ? type : null)
+                var interfaceTypes = corpus.FactsOwnedBy(contractId).Where(fact => fact.Kind == "containing-type")
+                    .Select(fact => fact.Target.SourceSymbolId is { } id ? corpus.Symbol(id) : null)
                     .Where(type => type?.TypeKind == "interface").ToArray();
                 if (interfaceTypes.Length != 0 && !interfaceTypes.Any(type => identifiers.Contains(type!.Name)))
                     deferred.Add(contractId);
@@ -275,10 +328,10 @@ public static class PurposeSearch
         || project.Contains("/Tests/", StringComparison.OrdinalIgnoreCase)
         || project.StartsWith("tests/", StringComparison.OrdinalIgnoreCase);
 
-    private static SearchResult Abstain(QueryRequest request, string? snapshotId, StructuralCatalog catalog, string mode,
+    private static SearchResult Abstain(QueryRequest request, string? snapshotId, StructuralCoverage coverage, string mode,
         string[] queryTokens, string decision, int withheld, string limitation) =>
         new(new([], new(request.Offset, request.Limit, 0, 0, false, null, snapshotId, snapshotId is not null)),
-            RankingVersion, mode, "C#", catalog.Coverage, queryTokens, queryTokens, EvidencePolicy,
+            RankingVersion, mode, "C#", coverage, queryTokens, queryTokens, EvidencePolicy,
             decision, withheld, [limitation, "Empty matches do not establish absence outside the supported loaded C# snapshot."]);
 
     private static SearchField DocField(string name, double weight, DocumentationSection section, StructuralFact? fact) =>
@@ -292,9 +345,9 @@ public static class PurposeSearch
         new(name, weight, SearchTokens(text).ToHashSet(StringComparer.Ordinal), source, location, factKind,
             documentation, relationship, lengthFamily ?? name, text, aiDescription);
 
-    private sealed record SearchField(string Name, double Weight, HashSet<string> Tokens,
+    internal sealed record SearchField(string Name, double Weight, HashSet<string> Tokens,
         string SourceSymbolId, DocumentationRange Location, string? FactKind,
         DocumentationEvidence? DocumentationEvidence, StructuralEvidence? RelationshipEvidence,
         string LengthFamily, string Text, AiDescriptionEvidence? AiDescriptionEvidence);
-    private sealed record SearchDocument(DocumentedSymbol Symbol, SearchField[] Fields);
+    internal sealed record SearchDocument(DocumentedSymbol Symbol, SearchField[] Fields);
 }

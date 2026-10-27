@@ -50,15 +50,17 @@ def retain_index(result, output):
         return {"index": str(destination), "snapshotIndex": str(destination)}
     identifier = manifest.get("indexId")
     artifacts = manifest.get("artifacts")
-    expected = {"index.json", "overview.md", "warnings.txt", "timings.json"}
+    version = manifest.get("manifestVersion")
+    # Version 2 (SQLite) stores index.db in place of index.json and catalog.json.
+    expected = {"index.db" if version == 2 else "index.json", "overview.md", "warnings.txt", "timings.json"}
     if isinstance(artifacts, dict) and "catalog.json" in artifacts:
         expected.add("catalog.json")
-    if (manifest.get("manifestVersion") != 1 or not isinstance(identifier, str)
+    if (version not in (1, 2) or not isinstance(identifier, str)
             or re.fullmatch(r"[0-9a-fA-F]{32}", identifier) is None
             or result.get("indexId", identifier) != identifier
             or not isinstance(artifacts, dict) or set(artifacts) != expected):
         raise ValueError("Benchmark result and retained generation manifest disagree")
-    source = snapshot.parent if snapshot.name == "index.json" else manifest_path.parent / "generations" / identifier
+    source = snapshot.parent if snapshot.name in ("index.json", "index.db") else manifest_path.parent / "generations" / identifier
     destination = output / "generations" / identifier
     destination.mkdir(parents=True, exist_ok=False)
     for name in sorted(expected):
@@ -73,7 +75,7 @@ def retain_index(result, output):
     # All copies use the captured immutable manifest, even if the active pointer moves.
     for target in (destination / "generation.json", output / "current.json", output / "manifest.json"):
         target.write_bytes(manifest_bytes)
-    return {"index": str(output / "current.json"), "snapshotIndex": str(destination / "index.json")}
+    return {"index": str(output / "current.json"), "snapshotIndex": str(destination / ("index.db" if version == 2 else "index.json"))}
 
 
 def main():

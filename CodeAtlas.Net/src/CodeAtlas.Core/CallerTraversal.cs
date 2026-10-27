@@ -15,9 +15,7 @@ public static class Callers
     public static CallerTraversal Traverse(StructuralCatalog catalog, string startId, int depth, int limit,
         CancellationToken cancellationToken = default)
     {
-        if (string.IsNullOrWhiteSpace(startId)) throw new ArgumentException("A source method ID is required.");
-        if (depth is < 1 or > 5) throw new ArgumentException("--depth must be from 1 to 5.");
-        if (limit is < 1 or > 1000) throw new ArgumentException("--limit must be between 1 and 1000.");
+        Validate(startId, depth, limit);
         var scanned = Math.Min(catalog.Facts.Length, MaximumFactsScanned);
         var incoming = new Dictionary<string, List<StructuralFact>>(StringComparer.Ordinal);
         for (var i = 0; i < scanned; i++)
@@ -28,6 +26,37 @@ public static class Callers
             if (!incoming.TryGetValue(target, out var items)) incoming[target] = items = [];
             items.Add(fact);
         }
+        return Traverse(id => incoming.TryGetValue(id, out var items) ? items : null, scanned,
+            scanned < catalog.Facts.Length, startId, depth, limit, cancellationToken);
+    }
+
+    /// <summary>Stored-row traversal: incoming resolved invocations are read per visited method,
+    /// restricted to the same first <see cref="MaximumFactsScanned"/> facts as the catalog scan.</summary>
+    internal static CallerTraversal Traverse(ISnapshotRows rows, string startId, int depth, int limit,
+        CancellationToken cancellationToken = default)
+    {
+        Validate(startId, depth, limit);
+        var (start, scanned, workLimited) = rows.IncomingInvocations(startId, MaximumFactsScanned);
+        var cache = new Dictionary<string, StructuralFact[]>(StringComparer.Ordinal) { [startId] = start };
+        IReadOnlyList<StructuralFact>? Incoming(string id)
+        {
+            if (!cache.TryGetValue(id, out var facts))
+                cache[id] = facts = rows.IncomingInvocations(id, MaximumFactsScanned).Incoming;
+            return facts.Length == 0 ? null : facts;
+        }
+        return Traverse(Incoming, scanned, workLimited, startId, depth, limit, cancellationToken);
+    }
+
+    private static void Validate(string startId, int depth, int limit)
+    {
+        if (string.IsNullOrWhiteSpace(startId)) throw new ArgumentException("A source method ID is required.");
+        if (depth is < 1 or > 5) throw new ArgumentException("--depth must be from 1 to 5.");
+        if (limit is < 1 or > 1000) throw new ArgumentException("--limit must be between 1 and 1000.");
+    }
+
+    private static CallerTraversal Traverse(Func<string, IReadOnlyList<StructuralFact>?> incoming, int scanned,
+        bool scanLimited, string startId, int depth, int limit, CancellationToken cancellationToken)
+    {
         var edges = new List<CallerEdge>();
         var emitted = new HashSet<(string Caller, string Callee, DocumentationRange Location)>();
         var seen = new HashSet<string>(StringComparer.Ordinal) { startId };
@@ -35,14 +64,14 @@ public static class Callers
         frontier.Enqueue((startId, 0));
         var hasMore = false;
         var depthLimited = false;
-        var workLimited = scanned < catalog.Facts.Length;
+        var workLimited = scanLimited;
         var examined = 0;
         var stopped = false;
         while (frontier.Count > 0 && !stopped)
         {
             cancellationToken.ThrowIfCancellationRequested();
             var (id, currentDepth) = frontier.Dequeue();
-            if (!incoming.TryGetValue(id, out var facts)) continue;
+            if (incoming(id) is not { } facts) continue;
             if (currentDepth == depth)
             {
                 depthLimited = true;

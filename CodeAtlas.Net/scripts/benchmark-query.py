@@ -132,6 +132,8 @@ def main():
     parser.add_argument("--baseline", type=Path, help="Required baseline-mode report.json for candidate relative budgets")
     parser.add_argument("--outdir", type=Path, default=Path(__file__).resolve().parents[1] / ".codeatlas" / "query-benchmarks")
     parser.add_argument("--conditions", default="Other machine load uncontrolled")
+    parser.add_argument("--expected", type=Path,
+                        help="SQLite generations: index.json from 'codeatlas export-json' of the same generation")
     args = parser.parse_args()
     if os.name != "nt":
         parser.error("Windows is required for OS peak working-set measurement")
@@ -144,6 +146,10 @@ def main():
         if len(generation) != 32 or any(char not in "0123456789abcdefABCDEF" for char in generation):
             parser.error("Invalid generation identity")
         artifact = index_path.parent / "generations" / generation / "index.json"
+        if pointer["manifestVersion"] == 2:
+            if args.expected is None:
+                parser.error("SQLite generation: pass --expected <export>/index.json from codeatlas export-json")
+            artifact = args.expected.resolve(strict=True)
         index = json.loads(artifact.read_text(encoding="utf-8-sig"))
         if index["indexId"] != generation:
             parser.error("Manifest/index identity mismatch")

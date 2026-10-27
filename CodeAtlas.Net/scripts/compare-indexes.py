@@ -111,6 +111,9 @@ def load_index(path, allow_unverified_raw=False, integrity=None):
             if len(manifest_bytes) > 64 * 1024:
                 raise ValueError("Snapshot manifest is unexpectedly large")
             manifest = json.loads(manifest_bytes.decode("utf-8-sig"))
+            if isinstance(manifest, dict) and manifest.get("manifestVersion") == 2:
+                raise ValueError("SQLite generation (manifest version 2); compare its JSON export from "
+                                 "'codeatlas export-json --index <current.json> --output <new-directory>'")
             if (not isinstance(manifest, dict) or type(manifest.get("manifestVersion")) is not int
                     or manifest["manifestVersion"] != 1):
                 raise ValueError("Unsupported or invalid snapshot manifest")

@@ -1,6 +1,7 @@
 using System.Text;
 using System.Text.Json;
 using CodeAtlas.Persistence;
+using CodeAtlas.Storage;
 namespace CodeAtlas;
 /// <summary>Disk-only queries: these operations never open an MSBuild workspace.</summary>
 public static class IndexStore
@@ -17,16 +18,25 @@ public static class IndexStore
         LoadSnapshotAsync(path, includeCatalog: true, cancellationToken);
 
     public static Task<LoadedSnapshot> LoadSnapshotAsync(string path, bool includeCatalog, CancellationToken cancellationToken = default) =>
-        LoadSnapshotCoreAsync(path, includeCatalog, allowUnverifiedRaw: false, cancellationToken);
+        LoadSnapshotCoreAsync(path, includeCatalog, allowUnverifiedRaw: false, headerOnly: false, cancellationToken);
+
+    /// <summary>
+    /// Query entry point. A SQLite generation is opened header-only: identity, inputs and warnings are
+    /// read now and rows are read per query through <see cref="LoadedSnapshot.Rows"/>. A legacy JSON
+    /// generation is loaded completely, as before (without catalogs unless requested).
+    /// </summary>
+    public static Task<LoadedSnapshot> OpenSnapshotAsync(string path, bool includeCatalog = true,
+        CancellationToken cancellationToken = default) =>
+        LoadSnapshotCoreAsync(path, includeCatalog, allowUnverifiedRaw: false, headerOnly: true, cancellationToken);
 
     /// <summary>Explicit forensic inspection of legacy split artifacts without a retained generation manifest.
     /// A sibling catalog is paired by identity when available, but its bytes have no manifest integrity guarantee.</summary>
     public static Task<LoadedSnapshot> LoadUnverifiedSnapshotAsync(string path, bool includeCatalog = true,
         CancellationToken cancellationToken = default) =>
-        LoadSnapshotCoreAsync(path, includeCatalog, allowUnverifiedRaw: true, cancellationToken);
+        LoadSnapshotCoreAsync(path, includeCatalog, allowUnverifiedRaw: true, headerOnly: false, cancellationToken);
 
     private static async Task<LoadedSnapshot> LoadSnapshotCoreAsync(string path, bool includeCatalog, bool allowUnverifiedRaw,
-        CancellationToken cancellationToken)
+        bool headerOnly, CancellationToken cancellationToken)
     {
         try
         {
@@ -35,12 +45,18 @@ public static class IndexStore
             CodebaseIndex? index;
             var isCurrent = Path.GetFileName(path).Equals("current.json", StringComparison.OrdinalIgnoreCase);
             var retainedManifest = Path.Combine(Path.GetDirectoryName(path)!, "generation.json");
-            var isRetained = Path.GetFileName(path).Equals("index.json", StringComparison.OrdinalIgnoreCase)
+            var isDatabase = Path.GetFileName(path).Equals(SqliteIndexSchema.ArtifactName, StringComparison.OrdinalIgnoreCase);
+            var isRetained = (Path.GetFileName(path).Equals("index.json", StringComparison.OrdinalIgnoreCase) || isDatabase)
                 && File.Exists(retainedManifest);
+            if (isDatabase && !isRetained)
+                throw new IndexFormatException("invalid_index", "An index database is read only through its generation manifest. "
+                    + "Pass the solution's current.json, or the database inside a complete retained generation.");
             if (isCurrent || isRetained)
             {
                 // The catalog, like the index, is authenticated during its single deserialization.
                 generation = await GenerationStore.ResolveAsync(isCurrent ? path : retainedManifest, cancellationToken, verifyCatalog: false);
+                if (generation.Manifest.ManifestVersion == GenerationStore.StoreManifestVersion)
+                    return OpenStore(generation, path, includeCatalog, headerOnly, cancellationToken);
                 index = await GenerationStore.ReadVerifiedAsync(generation, "index.json",
                     async (stream, token) => await JsonSerializer.DeserializeAsync<CodebaseIndex>(stream, JsonOptions, token), cancellationToken);
                 if (index is null)
@@ -90,6 +106,52 @@ public static class IndexStore
         }
     }
 
+    private static LoadedSnapshot OpenStore(ResolvedGeneration generation, string path, bool includeCatalog, bool headerOnly,
+        CancellationToken cancellationToken)
+    {
+        SqliteAvailability.Require();
+        var store = new SqliteIndexReader(generation.ArtifactPath(SqliteIndexSchema.ArtifactName));
+        CodebaseIndex index;
+        if (headerOnly)
+        {
+            index = store.ReadHeader(cancellationToken);
+            ValidateHeader(index);
+        }
+        else
+        {
+            index = store.ReadFull(includeCatalog, cancellationToken);
+            Validate(index, requireCatalogs: includeCatalog);
+        }
+        GenerationStore.RequireIdentity(generation, index.IndexId, index.Solution);
+        return new(index, path, generation.Directory, true)
+        {
+            Store = headerOnly ? store : null,
+            ArtifactName = SqliteIndexSchema.ArtifactName
+        };
+    }
+
+    /// <summary>Reads every byte of a stored generation's database and compares it with the manifest
+    /// SHA-256. Ordinary queries check length, header, identity and SQLite page structure instead.</summary>
+    public static async Task VerifyStoreAsync(LoadedSnapshot snapshot, CancellationToken cancellationToken = default)
+    {
+        if (snapshot.ArtifactName != SqliteIndexSchema.ArtifactName || snapshot.GenerationDirectory is null) return;
+        try
+        {
+            var generation = await GenerationStore.ResolveAsync(Path.Combine(snapshot.GenerationDirectory, "generation.json"),
+                cancellationToken, verifyCatalog: false);
+            GenerationStore.RequireIdentity(generation, snapshot.Index.IndexId, snapshot.Index.Solution);
+            await GenerationStore.VerifyArtifactAsync(generation, SqliteIndexSchema.ArtifactName, cancellationToken);
+        }
+        catch (SnapshotStoreException exception)
+        {
+            throw new IndexFormatException(exception.Code, exception.Message);
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        {
+            throw new IndexFormatException("snapshot_io_failed", "Cannot read the snapshot. Check its path and permissions, or rebuild it.", [exception.Message]);
+        }
+    }
+
     private static CodebaseIndex AttachCatalog(CodebaseIndex index, SymbolCatalogFile? catalog)
     {
         if (catalog is null)
@@ -103,6 +165,23 @@ public static class IndexStore
         }
         return index with { Symbols = catalog.Symbols, DocumentationCoverage = catalog.DocumentationCoverage,
             StructuralCatalog = catalog.StructuralCatalog, Duplicates = catalog.Duplicates };
+    }
+
+    /// <summary>Header checks for a row-backed snapshot. Row contents were validated before publication
+    /// and are protected by the database's integrity checks.</summary>
+    private static void ValidateHeader(CodebaseIndex index)
+    {
+        if (index.InputManifest is { } manifest) SnapshotInputModel.Validate(manifest);
+        if (index.VirtualSnapshot is not null)
+            throw new IndexFormatException("invalid_index", "A virtual benchmark snapshot cannot be loaded or published as a disk index.");
+        if (index.SchemaVersion is not (1 or 2 or SchemaVersion))
+            throw new IndexFormatException("unsupported_index", "Unsupported index version. Rebuild the index with this version of CodeAtlas.");
+        if (string.IsNullOrWhiteSpace(index.IndexId) || !Path.IsPathFullyQualified(index.Solution)
+            || index.Warnings is null || index.InputRoots is null || index.ExplicitInputs is null || index.Fingerprints is null
+            || index.InputRoots.Length == 0 || index.Fingerprints.Count == 0 || index.Warnings.Any(w => w is null)
+            || index.InputRoots.Concat(index.ExplicitInputs).Any(path => string.IsNullOrWhiteSpace(path) || !Path.IsPathFullyQualified(path))
+            || index.Fingerprints.Any(pair => !Path.IsPathFullyQualified(pair.Key) || pair.Value is not { Length: 64 } || !pair.Value.All(Uri.IsHexDigit)))
+            throw new IndexFormatException("invalid_index", "Invalid index contents. Rebuild the index.");
     }
 
     private static void Validate(CodebaseIndex? index, bool requireCatalogs)
@@ -157,10 +236,13 @@ public static class IndexStore
     public static IReadOnlyList<MethodInfo> FindMethods(CodebaseIndex index, string name) =>
         index.Methods.Where(m => m.Name == name).ToArray();
 
-    public static IReadOnlyList<SourceReference> FindReferences(CodebaseIndex index, string id)
+    public static IReadOnlyList<SourceReference> FindReferences(CodebaseIndex index, string id) =>
+        FindReferences(new MemorySnapshotRows(index), index.SchemaVersion, id);
+
+    internal static IReadOnlyList<SourceReference> FindReferences(ISnapshotRows rows, int schemaVersion, string id)
     {
-        if (index.References.TryGetValue(id, out var references)) return references;
-        if (index.SchemaVersion >= 2 && index.Symbols?.Any(symbol => symbol.Id == id && symbol.Kind != "method") == true)
+        if (rows.ReferencesOf(id) is { } references) return references;
+        if (schemaVersion >= 2 && rows.Symbol(id) is { Kind: not "method" })
             throw new QueryException("unsupported_symbol_kind", "References support ordinary and explicit-interface source methods only.");
         throw new AnalysisException("Method ID not found in the index. Use an ID returned by find-symbol.");
     }
@@ -178,19 +260,81 @@ public static class IndexStore
         {
             // Validation also runs at the commit boundary; this early check gives a stale rebuild a precise error.
             await RequireFreshAsync(index, cancellationToken);
-            var queryIndex = index with { Symbols = null, DocumentationCoverage = null, StructuralCatalog = null, Duplicates = null };
-            var catalog = new SymbolCatalogFile(index.Symbols, index.DocumentationCoverage, index.StructuralCatalog, index.Duplicates)
-                { IndexId = index.IndexId, Solution = index.Solution };
+            SqliteAvailability.Require();
+            // Callers publish after their semantic workspace is disposed. Reclaim it now so the store
+            // write runs beside the analysis results only, not beside the unreachable Roslyn graph.
+            GC.Collect(GC.MaxGeneration, GCCollectionMode.Forced, blocking: true, compacting: true);
             var generation = await new GenerationStore().PublishAsync(index.Solution, index.IndexId,
             [
-                new("index.json", (stream, token) => JsonSerializer.SerializeAsync(stream, queryIndex, JsonOptions, token)),
-                new("catalog.json", (stream, token) => JsonSerializer.SerializeAsync(stream, catalog, JsonOptions, token)),
+                new(SqliteIndexSchema.ArtifactName, null, (path, token) =>
+                {
+                    SqliteIndexWriter.Write(path, index, token);
+                    return Task.CompletedTask;
+                }),
                 TextArtifact("overview.md", Overview(index)),
                 TextArtifact("warnings.txt", WarningText(index)),
                 new("timings.json", writeTimings ?? ((stream, token) => JsonSerializer.SerializeAsync(stream,
                     new { index.IndexId, index.Solution, index.ToolVersion, scope = "Library publication; no stage measurements available." }, JsonOptions, token)))
             ], token => RequireFreshAsync(index, token), cancellationToken);
-            return new(index, generation.ManifestPath, generation.Directory, true);
+            return new(index, generation.ManifestPath, generation.Directory, true) { ArtifactName = SqliteIndexSchema.ArtifactName };
+        }
+        catch (SnapshotStoreException exception)
+        {
+            throw new IndexFormatException(exception.Code, exception.Message);
+        }
+        catch (Microsoft.Data.Sqlite.SqliteException exception)
+        {
+            throw new IndexFormatException("snapshot_io_failed", "Snapshot publication failed while writing the index database. The previous committed snapshot remains active; check disk space and permissions and retry.", [exception.Message]);
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        {
+            throw new IndexFormatException("snapshot_io_failed", "Snapshot publication failed. The previous committed snapshot remains active; check disk space and permissions and retry.", [exception.Message]);
+        }
+    }
+
+    /// <summary>
+    /// Writes a complete legacy (manifest version 1) generation: index.json and catalog.json exactly as
+    /// the JSON store wrote them, the generation's reports, and a generation.json with their digests.
+    /// The output directory must not exist. The source database is verified completely first.
+    /// </summary>
+    public static async Task<JsonExport> ExportJsonAsync(string snapshotPath, string outputDirectory,
+        CancellationToken cancellationToken = default)
+    {
+        outputDirectory = Path.GetFullPath(outputDirectory);
+        if (Directory.Exists(outputDirectory) || File.Exists(outputDirectory))
+            throw new ArgumentException("--output must name a new directory.");
+        var snapshot = await LoadSnapshotAsync(snapshotPath, includeCatalog: true, cancellationToken);
+        if (!snapshot.VerifiedGeneration || snapshot.GenerationDirectory is null)
+            throw new QueryException("rebuild_required", "Export requires a verified generation (current.json or a retained generation).");
+        await VerifyStoreAsync(snapshot, cancellationToken);
+        var index = snapshot.Index;
+        var queryIndex = index with { Symbols = null, DocumentationCoverage = null, StructuralCatalog = null, Duplicates = null };
+        var catalog = new SymbolCatalogFile(index.Symbols, index.DocumentationCoverage, index.StructuralCatalog, index.Duplicates)
+            { IndexId = index.IndexId, Solution = index.Solution };
+        try
+        {
+            var source = await GenerationStore.ResolveAsync(Path.Combine(snapshot.GenerationDirectory, "generation.json"),
+                cancellationToken, verifyCatalog: true);
+            Directory.CreateDirectory(outputDirectory);
+            var digests = new Dictionary<string, ArtifactDigest>(StringComparer.Ordinal);
+            async Task WriteAsync(string name, Func<Stream, CancellationToken, Task> write)
+            {
+                var path = Path.Combine(outputDirectory, name);
+                await using (var file = new FileStream(path, FileMode.CreateNew, FileAccess.Write, FileShare.None, 64 * 1024, FileOptions.Asynchronous))
+                    await write(file, cancellationToken);
+                await using var read = File.OpenRead(path);
+                digests[name] = new(read.Length, Convert.ToHexString(await System.Security.Cryptography.SHA256.HashDataAsync(read, cancellationToken)));
+            }
+            await WriteAsync("index.json", (stream, token) => JsonSerializer.SerializeAsync(stream, queryIndex, JsonOptions, token));
+            await WriteAsync("catalog.json", (stream, token) => JsonSerializer.SerializeAsync(stream, catalog, JsonOptions, token));
+            foreach (var name in new[] { "overview.md", "warnings.txt", "timings.json" })
+                await WriteAsync(name, (stream, token) => GenerationStore.ReadVerifiedAsync(source, name,
+                    async (input, inner) => { await input.CopyToAsync(stream, inner); return true; }, token));
+            var manifest = new GenerationManifest(GenerationStore.JsonManifestVersion, index.IndexId, index.Solution, digests);
+            await File.WriteAllTextAsync(Path.Combine(outputDirectory, "generation.json"),
+                JsonSerializer.Serialize(manifest, new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase }), cancellationToken);
+            return new(snapshot, outputDirectory, Path.Combine(outputDirectory, "index.json"),
+                Path.Combine(outputDirectory, "catalog.json"), Path.Combine(outputDirectory, "generation.json"));
         }
         catch (SnapshotStoreException exception)
         {
@@ -198,7 +342,7 @@ public static class IndexStore
         }
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
         {
-            throw new IndexFormatException("snapshot_io_failed", "Snapshot publication failed. The previous committed snapshot remains active; check disk space and permissions and retry.", [exception.Message]);
+            throw new IndexFormatException("snapshot_io_failed", "JSON export failed. Check the output path, disk space and permissions.", [exception.Message]);
         }
     }
 
@@ -277,11 +421,23 @@ public sealed record SymbolCatalogFile(DocumentedSymbol[]? Symbols, Documentatio
     public string? Solution { get => solution; init { solution = value; HasIdentityHeader = true; } }
 }
 
+/// <summary>Paths of a legacy JSON generation written by <see cref="IndexStore.ExportJsonAsync"/>.</summary>
+public sealed record JsonExport(LoadedSnapshot Snapshot, string Directory, string IndexJson, string CatalogJson, string Manifest);
+
 /// <summary>A command resolves this handle once; artifact paths remain bound to that generation.</summary>
 public sealed record LoadedSnapshot(CodebaseIndex Index, string Path, string? GenerationDirectory, bool VerifiedGeneration)
 {
+    /// <summary>Set for a header-only SQLite snapshot: <see cref="Index"/> then holds identity, inputs and
+    /// warnings, while projects, types, methods, references and catalogs are read through <see cref="Rows"/>.</summary>
+    internal SqliteIndexReader? Store { get; init; }
+    public bool IsHeaderOnly => Store is not null;
+    /// <summary>The generation's index artifact: index.db, or index.json for legacy JSON generations.</summary>
+    public string ArtifactName { get; init; } = "index.json";
+    internal ISnapshotRows Rows => rows ??= Store is { } store ? new SqliteSnapshotRows(store, Index) : new MemorySnapshotRows(Index);
+    private ISnapshotRows? rows;
+
     public string? OverviewPath => GenerationDirectory is null ? null : System.IO.Path.Combine(GenerationDirectory, "overview.md");
     public string? WarningsPath => GenerationDirectory is null ? null : System.IO.Path.Combine(GenerationDirectory, "warnings.txt");
     public string? TimingsPath => GenerationDirectory is null ? null : System.IO.Path.Combine(GenerationDirectory, "timings.json");
-    public string IndexPath => GenerationDirectory is null ? Path : System.IO.Path.Combine(GenerationDirectory, "index.json");
+    public string IndexPath => GenerationDirectory is null ? Path : System.IO.Path.Combine(GenerationDirectory, ArtifactName);
 }

@@ -64,6 +64,7 @@ internal static class ResponseContract
     public static (string Code, int Exit) Classify(Exception exception) => exception switch
     {
         OperationCanceledException => ("cancelled", 130),
+        SqliteUnavailableException unavailable => (unavailable.Code, 1),
         StaleIndexException => ("stale_index", 3),
         QueryException { Code: "snapshot_mismatch" } => ("snapshot_mismatch", 3),
         QueryException { Code: "unsupported_contract" } => ("unsupported_contract", 2),

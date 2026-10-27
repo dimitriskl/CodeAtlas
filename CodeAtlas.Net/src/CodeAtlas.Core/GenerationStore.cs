@@ -4,7 +4,10 @@ using System.Text.Json;
 
 namespace CodeAtlas.Persistence;
 
-internal sealed record GenerationArtifact(string Name, Func<Stream, CancellationToken, Task> Write);
+/// <summary>An artifact written through a hashing stream, or (WriteFile) created at a path by its own
+/// writer, such as the SQLite database, and hashed after it is closed.</summary>
+internal sealed record GenerationArtifact(string Name, Func<Stream, CancellationToken, Task>? Write,
+    Func<string, CancellationToken, Task>? WriteFile = null);
 internal sealed record ArtifactDigest(long Length, string Sha256);
 internal sealed record GenerationManifest(int ManifestVersion, string IndexId, string Solution,
     Dictionary<string, ArtifactDigest> Artifacts);
@@ -30,6 +33,10 @@ internal sealed class GenerationStore(
 {
     private static readonly string[] Names = ["index.json", "overview.md", "warnings.txt", "timings.json"];
     private static readonly string[] CatalogNames = ["catalog.json"];
+    /// <summary>Manifest version 2: one SQLite database replaces index.json and catalog.json.</summary>
+    internal static readonly string[] StoreNames = [Storage.SqliteIndexSchema.ArtifactName, "overview.md", "warnings.txt", "timings.json"];
+    internal const int JsonManifestVersion = 1;
+    internal const int StoreManifestVersion = 2;
     private static readonly JsonSerializerOptions JsonOptions = new() { PropertyNamingPolicy = JsonNamingPolicy.CamelCase };
     private static StringComparer PathComparer => OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal;
 
@@ -48,11 +55,12 @@ internal sealed class GenerationStore(
     {
         if (!Guid.TryParseExact(indexId, "N", out _))
             throw new ArgumentException("Index ID must be a GUID in N format.", nameof(indexId));
-        var expected = artifacts.Any(artifact => artifact.Name == "catalog.json")
-            ? Names.Concat(CatalogNames).Order(StringComparer.Ordinal).ToArray()
-            : Names.Order(StringComparer.Ordinal).ToArray();
-        if (!artifacts.Select(artifact => artifact.Name).Order(StringComparer.Ordinal).SequenceEqual(expected))
-            throw new ArgumentException("A generation requires index.json, overview.md, warnings.txt and timings.json, plus catalog.json when symbol catalogs are stored separately.");
+        var store = artifacts.Any(artifact => artifact.Name == Storage.SqliteIndexSchema.ArtifactName);
+        var expected = (store ? StoreNames : artifacts.Any(artifact => artifact.Name == "catalog.json")
+            ? Names.Concat(CatalogNames) : Names).Order(StringComparer.Ordinal).ToArray();
+        if (!artifacts.Select(artifact => artifact.Name).Order(StringComparer.Ordinal).SequenceEqual(expected)
+            || artifacts.Any(artifact => (artifact.Write is null) == (artifact.WriteFile is null)))
+            throw new ArgumentException("A generation requires index.db (or legacy index.json plus optional catalog.json), overview.md, warnings.txt and timings.json, each with exactly one writer.");
 
         solution = Path.GetFullPath(solution);
         var manifestPath = DefaultPath(solution);
@@ -71,13 +79,20 @@ internal sealed class GenerationStore(
         {
             await CheckpointAsync(PublishCheckpoint.BeforeArtifact, cancellationToken);
             var path = Path.Combine(directory, artifact.Name);
+            if (artifact.WriteFile is { } writeFile)
+            {
+                await writeFile(path, cancellationToken);
+                digests.Add(artifact.Name, await DigestAndFlushAsync(path, cancellationToken));
+                await CheckpointAsync(PublishCheckpoint.AfterArtifact, cancellationToken);
+                continue;
+            }
             using var hash = SHA256.Create();
             await using (var file = new FileStream(path, FileMode.CreateNew, FileAccess.Write, FileShare.None,
                 64 * 1024, FileOptions.Asynchronous | FileOptions.SequentialScan))
             {
                 await using (var hashing = new CryptoStream(file, hash, CryptoStreamMode.Write, leaveOpen: true))
                 {
-                    await artifact.Write(hashing, cancellationToken);
+                    await artifact.Write!(hashing, cancellationToken);
                     await hashing.FlushFinalBlockAsync(cancellationToken);
                 }
                 await file.FlushAsync(cancellationToken);
@@ -87,7 +102,7 @@ internal sealed class GenerationStore(
             await CheckpointAsync(PublishCheckpoint.AfterArtifact, cancellationToken);
         }
 
-        var manifest = new GenerationManifest(1, indexId, solution, digests);
+        var manifest = new GenerationManifest(store ? StoreManifestVersion : JsonManifestVersion, indexId, solution, digests);
         var temporary = Path.Combine(home, "current-" + Guid.NewGuid().ToString("N") + ".tmp");
         try
         {
@@ -134,8 +149,7 @@ internal sealed class GenerationStore(
         GenerationManifest? manifest;
         try
         {
-            await using var stream = new FileStream(manifestPath, FileMode.Open, FileAccess.Read,
-                FileShare.Read | FileShare.Delete, 4096, FileOptions.Asynchronous | FileOptions.SequentialScan);
+            await using var stream = await OpenPointerAsync(manifestPath, cancellationToken);
             if (stream.Length > 64 * 1024)
                 throw Invalid("Snapshot manifest is unexpectedly large.");
             manifest = await JsonSerializer.DeserializeAsync<GenerationManifest>(stream, JsonOptions, cancellationToken);
@@ -146,7 +160,7 @@ internal sealed class GenerationStore(
         }
         if (manifest is null)
             throw Invalid("Empty snapshot manifest.");
-        if (manifest.ManifestVersion != 1)
+        if (manifest.ManifestVersion is not (JsonManifestVersion or StoreManifestVersion))
             throw new SnapshotStoreException("unsupported_index", "Unsupported manifest version. Rebuild the index.");
         var names = ArtifactNames(manifest);
         if (!Guid.TryParseExact(manifest.IndexId, "N", out _) || string.IsNullOrWhiteSpace(manifest.Solution)
@@ -167,15 +181,41 @@ internal sealed class GenerationStore(
                 throw Invalid("Snapshot artifact is missing or truncated: " + name);
         }
         var resolved = new ResolvedGeneration(manifestPath, directory, manifest);
-        foreach (var name in names.Where(name => name != "index.json" && (verifyCatalog || name != "catalog.json")))
+        // The JSON index and catalog are authenticated while they are deserialized. The database is
+        // checked by length, header and identity on open; VerifyArtifactAsync hashes it completely.
+        foreach (var name in names.Where(name => name is not ("index.json" or Storage.SqliteIndexSchema.ArtifactName)
+                     && (verifyCatalog || name != "catalog.json")))
             await ReadVerifiedAsync(resolved, name, async (stream, token) => { await stream.CopyToAsync(Stream.Null, token); return true; }, cancellationToken);
         return resolved;
+    }
+
+    // Windows briefly refuses opens while ReplaceFile swaps the pointer (sharing violation, a
+    // delete-pending file, or a momentarily absent name). Retry that short window only.
+    private static async Task<FileStream> OpenPointerAsync(string path, CancellationToken cancellationToken)
+    {
+        for (var attempt = 1; ; attempt++)
+        {
+            try
+            {
+                return new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read | FileShare.Delete, 4096,
+                    FileOptions.Asynchronous | FileOptions.SequentialScan);
+            }
+            catch (Exception exception) when (OperatingSystem.IsWindows()
+                && (attempt < 20 && (exception is UnauthorizedAccessException
+                        || exception is IOException { HResult: var code } && (code & 0xffff) is 32 or 33 or 5)
+                    // ReplaceFile is not atomic for openers: the name can vanish for an instant.
+                    || attempt < 3 && exception is FileNotFoundException))
+            {
+                await Task.Delay(10 * attempt, cancellationToken);
+            }
+        }
     }
 
     public static async Task<T> ReadVerifiedAsync<T>(ResolvedGeneration snapshot, string name,
         Func<Stream, CancellationToken, Task<T>> read, CancellationToken cancellationToken = default)
     {
-        if ((!Names.Contains(name, StringComparer.Ordinal) && !CatalogNames.Contains(name, StringComparer.Ordinal))
+        if ((!Names.Contains(name, StringComparer.Ordinal) && !CatalogNames.Contains(name, StringComparer.Ordinal)
+                && !StoreNames.Contains(name, StringComparer.Ordinal))
             || !snapshot.Manifest.Artifacts.TryGetValue(name, out var expected))
             throw Invalid("Unknown snapshot artifact.");
         using var hash = SHA256.Create();
@@ -191,6 +231,11 @@ internal sealed class GenerationStore(
             throw Invalid("Snapshot artifact checksum mismatch: " + name);
         return result;
     }
+
+    /// <summary>Complete SHA-256 verification of one artifact against the manifest (used for the database
+    /// by index-status and export, where reading every byte is the purpose of the command).</summary>
+    public static Task VerifyArtifactAsync(ResolvedGeneration snapshot, string name, CancellationToken cancellationToken = default) =>
+        ReadVerifiedAsync(snapshot, name, async (stream, token) => { await stream.CopyToAsync(Stream.Null, token); return true; }, cancellationToken);
 
     public static void RequireIdentity(ResolvedGeneration snapshot, string indexId, string solution)
     {
@@ -224,7 +269,17 @@ internal sealed class GenerationStore(
     }
 
     private static string[] ArtifactNames(GenerationManifest manifest) =>
-        manifest.Artifacts?.ContainsKey("catalog.json") == true ? Names.Concat(CatalogNames).ToArray() : Names;
+        manifest.ManifestVersion == StoreManifestVersion ? StoreNames
+        : manifest.Artifacts?.ContainsKey("catalog.json") == true ? Names.Concat(CatalogNames).ToArray() : Names;
+
+    private static async Task<ArtifactDigest> DigestAndFlushAsync(string path, CancellationToken cancellationToken)
+    {
+        await using var file = new FileStream(path, FileMode.Open, FileAccess.ReadWrite, FileShare.None,
+            1024 * 1024, FileOptions.Asynchronous | FileOptions.SequentialScan);
+        var digest = Convert.ToHexString(await SHA256.HashDataAsync(file, cancellationToken));
+        file.Flush(flushToDisk: true);
+        return new(file.Length, digest);
+    }
 
     private static SnapshotStoreException Invalid(string message) => new("invalid_index", message + " Rebuild the index.");
 }

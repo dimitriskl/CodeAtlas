@@ -1,6 +1,6 @@
 {
   "formatVersion": 1,
-  "scope": "Runtime NuGet packages selected by restored tool assets, including the Roslyn BuildHost payload container; nested payload bytes are also checked against that container package.",
+  "scope": "Runtime NuGet packages selected by restored tool assets, including the Roslyn BuildHost payload container and bundled native libraries; nested payload and native bytes are also checked against their container packages. License and notice texts that a package does not carry are taken from its upstream repository at the pinned version, with that source recorded.",
   "qualification": "Upstream metadata and notice preservation; not legal certification.",
   "licenseText": {
     "file": "MIT-LICENSE.txt",
@@ -85,6 +85,13 @@
           "sha256": "ef4678850e7e3aaf9297f07e5c4060d477854e545ccf8e2ef8452d65a7b2efaf"
         }
       ]
+    },
+    {
+      "id": "Microsoft.Data.Sqlite.Core",
+      "version": "10.0.5",
+      "license": "MIT",
+      "copyright": "© Microsoft Corporation. All rights reserved.",
+      "notices": []
     },
     {
       "id": "Microsoft.Extensions.DependencyInjection.Abstractions",
@@ -174,6 +181,175 @@
           "source": "NOTICE",
           "file": "upstream/microsoft.visualstudio.solutionpersistence/1.0.52/NOTICE",
           "sha256": "2d56342544395b1cc4bb98192a439031362265125a68b8062942383b8df4309a"
+        }
+      ]
+    },
+    {
+      "id": "SQLitePCLRaw.bundle_e_sqlite3",
+      "version": "2.1.14",
+      "license": "Apache-2.0",
+      "copyright": "Copyright 2014-2024 SourceGear, LLC",
+      "notices": [
+        {
+          "source": "https://github.com/ericsink/SQLitePCL.raw/blob/a89750630f7f00038489eb41952c6edd9d189f60/LICENSE.TXT",
+          "file": "upstream-source/sqlitepcl.raw/2.1.14/LICENSE.TXT",
+          "sha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30"
+        },
+        {
+          "source": "https://github.com/ericsink/SQLitePCL.raw/blob/a89750630f7f00038489eb41952c6edd9d189f60/NOTICE.TXT",
+          "file": "upstream-source/sqlitepcl.raw/2.1.14/NOTICE.TXT",
+          "sha256": "485b276b3d2bfaa26df348e1e5c84df3648981e09b88531a6a53006f0705c24b"
+        }
+      ]
+    },
+    {
+      "id": "SQLitePCLRaw.core",
+      "version": "2.1.14",
+      "license": "Apache-2.0",
+      "copyright": "Copyright 2014-2024 SourceGear, LLC",
+      "notices": [
+        {
+          "source": "https://github.com/ericsink/SQLitePCL.raw/blob/a89750630f7f00038489eb41952c6edd9d189f60/LICENSE.TXT",
+          "file": "upstream-source/sqlitepcl.raw/2.1.14/LICENSE.TXT",
+          "sha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30"
+        },
+        {
+          "source": "https://github.com/ericsink/SQLitePCL.raw/blob/a89750630f7f00038489eb41952c6edd9d189f60/NOTICE.TXT",
+          "file": "upstream-source/sqlitepcl.raw/2.1.14/NOTICE.TXT",
+          "sha256": "485b276b3d2bfaa26df348e1e5c84df3648981e09b88531a6a53006f0705c24b"
+        }
+      ]
+    },
+    {
+      "id": "SQLitePCLRaw.lib.e_sqlite3",
+      "version": "2.1.14",
+      "license": "Apache-2.0",
+      "copyright": "Copyright 2014-2024 SourceGear, LLC",
+      "notices": [
+        {
+          "source": "https://github.com/ericsink/SQLitePCL.raw/blob/a89750630f7f00038489eb41952c6edd9d189f60/LICENSE.TXT",
+          "file": "upstream-source/sqlitepcl.raw/2.1.14/LICENSE.TXT",
+          "sha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30"
+        },
+        {
+          "source": "https://github.com/ericsink/SQLitePCL.raw/blob/a89750630f7f00038489eb41952c6edd9d189f60/NOTICE.TXT",
+          "file": "upstream-source/sqlitepcl.raw/2.1.14/NOTICE.TXT",
+          "sha256": "485b276b3d2bfaa26df348e1e5c84df3648981e09b88531a6a53006f0705c24b"
+        }
+      ],
+      "bundledNative": {
+        "component": "SQLite",
+        "version": "3.54.0",
+        "sourceId": "2026-10-09 15:46:58 be8d059e9a49089ab2dce5ed26dd87aaf598fdc5fbe0b107c0dd758464bcd5e3",
+        "license": "Public domain",
+        "licenseSource": "https://www.sqlite.org/copyright.html",
+        "files": [
+          {
+            "path": "runtimes/browser-wasm/nativeassets/net9.0/e_sqlite3.a",
+            "sha256": "fedd20b2215031a34d940cd8cda45615ea5e8249e8045d47e7e0d26eb56626c5"
+          },
+          {
+            "path": "runtimes/linux-arm/native/libe_sqlite3.so",
+            "sha256": "540e2abef9707b15715b8bfbabee2dd95d2b2a7cdd13530c8552329797f985a2"
+          },
+          {
+            "path": "runtimes/linux-arm64/native/libe_sqlite3.so",
+            "sha256": "c51ff623bc85ef89f1c4cfb340cd76d256b47d4dbee00c13443a497b8c10e365"
+          },
+          {
+            "path": "runtimes/linux-armel/native/libe_sqlite3.so",
+            "sha256": "ad0913fb855f1cd9f4abb621564ce2dd3025a845c298c270dd63c10d1deb76b3"
+          },
+          {
+            "path": "runtimes/linux-mips64/native/libe_sqlite3.so",
+            "sha256": "ebebc0300d3e67a9dd5e8587e1262873e23cda14730f30b8966efe1f21819ef8"
+          },
+          {
+            "path": "runtimes/linux-musl-arm/native/libe_sqlite3.so",
+            "sha256": "aef7be7721ab298e8e6179b55510eafd8c9ebab490c79b0dfeb8c32732982d3b"
+          },
+          {
+            "path": "runtimes/linux-musl-arm64/native/libe_sqlite3.so",
+            "sha256": "37e72e8a90da8d1d6e7b94a9f2b7870329393266acf3637de8bb197668006b4e"
+          },
+          {
+            "path": "runtimes/linux-musl-riscv64/native/libe_sqlite3.so",
+            "sha256": "daa81b89bc3048b9d2ba31ef1e5883449bc681e53fa7d8135bce1712e03c7cbc"
+          },
+          {
+            "path": "runtimes/linux-musl-s390x/native/libe_sqlite3.so",
+            "sha256": "0622e9d3b9e63ce09cc301a5547776935afe29993635b84045086f31f2479321"
+          },
+          {
+            "path": "runtimes/linux-musl-x64/native/libe_sqlite3.so",
+            "sha256": "b8e951ef47a0ed8724f893497d809d47f330f59dedeb608014f5a5ce1ba4d07d"
+          },
+          {
+            "path": "runtimes/linux-ppc64le/native/libe_sqlite3.so",
+            "sha256": "eb69c91684ab674a1b5ee42e3c5e47ceccc14ce2f8ab2c6d4be865461e7cc2d7"
+          },
+          {
+            "path": "runtimes/linux-riscv64/native/libe_sqlite3.so",
+            "sha256": "4d98d5bcec519583e4e29c14e108f9c3667b7c2ccb22990c95d1392af5029161"
+          },
+          {
+            "path": "runtimes/linux-s390x/native/libe_sqlite3.so",
+            "sha256": "fa7b0b57f6fd4af8231c7c90de5ef5e82d3f174690a267326bc4ee5399a9a66f"
+          },
+          {
+            "path": "runtimes/linux-x64/native/libe_sqlite3.so",
+            "sha256": "4dc77b4c5c49be108470ada98911a5db7af9be23e923fdc2d00e2b93f55d70ac"
+          },
+          {
+            "path": "runtimes/linux-x86/native/libe_sqlite3.so",
+            "sha256": "0fc3731a4539f3979d3dfa6364ed3173316a078669b99703bf868469391aa61f"
+          },
+          {
+            "path": "runtimes/maccatalyst-arm64/native/libe_sqlite3.dylib",
+            "sha256": "e381c31d8981678a771d7c7d770a798c22bd9db1d2b6750077238236b92f2839"
+          },
+          {
+            "path": "runtimes/maccatalyst-x64/native/libe_sqlite3.dylib",
+            "sha256": "59fe682b51ac2e9204f723672b913ce6faa46e09998e1014e2e1f6efd2b5b966"
+          },
+          {
+            "path": "runtimes/osx-arm64/native/libe_sqlite3.dylib",
+            "sha256": "e4dd58502daa3b5911b3c341a22f8c6cb4f6a7f49be3b92219497a1a981fb0c2"
+          },
+          {
+            "path": "runtimes/osx-x64/native/libe_sqlite3.dylib",
+            "sha256": "e53c0e033a306d2344fdd5b7303c871b8eef299404744ae5ffe37f4afcb6dbdf"
+          },
+          {
+            "path": "runtimes/win-arm64/native/e_sqlite3.dll",
+            "sha256": "e3d17b136b58e9e3f768f97ddb406cff3595632126371ad97546be368603bff6"
+          },
+          {
+            "path": "runtimes/win-x64/native/e_sqlite3.dll",
+            "sha256": "b082e8a72ad4ce908234eac970b09b7d328d16157cec34a3ebccfd9dfe2221c6"
+          },
+          {
+            "path": "runtimes/win-x86/native/e_sqlite3.dll",
+            "sha256": "329e6c6c5e7da09d0397a25073d556e9156e067dfc9279cdf4cc54da7d2566e0"
+          }
+        ]
+      }
+    },
+    {
+      "id": "SQLitePCLRaw.provider.e_sqlite3",
+      "version": "2.1.14",
+      "license": "Apache-2.0",
+      "copyright": "Copyright 2014-2024 SourceGear, LLC",
+      "notices": [
+        {
+          "source": "https://github.com/ericsink/SQLitePCL.raw/blob/a89750630f7f00038489eb41952c6edd9d189f60/LICENSE.TXT",
+          "file": "upstream-source/sqlitepcl.raw/2.1.14/LICENSE.TXT",
+          "sha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30"
+        },
+        {
+          "source": "https://github.com/ericsink/SQLitePCL.raw/blob/a89750630f7f00038489eb41952c6edd9d189f60/NOTICE.TXT",
+          "file": "upstream-source/sqlitepcl.raw/2.1.14/NOTICE.TXT",
+          "sha256": "485b276b3d2bfaa26df348e1e5c84df3648981e09b88531a6a53006f0705c24b"
         }
       ]
     },
