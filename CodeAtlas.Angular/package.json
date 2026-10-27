@@ -1,0 +1,53 @@
+{
+  "name": "codeatlas-ng",
+  "version": "0.00.01",
+  "description": "CodeAtlas for Angular CLI workspaces. MCP server and CLI that share the CodeAtlas JSON envelope.",
+  "license": "MIT",
+  "author": "Dimitris Klis",
+  "type": "module",
+  "engines": {
+    "node": ">=24"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/dimitriskl/CodeAtlas.git",
+    "directory": "CodeAtlas.Angular"
+  },
+  "bin": {
+    "codeatlas-ng": "./dist/cli.js",
+    "codeatlas-ng-mcp": "./dist/mcp.js"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "LICENSE",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "lint": "eslint . && prettier --check .",
+    "format": "prettier --write .",
+    "pretest": "npm run build",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "1.32.2",
+    "zod": "^3.25.76"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.39.1",
+    "@types/node": "^24.10.1",
+    "eslint": "^9.39.1",
+    "eslint-config-prettier": "^10.1.8",
+    "prettier": "^3.6.2",
+    "typescript": "^5.9.3",
+    "typescript-eslint": "^8.46.2",
+    "vitest": "^3.2.4"
+  }
+}
