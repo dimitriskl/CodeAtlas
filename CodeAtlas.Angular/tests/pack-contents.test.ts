@@ -12,6 +12,12 @@ const publishedPaths = [
   "dist/coverage.js",
   "dist/envelope.d.ts",
   "dist/envelope.js",
+  "dist/errors.d.ts",
+  "dist/errors.js",
+  "dist/generation-store.d.ts",
+  "dist/generation-store.js",
+  "dist/index-command.d.ts",
+  "dist/index-command.js",
   "dist/index.d.ts",
   "dist/index.js",
   "dist/mcp-server.d.ts",
@@ -20,6 +26,10 @@ const publishedPaths = [
   "dist/mcp.js",
   "dist/version.d.ts",
   "dist/version.js",
+  "dist/workspace-storage.d.ts",
+  "dist/workspace-storage.js",
+  "dist/workspace.d.ts",
+  "dist/workspace.js",
   "package.json",
 ];
 

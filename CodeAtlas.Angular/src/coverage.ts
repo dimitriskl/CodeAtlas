@@ -15,6 +15,15 @@ export type Coverage = {
  * Symbol and reference kinds are the product model from PRD 0001.
  * `templateCoverage` stays `unknown` until a workspace is read.
  */
+/** Edition boundary for a published generation. `no-index` is no longer a limitation. */
+export function coverageForGeneration(templateCoverage: Coverage["templateCoverage"]): Coverage {
+  return {
+    ...staticCoverage(),
+    templateCoverage,
+    limitations: [],
+  };
+}
+
 export function staticCoverage(): Coverage {
   return {
     language: "TypeScript",

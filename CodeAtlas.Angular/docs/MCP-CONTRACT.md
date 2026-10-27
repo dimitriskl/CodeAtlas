@@ -11,7 +11,7 @@ Three numbers, kept separate so each can change on its own:
 | Number              | Constant          | Initial value | Meaning                                                                                                |
 | ------------------- | ----------------- | ------------- | ------------------------------------------------------------------------------------------------------ |
 | Contract version    | `contractVersion` | `1`           | Shape of this JSON envelope.                                                                           |
-| Schema version      | `schemaVersion`   | `1`           | Persisted index schema. No index is written yet.                                                       |
+| Schema version      | `schemaVersion`   | `1`           | Persisted index schema. `index` writes it into each generation.                                        |
 | Application version | `appVersion`      | `0.00.01`     | This package. Format `x.xx.xx`. Printed by `codeatlas-ng --version` and sent as `responseToolVersion`. |
 
 `responseToolVersion` is the application version of the process that answered. It is not the contract version and not the schema version.
@@ -201,6 +201,226 @@ The full error-code catalog is extended by later tasks. This section records `in
     "code": "invalid_arguments",
     "message": "Unknown command.",
     "diagnostics": []
+  }
+}
+```
+
+## Storage naming
+
+An index lives inside the workspace that was indexed:
+
+`.codeatlas/workspaces/<workspace-name>-<path-hash>/`
+
+The same workspace path produces the same folder name on Windows and Ubuntu. The name is a pure function of the canonical directory:
+
+1. Resolve the workspace path, then canonicalise it with realpath. That removes symlinks and, on Windows, uses the canonical casing.
+2. Turn backslashes into `/`.
+3. Remove a trailing `/` unless the result would be empty or a Windows drive prefix (`C:`).
+4. On Windows, uppercase that string with `String.prototype.toUpperCase` (Unicode default mapping, not a locale). On every other system, keep the casing. This string is the workspace identity.
+5. `workspace-name` is the last segment of the canonical path from step 1. It keeps that casing. It is not the uppercased form.
+6. `path-hash` is the SHA-256 of the UTF-8 bytes of the identity, written as 64 lowercase hex digits.
+7. The folder name is `<workspace-name>-<path-hash>`.
+
+Examples, already canonical:
+
+| Canonical path  | Identity        | `path-hash`                                                        |
+| --------------- | --------------- | ------------------------------------------------------------------ |
+| `/repos/shop`   | `/repos/shop`   | `618c67282d6befa813aee566d76e7d93c8ca9f72f549ae7a9e4ee2e8b02cc06f` |
+| `C:\repos\shop` | `C:/REPOS/SHOP` | `04882da5cee0f6ee84b10c0a312c7f803ddecc9c41f5dd4af4e2c622ed7e1e61` |
+
+The folder names are `shop-618c67282d6befa813aee566d76e7d93c8ca9f72f549ae7a9e4ee2e8b02cc06f` and `shop-04882da5cee0f6ee84b10c0a312c7f803ddecc9c41f5dd4af4e2c622ed7e1e61`.
+
+Paths stored in the generation are workspace-relative and use `/`. They do not start with `/` and they do not contain `\`. A symbol id uses that same path: `<angular.json project>::<workspace-relative path>#<qualified name>`. A top-level class uses its class name as the qualified name. Nested names are specified with `find_symbol`.
+
+### Generation files
+
+```
+.codeatlas/workspaces/<folder>/
+  current.json
+  .write.lock
+  generations/<generationId>/index.db
+```
+
+`generationId` is 32 lowercase hex digits (a UUID with the hyphens removed). `.write.lock` exists only while a writer holds it.
+
+`current.json` is the pointer. Manifest version 1:
+
+| Field                       | Meaning                                          |
+| --------------------------- | ------------------------------------------------ |
+| `manifestVersion`           | `1`                                              |
+| `generationId`              | The published generation.                        |
+| `schemaVersion`             | `1`                                              |
+| `workspace`                 | The workspace identity from the naming rules.    |
+| `artifacts.index.db.length` | Byte length of that generation's `index.db`.     |
+| `artifacts.index.db.sha256` | SHA-256 of those bytes, 64 lowercase hex digits. |
+
+Publication writes a new `generations/<generationId>/` directory and its `index.db`, then replaces `current.json` by renaming a temporary file in the same directory. The generation directory is not modified after the pointer names it. Indexing the same workspace again publishes a new generation id, leaves the previous `index.db` bytes unchanged, and keeps the same folder name.
+
+### Schema version 1
+
+`index.db` is SQLite. This version stores:
+
+| Table           | Columns                                                                                                                                                                                |
+| --------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `metadata`      | `key` TEXT primary key, `value` TEXT. Keys: `generationId`, `schemaVersion`, `contractVersion`, `appVersion`, `templateCoverage`.                                                      |
+| `projects`      | `name` TEXT primary key, `root` TEXT, `source_root` TEXT, `project_type` TEXT. Paths are workspace-relative.                                                                           |
+| `tracked_files` | `path` TEXT primary key, `sha256` TEXT. `path` is workspace-relative. `sha256` is the lowercase hex SHA-256 of the file bytes.                                                         |
+| `symbols`       | `id` TEXT primary key, `project` TEXT, `path` TEXT, `qualified_name` TEXT, `kind` TEXT, `line` INTEGER, `column` INTEGER. `line` and `column` are 1-based and point at the class name. |
+
+Tracked paths are:
+
+- `angular.json`
+- `package.json`, when it exists
+- `package-lock.json`, when it exists
+- every workspace-root file whose name matches `tsconfig*.json`
+- each project's `architect.build.options.tsConfig`, when that file is not already included
+- each non-declaration TypeScript file in that project's program that sits inside the workspace and is not under `node_modules`
+
+`angular.json` paths (`root`, `sourceRoot`, `architect.build.options.tsConfig`) are workspace-relative. When `tsConfig` is omitted, the project uses `tsconfig.json` at the workspace root if that file exists. A named class declaration at the top level of one of those sources is a symbol of kind `class`, owned by the project whose program contained the file.
+
+`templateCoverage` stored in metadata is `complete` for Angular 17 and later, `partial` for Angular 15 and 16, and `unknown` when `@angular/core` could not be read from `dependencies` or `devDependencies`. The major version is the first integer in the version string.
+
+### Writer lock
+
+`index` holds an exclusive lock on `.write.lock` for the whole publish.
+
+- The holder creates the file exclusively, writes its process id as decimal text plus a newline, fsyncs, and closes the file.
+- If the file exists and that process is running, `index` exits 1 with `index_busy` and message `Another index is publishing this workspace.` It does not create a generation and it does not change `current.json` or the published `index.db`.
+- A process is running when `process.kill(pid, 0)` succeeds or fails with `EPERM`. Any other failure, or a lock file that is not a single positive integer, is a stale lock: delete it and try the exclusive create once more.
+- The holder deletes `.write.lock` when `index` finishes, including when publication fails.
+
+Stdout is empty. Stderr is the error envelope (`command` is `index`, `freshness` and `coverage` are null, no pagination). `index_status` does not take the lock and does not create `.write.lock`.
+
+Other `index` failures:
+
+| Code                  | Exit | When                                                                                                                                                   |
+| --------------------- | ---- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `invalid_arguments`   | 2    | The arguments are not `index` or `index --workspace <path>`. Message: `Index accepts only --workspace <path>.`                                         |
+| `workspace_not_found` | 1    | The path does not exist, or it has no `angular.json` with a `projects` object. Message: `No Angular workspace configuration (angular.json) was found.` |
+| `index_busy`          | 1    | The writer lock is held, as above.                                                                                                                     |
+| `analysis_failed`     | 1    | The workspace could not be indexed, including a `tsConfig` that was named and is missing, or `angular.json` that is not JSON.                          |
+| `invalid_index`       | 1    | `current.json` or `index.db` is present but not a schema-1 generation.                                                                                 |
+| `unsupported_index`   | 1    | The generation's `schemaVersion` is not `1`.                                                                                                           |
+
+`--workspace` defaults to the current directory. A relative path is resolved from there.
+
+## CLI `index`
+
+`codeatlas-ng index [--workspace <path>]` reads the workspace, publishes one generation, and prints the success envelope on stdout. Stderr is empty. Exit code is 0.
+
+`result` is present on this success envelope:
+
+| Field             | Type   | Meaning                                                                  |
+| ----------------- | ------ | ------------------------------------------------------------------------ |
+| `generationId`    | string | The generation just published.                                           |
+| `schemaVersion`   | number | `1`, from the generation.                                                |
+| `contractVersion` | number | Contract version stored in the generation.                               |
+| `appVersion`      | string | Application version stored in the generation.                            |
+| `counts.projects` | number | Rows in `projects`.                                                      |
+| `counts.files`    | number | Rows in `tracked_files`.                                                 |
+| `counts.symbols`  | number | Rows in `symbols`.                                                       |
+| `index`           | string | Absolute path of `current.json`, with the operating system's separators. |
+
+`pagination.snapshotId` is that `generationId`. The other pagination fields are the zero page (`offset` 0, `limit` 0, `returned` 0, `total` 0, `hasMore` false, `nextOffset` null, `continuationSupported` false). `index` does not page rows.
+
+Freshness after a publish is `fresh`: the check re-hashes the tracked files and finds no differences. `inputCoverage.status` is `complete` and `inputCoverage.scope` is `tracked-input-content-hashes`. `changedFiles`, `reasonCodes`, and `diagnostics` are empty. `isStale` is false.
+
+Coverage is the edition boundary. `templateCoverage` is the value stored in the generation. `limitations` is `[]` because a generation is loaded (`no-index` is removed). `warningCount` is 0; this command stores no warnings.
+
+## MCP tool `index_status`
+
+Read-only. It does not write the index and it does not call a provider.
+
+Input:
+
+| Field       | Type             | Meaning                                                                                      |
+| ----------- | ---------------- | -------------------------------------------------------------------------------------------- |
+| `workspace` | string, required | Path to the workspace directory. Relative paths resolve from the server's current directory. |
+
+When `current.json` exists for that workspace, the tool returns a success envelope with `command` `index_status` and the same `result` fields as `index`. The versions and counts are read from the published generation. `result.index` is the absolute path of `current.json`. `pagination.snapshotId` is the generation id. Freshness is computed by hashing the tracked files again: `changedFiles` lists the stored paths whose bytes differ, in ascending code-unit order. An empty list is `fresh`; a non-empty list is `stale` with `isStale` true. `index_status` reports that state and does not refuse a stale generation.
+
+When the workspace has no `current.json`, the tool still succeeds. It does not create `.codeatlas`. `result.generationId`, `result.schemaVersion`, `result.appVersion`, and `result.index` are null. `result.contractVersion` is the answering contract version (`1`), because there is no generation to read. `result.counts` is `{ "projects": 0, "files": 0, "symbols": 0 }`. Freshness and coverage are the no-index values from the envelope section. `pagination.snapshotId` is null and the rest of the page is the zero page.
+
+## Example: `index_status` with no index
+
+`checkedAtUtc` is the time of the check. Every other field is stable.
+
+```json
+{
+  "contractVersion": 1,
+  "command": "index_status",
+  "success": true,
+  "responseToolVersion": "0.00.01",
+  "warningCount": 0,
+  "freshness": {
+    "state": "unknown",
+    "checkedAtUtc": "2026-10-27T00:00:00.000Z",
+    "isStale": false,
+    "changedFiles": [],
+    "scope": "tracked-input-content-hashes",
+    "inputCoverage": {
+      "status": "unknown",
+      "scope": "no-index",
+      "issueCount": 0,
+      "reasonCodes": []
+    },
+    "diagnostics": []
+  },
+  "coverage": {
+    "language": "TypeScript",
+    "symbols": [
+      "component",
+      "directive",
+      "pipe",
+      "service",
+      "guard",
+      "interceptor",
+      "route",
+      "class",
+      "interface",
+      "function",
+      "method",
+      "property",
+      "input",
+      "output",
+      "type-alias",
+      "enum"
+    ],
+    "references": "static-source-and-template-references",
+    "referenceSymbolKinds": [
+      "invocation",
+      "template-call",
+      "template-usage",
+      "injection",
+      "route",
+      "reference"
+    ],
+    "templateCoverage": "unknown",
+    "runtimeCallGraph": false,
+    "exclusions": ["string-based-dynamic-calls", "runtime-factory-swapped-providers"],
+    "limitations": ["no-index"]
+  },
+  "pagination": {
+    "offset": 0,
+    "limit": 0,
+    "returned": 0,
+    "total": 0,
+    "hasMore": false,
+    "nextOffset": null,
+    "snapshotId": null,
+    "continuationSupported": false
+  },
+  "result": {
+    "generationId": null,
+    "schemaVersion": null,
+    "contractVersion": 1,
+    "appVersion": null,
+    "counts": {
+      "projects": 0,
+      "files": 0,
+      "symbols": 0
+    },
+    "index": null
   }
 }
 ```
