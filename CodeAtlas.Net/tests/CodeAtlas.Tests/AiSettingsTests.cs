@@ -16,22 +16,23 @@ public sealed class AiSettingsTests : IDisposable
         Directory.CreateDirectory(root);
         File.WriteAllText(SettingsPath, "{\"logging\":{\"level\":\"warning\"}}");
         var order = new List<string>();
-        var savedKeys = new Dictionary<string, string>();
-        var testedBeforePersisting = false;
         var testedBeforeSavingOptions = false;
-        var setup = new AiSetup(_ => null, (name, key) => { order.Add("persist"); savedKeys[name] = key; },
-            name => { order.Add("prompt"); return "synthetic-secret"; },
-            (_, _) => { order.Add("test"); testedBeforePersisting = savedKeys.Count == 0; testedBeforeSavingOptions = AiSettingsStore.Load(SettingsPath) is null; return Task.CompletedTask; });
+        var store = new FakeCredentialStore { OnSave = () => order.Add("persist") };
+        var prompted = "";
+        var setup = new AiSetup(_ => null, store,
+            name => { order.Add("prompt"); prompted = name; return "synthetic-secret"; },
+            (_, _) => { order.Add("test"); testedBeforeSavingOptions = AiSettingsStore.Load(SettingsPath) is null; return Task.CompletedTask; });
         var selected = new AiPreferences("openai", "my-model", "low");
 
         // Act
-        await setup.ConfigureAsync(selected, SettingsPath, default);
+        var result = await setup.ConfigureAsync(selected, SettingsPath, default);
 
         // Assert
         Assert.Equal(["prompt", "test", "persist"], order);
-        Assert.True(testedBeforePersisting);
         Assert.True(testedBeforeSavingOptions);
-        Assert.Equal("synthetic-secret", savedKeys["CODEATLAS_AI_OPENAI_API_KEY"]);
+        Assert.Equal("CODEATLAS_AI_OPENAI_KEY", prompted);
+        Assert.Equal("synthetic-secret", store.Keys["openai"]);
+        Assert.Equal("Fake Keychain", result.KeyLocation);
         var saved = File.ReadAllText(SettingsPath);
         Assert.DoesNotContain("synthetic-secret", saved);
         Assert.Contains("logging", saved);
@@ -40,21 +41,44 @@ public sealed class AiSettingsTests : IDisposable
     }
 
     [Fact]
-    public async Task ExistingProviderKeyIsReusedWithoutPromptingOrChangingItsOriginalVariable()
+    public async Task EnvironmentKeyIsUsedWithoutPromptingAndNothingIsSaved()
     {
         // Arrange
-        var persisted = new Dictionary<string, string>();
+        var store = new FakeCredentialStore();
         var setup = new AiSetup(name => name == "OPENAI_API_KEY" ? "synthetic-existing-key" : null,
-            (name, key) => persisted[name] = key, _ => throw new Exception("Unexpected prompt"), (_, _) => Task.CompletedTask);
+            store, _ => throw new Exception("Unexpected prompt"), (_, _) => Task.CompletedTask);
 
         // Act
-        await setup.ConfigureAsync(new("openai", "chosen-model"), SettingsPath, default);
+        var result = await setup.ConfigureAsync(new("openai", "chosen-model"), SettingsPath, default);
 
         // Assert
-        var saved = Assert.Single(persisted);
-        Assert.Equal("CODEATLAS_AI_OPENAI_API_KEY", saved.Key);
-        Assert.Equal("synthetic-existing-key", saved.Value);
+        Assert.Equal(0, store.Saves);
+        Assert.Equal("environment variable OPENAI_API_KEY", result.KeyLocation);
         Assert.DoesNotContain("synthetic-existing-key", File.ReadAllText(SettingsPath));
+    }
+
+    [Fact]
+    public async Task StoredKeyIsReusedWithoutPromptingOrSavingAgain()
+    {
+        // Arrange
+        var store = new FakeCredentialStore();
+        store.Keys["anthropic"] = "synthetic-stored-key";
+        string? used = null;
+        var setup = new AiSetup(_ => null, store, _ => throw new Exception("Unexpected prompt"), (configuration, _) =>
+        {
+            using var message = new HttpRequestMessage();
+            configuration.Authorize(message);
+            used = message.Headers.GetValues("x-api-key").Single();
+            return Task.CompletedTask;
+        });
+
+        // Act
+        var result = await setup.ConfigureAsync(new("anthropic", "claude-model"), SettingsPath, default);
+
+        // Assert
+        Assert.Equal("synthetic-stored-key", used);
+        Assert.Equal(0, store.Saves);
+        Assert.Equal("Fake Keychain", result.KeyLocation);
     }
 
     [Fact]
@@ -64,17 +88,34 @@ public sealed class AiSettingsTests : IDisposable
         Directory.CreateDirectory(root);
         const string original = "{\"ai\":{\"provider\":\"ollama\",\"model\":\"old-model\"}}";
         File.WriteAllText(SettingsPath, original);
-        var saves = 0;
-        var setup = new AiSetup(_ => "synthetic-secret", (_, _) => saves++, _ => throw new Exception("Unexpected prompt"),
+        var store = new FakeCredentialStore();
+        var setup = new AiSetup(_ => null, store, _ => throw new Exception("Unexpected prompt"),
             (_, _) => throw new QueryException("ai_provider_failed", "Connection failed"));
 
         // Act
-        var error = await Record.ExceptionAsync(() => setup.ConfigureAsync(new("openai", "new-model"), SettingsPath, default));
+        var error = await Record.ExceptionAsync(() => setup.ConfigureAsync(new("openai", "new-model"), SettingsPath, default, "synthetic-secret"));
 
         // Assert
         Assert.Equal("ai_provider_failed", Assert.IsType<QueryException>(error).Code);
-        Assert.Equal(0, saves);
+        Assert.Equal(0, store.Saves);
+        Assert.Empty(store.Keys);
         Assert.Equal(original, File.ReadAllText(SettingsPath));
+    }
+
+    [Fact]
+    public async Task KeySaveFailureAfterPassingTestLeavesSettingsUnchanged()
+    {
+        // Arrange
+        var store = new FakeCredentialStore { FailSave = true };
+        var setup = new AiSetup(_ => null, store, _ => "synthetic-secret", (_, _) => Task.CompletedTask);
+
+        // Act
+        var error = await Record.ExceptionAsync(() => setup.ConfigureAsync(new("kimi", "kimi-model"), SettingsPath, default));
+
+        // Assert
+        Assert.Equal("ai_configuration_invalid", Assert.IsType<QueryException>(error).Code);
+        Assert.DoesNotContain("synthetic-secret", error.Message);
+        Assert.False(File.Exists(SettingsPath));
     }
 
     [Fact]
@@ -82,7 +123,7 @@ public sealed class AiSettingsTests : IDisposable
     {
         // Arrange
         var tests = 0;
-        var setup = new AiSetup(_ => throw new Exception("Unexpected credential read"), (_, _) => throw new Exception("Unexpected credential write"),
+        var setup = new AiSetup(_ => throw new Exception("Unexpected credential read"), new FakeCredentialStore { Forbidden = true },
             _ => throw new Exception("Unexpected prompt"), (_, _) => { tests++; return Task.CompletedTask; });
 
         // Act
@@ -91,6 +132,31 @@ public sealed class AiSettingsTests : IDisposable
         // Assert
         Assert.Equal(1, tests);
         Assert.Equal("ollama", AiSettingsStore.Load(SettingsPath)!.Provider);
+    }
+
+    [Fact]
+    public void KeyLookupPrefersEnvironmentVariablesThenKeychain()
+    {
+        // Arrange
+        var store = new FakeCredentialStore();
+        store.Keys["openai"] = "synthetic-stored";
+        var preferences = new AiPreferences("openai", "model");
+        var environment = new Dictionary<string, string>
+        {
+            ["CODEATLAS_AI_OPENAI_KEY"] = "synthetic-new", ["CODEATLAS_AI_OPENAI_API_KEY"] = "synthetic-legacy"
+        };
+
+        // Act
+        var preferred = preferences.FindKey(environment.GetValueOrDefault, store);
+        environment.Remove("CODEATLAS_AI_OPENAI_KEY");
+        var legacy = preferences.FindKey(environment.GetValueOrDefault, store);
+        environment.Clear();
+        var stored = preferences.FindKey(environment.GetValueOrDefault, store);
+
+        // Assert
+        Assert.Equal(("synthetic-new", "environment variable CODEATLAS_AI_OPENAI_KEY"), (preferred!.Value, preferred.Location));
+        Assert.Equal(("synthetic-legacy", "environment variable CODEATLAS_AI_OPENAI_API_KEY"), (legacy!.Value, legacy.Location));
+        Assert.Equal(("synthetic-stored", "Fake Keychain"), (stored!.Value, stored.Location));
     }
 
     [Fact]

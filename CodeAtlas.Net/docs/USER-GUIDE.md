@@ -56,6 +56,8 @@ Stdout contains the JSON outcome. Stderr contains progress and, on failure, erro
 
 ## Search by purpose and read structural facts
 
+The easiest way is the start menu: run `codeatlas` with no arguments in a terminal and choose `2 Map a solution and add AI descriptions` or `3 Change AI settings`. See the [quick guide](USAGE.md#start-menu). The menu never appears when arguments are given or input/output is redirected, so scripts and agents keep using the commands below.
+
 Select a provider and model once, then generate descriptions explicitly. For an installed local Ollama model:
 
 ```powershell
@@ -67,15 +69,27 @@ dotnet run --project src/CodeAtlas.Cli --no-build -- describe --index $manifest 
 dotnet run --project src/CodeAtlas.Cli --no-build -- search-symbols --index $manifest --query 'what you need' --kind all
 ```
 
-For a cloud model, use `configure-ai --provider openai --model <model-name>`, adding `--effort low` only when that model supports it. Setup reuses an existing provider key, or prompts for a missing key without echo in an interactive terminal. It sends a fixed connection-test prompt containing no project source. Only a successful test saves the selection and persists the key in a Windows **user** environment variable named `CODEATLAS_AI_<PROVIDER>_API_KEY`. Keys never go into JSON. Noninteractive setup with a missing key returns an error instead of waiting for input. Persistent cloud-key setup requires Windows; environment-configured descriptions also work on other systems.
+For a cloud model, use `configure-ai --provider openai --model <model-name>`, adding `--effort low` only when that model supports it. Setup reuses an existing provider key, or prompts for a missing key without echo in an interactive terminal. It sends a fixed connection-test prompt containing no project source. Only a successful test saves the selection and a newly entered key. Noninteractive setup with a missing key returns an error instead of waiting for input. The `configure-ai` result adds `credentialStore` (where the key came from or was saved) and `credentialWarning` (set when the fallback file was used).
 
-| Provider | Existing key accepted | Endpoint/model selection |
+### Where API keys are kept
+
+CodeAtlas looks for a cloud key in this order and uses the first one it finds:
+
+1. **Environment variable** `CODEATLAS_AI_<PROVIDER>_KEY` (for example `CODEATLAS_AI_OPENAI_KEY`), then the older names in the table below. Nothing is saved. This fits CI, agents and headless servers.
+2. **OS keychain**: Windows Credential Manager (entry `CodeAtlas:ai:<provider>`), macOS Keychain (service `CodeAtlas`, through the `security` tool) or Linux Secret Service such as GNOME Keyring or KWallet (through `secret-tool`, when it is installed and a desktop session bus is running).
+3. **Fallback file** when no keychain is available: `~/.config/codeatlas/credentials.json` (Windows: `%APPDATA%\CodeAtlas\credentials.json`). Only your user can read it (`chmod 600`, or a user-only ACL on Windows). It is **not encrypted**; CodeAtlas prints a warning when it saves there.
+
+A newly entered key is saved in the keychain, or else in the fallback file. Keys are passed to keychain tools on standard input, never on the command line. Keys never go into `.codeatlas/`, `appsettings.json`, indexes, requests or logs. To delete a saved key, use the start menu: `3 Change AI settings`, then `2 Remove a saved key`.
+
+Earlier versions saved keys in Windows user environment variables named `CODEATLAS_AI_<PROVIDER>_API_KEY`. These are still read and are never deleted automatically. To move such a key to Credential Manager, delete the variable yourself and enter the key again in the start menu.
+
+| Provider | Existing key accepted (after `CODEATLAS_AI_<PROVIDER>_KEY`) | Endpoint/model selection |
 | --- | --- | --- |
-| `openai` | `OPENAI_API_KEY` (legacy `CODEATLAS_AI_API_KEY` also works) | OpenAI chat completions; select a model explicitly |
-| `azure` | `AZURE_OPENAI_API_KEY` or `AZUREAI_API_KEY` | `--endpoint https://<resource>.openai.azure.com/openai/v1/chat/completions`; `--model <deployment-name>` |
-| `anthropic` | `ANTHROPIC_API_KEY` | Native Anthropic Messages API; select a Claude model |
-| `kimi` | `MOONSHOT_API_KEY` | Moonshot chat completions; select a Kimi model |
-| `openrouter` | `OPENROUTER_API_KEY` | OpenRouter chat completions; `--model <provider/model>` |
+| `openai` | `CODEATLAS_AI_API_KEY`, `CODEATLAS_AI_OPENAI_API_KEY`, `OPENAI_API_KEY` | OpenAI chat completions; select a model explicitly |
+| `azure` | `CODEATLAS_AI_AZURE_API_KEY`, `AZURE_OPENAI_API_KEY` or `AZUREAI_API_KEY` | `--endpoint https://<resource>.openai.azure.com/openai/v1/chat/completions`; `--model <deployment-name>` |
+| `anthropic` | `CODEATLAS_AI_ANTHROPIC_API_KEY`, `ANTHROPIC_API_KEY` | Native Anthropic Messages API; select a Claude model |
+| `kimi` | `CODEATLAS_AI_KIMI_API_KEY`, `MOONSHOT_API_KEY` | Moonshot chat completions; select a Kimi model |
+| `openrouter` | `CODEATLAS_AI_OPENROUTER_API_KEY`, `OPENROUTER_API_KEY` | OpenRouter chat completions; `--model <provider/model>` |
 | `ollama` (`llama` alias) | No key | Local `http://localhost:11434/v1/chat/completions`; model must already be installed |
 
 The default settings file is `.codeatlas/appsettings.json` relative to the current directory. Use `--settings <path>` on setup and describe to select a different file. Existing unrelated JSON sections are preserved. For example:
@@ -185,7 +199,7 @@ Keep the same query filters. A refresh or replacement invalidates an older conti
 
 ## Understand snapshot state and storage
 
-Use the returned `index` path, the stable solution-scoped `current.json` manifest. It selects one immutable generation containing `index.json`, `catalog.json`, `generation.json`, `overview.md`, `warnings.txt` and `timings.json`. Keep those reports together. Each solution has its own pointer, including solutions sharing a directory.
+Use the returned `index` path, the stable solution-scoped `current.json` manifest. It selects one immutable generation containing `index.db` (a SQLite database; older generations hold `index.json` and `catalog.json`), `generation.json`, `overview.md`, `warnings.txt` and `timings.json`. Keep those reports together. Each solution has its own pointer, including solutions sharing a directory.
 
 The manifest changes only after artifacts are staged, flushed and checked. Readers verify the selected generation. Failure or cancellation before publication preserves the previous active snapshot, which can correctly be stale after source edits. A failed first publication leaves no active snapshot. Do not edit generated hashes or schemas to bypass errors.
 

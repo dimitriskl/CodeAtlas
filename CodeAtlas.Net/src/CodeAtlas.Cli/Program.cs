@@ -6,7 +6,8 @@ using CodeAtlas.Cli;
 var managedEntryUtc = DateTimeOffset.UtcNow;
 var jsonOptions = new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase, WriteIndented = true };
 const string usage = """
-Usage: codeatlas index --solution <path.sln|path.slnx> [--reference-workers <1-8>]
+Usage: codeatlas                (no arguments, interactive terminal: numbered start menu)
+       codeatlas index --solution <path.sln|path.slnx> [--reference-workers <1-8>]
        codeatlas refresh --solution <path.sln|path.slnx> [--reference-workers <1-8>]
        codeatlas --version
        codeatlas index-status --index <path-to-index.json> [--profile]
@@ -27,6 +28,7 @@ Usage: codeatlas index --solution <path.sln|path.slnx> [--reference-workers <1-8
        codeatlas find-duplicates --index <path-to-index.json> [--mode bodies|purpose] [--symbol <id>]
        codeatlas find-callers --index <path-to-index.json> --symbol <id> [--depth <1-5>] [--limit <1-1000>]
        codeatlas coverage --index <path-to-index.json>
+       codeatlas export-json --index <path-to-index.json> --output <new-directory>
 
 Query options: --project <relative-project-path> --limit <1-1000> --offset <nonnegative> --snapshot <indexId> --profile
 Default limit is 100. Indexed continuations require --snapshot; live queries support only the first page.
@@ -35,18 +37,24 @@ All JSON commands accept --contract-version 1. Projects and declaring types matc
 Warnings are saved in the solution-scoped generation. Results include a notice with the file path.
 Indexing progress and elapsed time go to stderr; stdout contains the final JSON result.
 Indexing artifacts commit together under .codeatlas/solutions/<solution-identity>/current.json.
+Each generation stores its analysis in one SQLite database (index.db); queries read only the rows they need.
+export-json writes the legacy index.json/catalog.json generation for comparison tools. Older JSON
+generations remain readable. Without a usable SQLite library, commands fail with sqlite_unavailable.
 Reference indexing uses 2 concurrent searches by default; use 1 for serial comparison.
 Default/explicit method discovery returns MethodInfo. Other kinds/all return compact SymbolSummary records.
 get-documentation returns full developer XML, resolved sections and provenance; missing documentation remains missing.
 search-symbols ranks names, signatures, authored documentation, saved AI descriptions, and one-hop structural facts.
 It does not call a model. get-facts returns Roslyn facts for one saved symbol. A resolved call is a relationship, not a runtime effect.
 configure-ai tests the selected model without project source, then saves non-secret options to .codeatlas/appsettings.json.
-Cloud keys are requested without echo only when needed and stored in Windows user environment variables; Ollama needs no key.
+Cloud keys are read from CODEATLAS_AI_<PROVIDER>_KEY (or older variables), then the OS keychain, then an owner-only file.
+A missing key is requested without echo and saved to the keychain (or that file) only after the test passes; Ollama needs no key.
 describe uses saved options or legacy CODEATLAS_AI_* settings. Selection overrides test and save the new connection first.
 Without a configured selection or legacy credentials AI stays disabled. Effort support depends on provider and model.
 explain-request exports selected source evidence locally; optional --local, --context, --reference-limit and byte limits bound that context.
 explain-import requires registered request identity, evidence citations, provenance and unchanged observed inputs. No provider is called.
 """;
+if (StartMenu.ShouldOpen(args, Console.IsInputRedirected, Console.IsOutputRedirected))
+    return await StartMenu.RunInConsoleAsync();
 if (args.Length == 1 && args[0] == "--version")
 {
     Console.WriteLine(CodeAtlasVersion.Current);
@@ -70,7 +78,7 @@ var coverageAvailable = false;
 QueryProfile? profile = null;
 try
 {
-    if (args.Length < 3 || command is not ("index" or "refresh" or "index-status" or "find-symbol" or "find-references" or "get-documentation" or "search-symbols" or "get-facts" or "explain-request" or "explain-import" or "get-explanation" or "describe" or "configure-ai" or "find-duplicates" or "find-callers" or "coverage"))
+    if (args.Length < 3 || command is not ("index" or "refresh" or "index-status" or "find-symbol" or "find-references" or "get-documentation" or "search-symbols" or "get-facts" or "explain-request" or "explain-import" or "get-explanation" or "describe" or "configure-ai" or "find-duplicates" or "find-callers" or "coverage" or "export-json"))
         throw new ArgumentException(usage);
     var options = new Dictionary<string, string>(StringComparer.Ordinal);
     for (var i = 1; i < args.Length; i++)
@@ -103,9 +111,13 @@ try
         : int.TryParse(raw, out var number) ? number : throw new ArgumentException($"{key} must be an integer.");
     QueryRequest Request() => new(options.GetValueOrDefault("--project"), options.GetValueOrDefault("--type"),
         Integer("--limit", 100), Integer("--offset", 0), options.GetValueOrDefault("--snapshot"));
-    async Task<CodebaseIndex> LoadFreshIndexAsync(string path, bool includeCatalog = true)
+    // Row-backed by default: a SQLite generation opens header-only and each query reads its rows.
+    // "full" materializes the complete index for commands that need every record (explanations).
+    async Task<CodebaseIndex> LoadFreshIndexAsync(string path, bool includeCatalog = true, bool full = false)
     {
-        loadedSnapshot = await TimedAsync("jsonLoading", () => IndexStore.LoadSnapshotAsync(path, includeCatalog, cancellation.Token));
+        loadedSnapshot = await TimedAsync("jsonLoading", () => full
+            ? IndexStore.LoadSnapshotAsync(path, includeCatalog, cancellation.Token)
+            : IndexStore.OpenSnapshotAsync(path, includeCatalog, cancellation.Token));
         var index = loadedIndex = loadedSnapshot.Index;
         coverageAvailable = true;
         var status = await TimedAsync("freshnessHashing", () => IndexStore.CheckFreshnessAsync(index, cancellation.Token));
@@ -121,13 +133,15 @@ try
         var settingsPath = Path.GetFullPath(options.GetValueOrDefault("--settings") ?? AiSettingsStore.DefaultPath);
         var selected = AiPreferences.Select(options, AiSettingsStore.Load(settingsPath), AiSetup.ReadEnvironment)
             ?? throw new ArgumentException("configure-ai requires --model and an optional --provider.");
-        using var http = new HttpClient(new HttpClientHandler { AllowAutoRedirect = false }) { Timeout = TimeSpan.FromMinutes(2) };
-        var configured = await AiSetup.Interactive(http).ConfigureAsync(selected, settingsPath, cancellation.Token);
+        using var http = AiSetup.CreateHttpClient();
+        var setup = await AiSetup.Interactive(http).ConfigureAsync(selected, settingsPath, cancellation.Token);
+        var configured = setup.Configuration;
         var configurationOutput = JsonSerializer.SerializeToNode(new
         {
             ai = "enabled", connection = "tested", configured.Provider, configured.Model, configured.Effort,
             endpoint = configured.Endpoint.AbsoluteUri, settings = settingsPath,
             credentialEnvironmentVariable = configured.Provider == "ollama" ? null : selected.KeyVariable,
+            credentialStore = setup.KeyLocation, credentialWarning = setup.KeyWarning,
             message = "Connection passed and options saved. No project source was sent."
         }, jsonOptions)!.AsObject();
         ResponseContract.AddEnvelope(configurationOutput, command, true, jsonOptions, null, false);
@@ -145,6 +159,8 @@ try
         if (options.TryGetValue("--reference-workers", out var workers)
             && (!int.TryParse(workers, out referenceWorkers) || referenceWorkers is < 1 or > 8))
             throw new ArgumentException("--reference-workers must be an integer between 1 and 8.");
+        // Fail before minutes of analysis when the store cannot be written.
+        SqliteAvailability.Require();
         var index = command == "refresh"
             ? await SolutionAnalysis.RefreshIndexAsync(path, cancellation.Token, indexingProgress, referenceWorkers)
             : await SolutionAnalysis.CreateIndexAsync(path, cancellation.Token, indexingProgress, referenceWorkers);
@@ -171,12 +187,27 @@ try
     {
         if (options.Count != 1 || !options.TryGetValue("--index", out var path))
             throw new ArgumentException(usage);
-        loadedSnapshot = await TimedAsync("jsonLoading", () => IndexStore.LoadSnapshotAsync(path, cancellation.Token));
+        loadedSnapshot = await TimedAsync("jsonLoading", () => IndexStore.OpenSnapshotAsync(path, includeCatalog: true, cancellation.Token));
         var index = loadedIndex = loadedSnapshot.Index;
+        // Status is the integrity command: it hashes the whole database against the manifest.
+        await TimedAsync("storeVerification", async () => { await IndexStore.VerifyStoreAsync(loadedSnapshot, cancellation.Token); return true; });
         coverageAvailable = true;
         freshness = ResponseContract.Freshness(await TimedAsync("freshnessHashing", () => IndexStore.CheckFreshnessAsync(index, cancellation.Token)));
         result = new { index.Solution, index.IndexId, index.CreatedAtUtc, index.ToolVersion,
             refresh = index.Refresh,
+            warningCount = index.Warnings.Length, index.Warnings };
+    }
+    else if (command == "export-json")
+    {
+        if (options.Count != 2 || !options.TryGetValue("--index", out var exportIndex) || !options.TryGetValue("--output", out var exportOutput))
+            throw new ArgumentException("export-json requires --index <current.json> and --output <new-directory>.");
+        var export = await TimedAsync("lookup", () => IndexStore.ExportJsonAsync(exportIndex, exportOutput, cancellation.Token));
+        loadedSnapshot = export.Snapshot;
+        var index = loadedIndex = export.Snapshot.Index;
+        coverageAvailable = true;
+        result = new { source = "index", index.Solution, index.IndexId, output = export.Directory,
+            indexJson = export.IndexJson, catalogJson = export.CatalogJson, manifest = export.Manifest,
+            message = "Legacy JSON generation written for comparison tools; queries keep using the SQLite store.",
             warningCount = index.Warnings.Length, index.Warnings };
     }
     else if (command == "coverage")
@@ -185,7 +216,7 @@ try
             throw new ArgumentException("coverage requires only --index.");
         var index = await LoadFreshIndexAsync(coverageIndex);
         result = new { source = "index", index.Solution, index.IndexId, supportedLanguages = LanguageBoundary.Supported,
-            documentation = index.DocumentationCoverage, structural = index.StructuralCatalog?.Coverage,
+            documentation = index.DocumentationCoverage, structural = SnapshotQueries.StructuralCoverage(loadedSnapshot!),
             warningCount = index.Warnings.Length, warnings = index.Warnings };
     }
     else if (command == "find-callers")
@@ -198,12 +229,7 @@ try
         if (depth is < 1 or > 5) throw new ArgumentException("--depth must be from 1 to 5.");
         if (limit is < 1 or > 1000) throw new ArgumentException("--limit must be between 1 and 1000.");
         var index = await LoadFreshIndexAsync(callerIndex);
-        if (!index.Methods.Any(method => method.Id == callerSymbol))
-            throw index.Symbols?.Any(symbol => symbol.Id == callerSymbol) == true
-                ? new QueryException("unsupported_symbol_kind", "Caller traversal supports indexed source methods only.")
-                : new QueryException("symbol_not_found", "Source method ID was not found in this snapshot.");
-        var facts = index.StructuralCatalog ?? throw new QueryException("rebuild_required", "Rebuild to extract structural facts.");
-        var traversal = Timed("lookup", () => Callers.Traverse(facts, callerSymbol, depth, limit, cancellation.Token));
+        var traversal = Timed("lookup", () => SnapshotQueries.FindCallers(loadedSnapshot!, callerSymbol, depth, limit, cancellation.Token));
         result = new { source = "index", index.Solution, index.IndexId, traversal, warningCount = index.Warnings.Length, warnings = index.Warnings };
     }
     else if (command == "find-duplicates")
@@ -217,16 +243,12 @@ try
             throw new ArgumentException("--mode must be bodies or purpose; purpose requires --symbol.");
         var request = Request();
         request.ValidateOptions(supportsType: false, indexed: true);
-        var index = await LoadFreshIndexAsync(duplicateIndex);
+        // Purpose overlap ranks over the whole catalog, so it loads the complete snapshot.
+        var index = await LoadFreshIndexAsync(duplicateIndex, full: mode == "purpose");
         request.Validate(index.IndexId, supportsType: false);
-        if (symbolId is not null && !index.Methods.Any(method => method.Id == symbolId))
-            throw index.Symbols?.Any(symbol => symbol.Id == symbolId) == true
-                ? new QueryException("unsupported_symbol_kind", "Duplicate candidates support indexed source methods only.")
-                : new QueryException("symbol_not_found", "Source method ID was not found in this snapshot.");
-        var duplicates = index.Duplicates ?? throw new QueryException("rebuild_required", "Rebuild to extract duplicate candidates.");
         if (mode == "bodies")
         {
-            var matches = Timed("lookup", () => DuplicateSnapshotQueries.FindGroups(duplicates, index.IndexId, request, symbolId));
+            var matches = Timed("lookup", () => SnapshotQueries.FindDuplicateGroups(loadedSnapshot!, request, symbolId));
             result = new { source = "index", index.Solution, index.IndexId, mode, symbol = symbolId,
                 duplicates = matches.Page.Items, matches.Page.Pagination, matches.Work, duplicateCoverage = matches.Coverage,
                 matches.DetectorVersion, matches.Limits, matches.OmittedMethodCount, matches.Selection, matches.Limitations,
@@ -234,6 +256,8 @@ try
         }
         else
         {
+            SnapshotQueries.RequireMethod(loadedSnapshot!, symbolId!, "Duplicate candidates support indexed source methods only.");
+            var duplicates = index.Duplicates ?? throw new QueryException("rebuild_required", "Rebuild to extract duplicate candidates.");
             var symbols = index.Symbols ?? throw new QueryException("rebuild_required", "Rebuild to extract symbol documentation.");
             var facts = index.StructuralCatalog ?? throw new QueryException("rebuild_required", "Rebuild to extract structural facts.");
             var matches = Timed("lookup", () => PurposeOverlap.Build(symbols, facts, duplicates, index.IndexId, symbolId!, request, cancellation.Token));
@@ -253,61 +277,19 @@ try
         if (limit < 1) throw new ArgumentException("--limit must be a positive integer.");
         var settingsPath = Path.GetFullPath(options.GetValueOrDefault("--settings") ?? AiSettingsStore.DefaultPath);
         var preferences = AiPreferences.Select(options, AiSettingsStore.Load(settingsPath), AiSetup.ReadEnvironment);
-        var configuration = preferences?.Configuration(AiSetup.ReadEnvironment);
-        var index = await LoadFreshIndexAsync(descriptionIndex);
-        var symbols = DocumentationSnapshotQueries.RequireCoverage(index)
-            .Where(symbol => symbol.Kind is "method" or "type")
-            .Where(symbol => !options.TryGetValue("--project", out var project) || symbol.Project == project)
-            .Where(symbol => !options.TryGetValue("--symbol", out var id) || symbol.Id == id)
-            .OrderBy(symbol => symbol.Id, StringComparer.Ordinal).ToArray();
+        var configuration = preferences?.Configuration(AiSetup.ReadEnvironment, CredentialStore.ForCurrentUser());
+        var index = await LoadFreshIndexAsync(descriptionIndex, full: true);
+        var symbols = DescriptionBatch.Candidates(index, options.GetValueOrDefault("--project"), options.GetValueOrDefault("--symbol"));
         if (options.ContainsKey("--symbol") && symbols.Length == 0)
             throw new QueryException("symbol_not_found", "Select an indexed class/type or method ID.");
         if (options.Keys.Any(AiPreferences.IsSelectionOption))
         {
-            using var probe = new HttpClient(new HttpClientHandler { AllowAutoRedirect = false }) { Timeout = TimeSpan.FromMinutes(2) };
-            configuration = await AiSetup.Interactive(probe).ConfigureAsync(preferences!, settingsPath, cancellation.Token);
+            using var probe = AiSetup.CreateHttpClient();
+            configuration = (await AiSetup.Interactive(probe).ConfigureAsync(preferences!, settingsPath, cancellation.Token)).Configuration;
         }
-        var generated = 0;
-        var cached = 0;
-        var failed = new List<string>();
-        string? failureFile = null;
-        if (configuration is not null)
-        {
-            var service = ExplanationSnapshotAdapter.ForSnapshot(loadedSnapshot!);
-            var descriptions = await service.GetSearchableAsync(cancellation.Token);
-            cached = symbols.Count(symbol => descriptions.ContainsKey(symbol.Id));
-            var selected = symbols.Where(symbol => !descriptions.ContainsKey(symbol.Id));
-            using var http = new HttpClient(new HttpClientHandler { AllowAutoRedirect = false })
-                { Timeout = TimeSpan.FromMinutes(2) };
-            var generator = new ExplanationGenerator(http, configuration);
-            var exchange = Path.Combine(Path.GetDirectoryName(index.Solution)!, ".codeatlas", "agent-exchange");
-            foreach (var symbol in selected)
-            {
-                if (generated >= limit) break;
-                cancellation.Token.ThrowIfCancellationRequested();
-                var stem = Path.Combine(exchange, Guid.NewGuid().ToString("N"));
-                try
-                {
-                    var request = await service.ExportAsync(symbol.Id, stem + ".request.json",
-                        referenceLimit: 0, cancellationToken: cancellation.Token);
-                    var response = await generator.GenerateAsync(request, cancellation.Token);
-                    await File.WriteAllTextAsync(stem + ".response.json",
-                        JsonSerializer.Serialize(response, jsonOptions), cancellation.Token);
-                    await service.AcceptAsync(stem + ".response.json", cancellation.Token);
-                    generated++;
-                }
-                catch (QueryException error) when (error.Code is "explanation_budget_exceeded" or "unsupported_explanation_context")
-                {
-                    failed.Add($"{symbol.Id}: {error.Code}: {error.Message}");
-                }
-            }
-            if (failed.Count != 0)
-            {
-                Directory.CreateDirectory(exchange);
-                failureFile = Path.Combine(exchange, "describe-" + Guid.NewGuid().ToString("N") + ".warnings.txt");
-                await File.WriteAllLinesAsync(failureFile, failed, cancellation.Token);
-            }
-        }
+        var batch = configuration is null ? new DescriptionBatchResult(0, 0, [], null)
+            : await DescriptionBatch.RunAsync(loadedSnapshot!, symbols, configuration, limit, null, cancellation.Token);
+        var (generated, cached, failed, failureFile) = batch;
         result = new { source = "index", index.Solution, index.IndexId,
             ai = configuration is null ? "disabled" : "enabled", generated, cached,
             remaining = symbols.Length - generated - cached, failed = failed.Count, descriptionWarningsFile = failureFile,
@@ -333,7 +315,7 @@ try
         if (referenceLimit is < 0 or > 8) throw new ArgumentException("--reference-limit must be from 0 to 8.");
         if (options.TryGetValue("--request", out var identity) && !Guid.TryParseExact(identity, "N", out _))
             throw new ArgumentException("--request must be the requestId returned by explain-request.");
-        var index = await LoadFreshIndexAsync(explainIndex);
+        var index = await LoadFreshIndexAsync(explainIndex, full: true);
         var service = ExplanationSnapshotAdapter.ForSnapshot(loadedSnapshot!);
         if (command == "explain-import")
         {
@@ -436,28 +418,26 @@ try
             request.Validate(index.IndexId, command == "find-symbol" || singleton);
             if (singleton)
             {
-                var symbol = Timed("lookup", () => DocumentationQueries.GetDocumentation(
-                    DocumentationSnapshotQueries.RequireCoverage(index), value));
+                var symbol = Timed("lookup", () => SnapshotQueries.GetDocumentation(loadedSnapshot!, value));
                 result = new { source = "index", index.Solution, index.IndexId, index.CreatedAtUtc, index.ToolVersion,
                     symbol, warningCount = index.Warnings.Length, index.Warnings };
             }
             else if (command == "find-symbol" && kind != "method")
             {
-                var page = Timed("lookup", () => DocumentationQueries.FindSymbols(
-                    DocumentationSnapshotQueries.RequireCoverage(index), value, kind, request, index.IndexId));
+                var page = Timed("lookup", () => SnapshotQueries.FindSymbols(loadedSnapshot!, value, kind, request));
                 var summaries = Timed("lookup", () => page.Items.Select(SymbolSummary.From).ToArray());
                 result = new { source = "index", index.Solution, index.IndexId, index.CreatedAtUtc, index.ToolVersion,
                     symbols = summaries, page.Pagination, warningCount = index.Warnings.Length, index.Warnings };
             }
             else if (command == "find-symbol")
             {
-                var page = Timed("lookup", () => QueryPaging.Methods(IndexStore.FindMethods(index, value), request, index.IndexId));
+                var page = Timed("lookup", () => SnapshotQueries.FindMethods(loadedSnapshot!, value, request));
                 result = new { source = "index", index.Solution, index.IndexId, index.CreatedAtUtc, index.ToolVersion,
                     symbols = page.Items, page.Pagination, warningCount = index.Warnings.Length, index.Warnings };
             }
             else
             {
-                var page = Timed("lookup", () => QueryPaging.References(IndexStore.FindReferences(index, value), request, index.IndexId));
+                var page = Timed("lookup", () => SnapshotQueries.FindReferences(loadedSnapshot!, value, request));
                 result = new { source = "index", index.Solution, index.IndexId, index.CreatedAtUtc, index.ToolVersion,
                     symbol = value, references = page.Items, page.Pagination, warningCount = index.Warnings.Length, index.Warnings };
             }

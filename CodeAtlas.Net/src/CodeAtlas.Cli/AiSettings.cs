@@ -7,26 +7,39 @@ namespace CodeAtlas.Cli;
 
 internal sealed record AiPreferences(string Provider, string Model, string? Effort = null, string? Endpoint = null)
 {
-    internal string KeyVariable => "CODEATLAS_AI_" + Provider.ToUpperInvariant() + "_API_KEY";
+    /// <summary>The preferred key variable. When set, it is used and nothing is saved.</summary>
+    internal string KeyVariable => "CODEATLAS_AI_" + Provider.ToUpperInvariant() + "_KEY";
 
-    internal string? ReadKey(Func<string, string?> read)
+    /// <summary>Earlier versions saved keys here (Windows user environment). Still read; never deleted automatically.</summary>
+    internal string LegacyKeyVariable => "CODEATLAS_AI_" + Provider.ToUpperInvariant() + "_API_KEY";
+
+    internal IReadOnlyList<string> KeyVariables => Provider switch
     {
-        if (Provider == "ollama") return null;
-        string[] names = Provider switch
-        {
-            "openai" => ["CODEATLAS_AI_API_KEY", KeyVariable, "OPENAI_API_KEY"],
-            "azure" => [KeyVariable, "AZURE_OPENAI_API_KEY", "AZUREAI_API_KEY"],
-            "anthropic" => [KeyVariable, "ANTHROPIC_API_KEY"],
-            "kimi" => [KeyVariable, "MOONSHOT_API_KEY"],
-            "openrouter" => [KeyVariable, "OPENROUTER_API_KEY"],
-            _ => []
-        };
-        return names.Select(read).FirstOrDefault(value => !string.IsNullOrWhiteSpace(value));
+        "openai" => [KeyVariable, "CODEATLAS_AI_API_KEY", LegacyKeyVariable, "OPENAI_API_KEY"],
+        "azure" => [KeyVariable, LegacyKeyVariable, "AZURE_OPENAI_API_KEY", "AZUREAI_API_KEY"],
+        "anthropic" => [KeyVariable, LegacyKeyVariable, "ANTHROPIC_API_KEY"],
+        "kimi" => [KeyVariable, LegacyKeyVariable, "MOONSHOT_API_KEY"],
+        "openrouter" => [KeyVariable, LegacyKeyVariable, "OPENROUTER_API_KEY"],
+        _ => []
+    };
+
+    internal string? ReadKey(Func<string, string?> read) => FindEnvironmentKey(read)?.Value;
+
+    internal CredentialLookup? FindEnvironmentKey(Func<string, string?> read)
+    {
+        foreach (var name in KeyVariables)
+            if (read(name) is { } value && !string.IsNullOrWhiteSpace(value))
+                return new(value, "environment variable " + name);
+        return null;
     }
 
-    internal AiConfiguration? Configuration(Func<string, string?> read)
+    /// <summary>Lookup order: environment variables, then the OS keychain, then the owner-only fallback file.</summary>
+    internal CredentialLookup? FindKey(Func<string, string?> read, ICredentialStore? store) =>
+        Provider == "ollama" ? null : FindEnvironmentKey(read) ?? store?.Find(Provider);
+
+    internal AiConfiguration? Configuration(Func<string, string?> read, ICredentialStore? store = null)
     {
-        var key = ReadKey(read);
+        var key = FindKey(read, store)?.Value;
         return Provider != "ollama" && key is null ? null : Create(key);
     }
 

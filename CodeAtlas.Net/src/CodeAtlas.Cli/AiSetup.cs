@@ -3,22 +3,49 @@ using CodeAtlas.Explanations;
 
 namespace CodeAtlas.Cli;
 
-internal sealed class AiSetup(Func<string, string?> readEnvironment, Action<string, string> persistCredential,
+/// <summary>Outcome of a tested AI setup. <see cref="KeyLocation"/> names where the key came from or was saved, never the key.</summary>
+internal sealed record AiSetupResult(AiConfiguration Configuration, string? KeyLocation, string? KeyWarning);
+
+internal sealed class AiSetup(Func<string, string?> readEnvironment, ICredentialStore credentials,
     Func<string, string?> promptSecret, Func<AiConfiguration, CancellationToken, Task> testConnection)
 {
-    internal async Task<AiConfiguration> ConfigureAsync(AiPreferences selected, string path, CancellationToken token)
+    /// <summary>
+    /// Tests the connection before anything is saved. A key from an environment variable or an existing store is used
+    /// as is; only a newly entered key (prompted or <paramref name="enteredKey"/>) is saved to the credential store.
+    /// </summary>
+    internal async Task<AiSetupResult> ConfigureAsync(AiPreferences selected, string path, CancellationToken token,
+        string? enteredKey = null)
     {
         token.ThrowIfCancellationRequested();
-        var key = selected.ReadKey(readEnvironment);
-        if (selected.Provider != "ollama" && key is null)
-            key = promptSecret(selected.KeyVariable) ?? throw new QueryException("ai_configuration_invalid",
-                $"An API key is required. Run configure-ai in an interactive terminal or set {selected.KeyVariable}.");
+        string? key = null;
+        string? location = null;
+        var entered = false;
+        if (selected.Provider != "ollama")
+        {
+            if (!string.IsNullOrEmpty(enteredKey)) { key = enteredKey; entered = true; }
+            else if (selected.FindKey(readEnvironment, credentials) is { } found) { key = found.Value; location = found.Location; }
+            else
+            {
+                key = promptSecret(selected.KeyVariable) ?? throw new QueryException("ai_configuration_invalid",
+                    $"An API key is required. Run configure-ai in an interactive terminal or set {selected.KeyVariable}.");
+                entered = true;
+            }
+        }
         var configuration = selected.Create(key);
         await testConnection(configuration, token);
         token.ThrowIfCancellationRequested();
-        if (selected.Provider != "ollama") persistCredential(selected.KeyVariable, key!);
+        string? warning = null;
+        if (entered)
+        {
+            CredentialSaveResult saved;
+            try { saved = credentials.Save(selected.Provider, key!); }
+            catch (CredentialStoreException e)
+            { throw new QueryException("ai_configuration_invalid", "Connection passed, but the key could not be saved: " + e.Message + " Settings were not replaced."); }
+            location = saved.Location;
+            warning = saved.Warning;
+        }
         AiSettingsStore.Save(path, selected with { Endpoint = configuration.Endpoint.AbsoluteUri, Effort = configuration.Effort });
-        return configuration;
+        return new(configuration, location, warning);
     }
 
     internal static string? ReadEnvironment(string name)
@@ -27,23 +54,22 @@ internal sealed class AiSetup(Func<string, string?> readEnvironment, Action<stri
         return value ?? (OperatingSystem.IsWindows() ? Environment.GetEnvironmentVariable(name, EnvironmentVariableTarget.User) : null);
     }
 
-    internal static AiSetup Interactive(HttpClient client) => new(ReadEnvironment, (name, key) =>
+    internal static async Task TestConnectionAsync(AiConfiguration configuration, CancellationToken token)
     {
-        if (!OperatingSystem.IsWindows())
-            throw new QueryException("ai_credential_persistence_unavailable", "Persistent user environment variables require Windows. Set the provider key in your shell and use describe directly on other systems.");
-        try
-        {
-            Environment.SetEnvironmentVariable(name, key, EnvironmentVariableTarget.User);
-            Environment.SetEnvironmentVariable(name, key);
-        }
-        catch (Exception e) when (e is UnauthorizedAccessException or System.Security.SecurityException or IOException)
-        { throw new QueryException("ai_configuration_invalid", "Connection passed, but the user environment variable could not be saved. Settings were not replaced."); }
-    }, ReadSecret, (configuration, token) => new AiProviderClient(client, configuration).TestConnectionAsync(token));
+        using var client = CreateHttpClient();
+        await new AiProviderClient(client, configuration).TestConnectionAsync(token);
+    }
+
+    internal static HttpClient CreateHttpClient() =>
+        new(new HttpClientHandler { AllowAutoRedirect = false }) { Timeout = TimeSpan.FromMinutes(2) };
+
+    internal static AiSetup Interactive(HttpClient client) => new(ReadEnvironment, CredentialStore.ForCurrentUser(), ReadSecret,
+        (configuration, token) => new AiProviderClient(client, configuration).TestConnectionAsync(token));
 
     private static string? ReadSecret(string name)
     {
         if (Console.IsInputRedirected) return null;
-        Console.Error.Write($"Enter {name} (hidden; Esc cancels): ");
+        Console.Error.Write($"Enter the API key, or set {name} (hidden; Esc cancels): ");
         var secret = new StringBuilder();
         while (true)
         {
