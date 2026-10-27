@@ -97,6 +97,7 @@ export type SecretInput = Readable & {
   isTTY?: boolean;
   fd?: number;
   setRawMode?: (mode: boolean) => void;
+  ref?: () => void;
   unref?: () => void;
 };
 
@@ -383,13 +384,19 @@ async function readPipedKey(stdin: SecretInput): Promise<string | null> {
       return null;
     }
   }
+  stdin.ref?.();
   stdin.setEncoding("utf8");
   return new Promise((resolve) => {
     let settled = false;
     let data = "";
+    const timer = setTimeout(() => {
+      take();
+      finish(data.length === 0 ? null : normalizeStreamedKey(data));
+    }, 50);
     const finish = (value: string | null) => {
       if (settled) return;
       settled = true;
+      clearTimeout(timer);
       stdin.off("readable", onReadable);
       stdin.off("end", onEnd);
       stdin.pause();
@@ -412,16 +419,14 @@ async function readPipedKey(stdin: SecretInput): Promise<string | null> {
       take();
     };
     const onEnd = () => {
+      take();
       finish(normalizeStreamedKey(data));
     };
     stdin.on("readable", onReadable);
     stdin.on("end", onEnd);
-    if (!take()) {
-      setImmediate(() => {
-        if (settled) return;
-        if (!take()) finish(data.length === 0 ? null : normalizeStreamedKey(data));
-      });
-    }
+    // A closed pipe's bytes can arrive on a later turn. An inherited open pipe never ends,
+    // so the timer gives up instead of waiting for it.
+    take();
   });
 }
 
