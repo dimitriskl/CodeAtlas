@@ -1,3 +1,5 @@
+using System.Security.Cryptography;
+using System.Text.Json;
 using Microsoft.Data.Sqlite;
 
 namespace CodeAtlas.Storage;
@@ -30,6 +32,61 @@ internal sealed partial class SqliteIndexWriter
             transaction.Rollback();
             throw;
         }
+    }
+
+    /// <summary>
+    /// Prepares a generation copy: new id, and tracked file hashes set to the bytes now on disk.
+    /// Freshness compares those hashes with disk, so a generation left on the old hashes is refused.
+    /// </summary>
+    internal static void PreparePublishedCopy(string path, string indexId, string solution)
+    {
+        using var connection = OpenWorkingCopy(path);
+        Execute(connection, "PRAGMA journal_mode=DELETE;");
+        using var transaction = connection.BeginTransaction();
+        SetGenerationId(connection, transaction, indexId);
+        RefreshTrackedHashes(connection, transaction, Path.GetDirectoryName(solution)!);
+        transaction.Commit();
+    }
+
+    private static void SetGenerationId(SqliteConnection connection, SqliteTransaction transaction, string indexId)
+    {
+        using var command = connection.CreateCommand();
+        command.Transaction = transaction;
+        command.CommandText = "UPDATE meta SET value = $value WHERE key = 'indexId'";
+        command.Parameters.AddWithValue("$value", JsonSerializer.Serialize(indexId, SqliteIndexSchema.Json));
+        if (command.ExecuteNonQuery() != 1)
+            throw new IndexFormatException("invalid_index", "The working copy has no generation id.");
+    }
+
+    private static void RefreshTrackedHashes(SqliteConnection connection, SqliteTransaction transaction, string solutionDirectory)
+    {
+        foreach (var (path, stored) in ReadInputHashes(connection, transaction))
+        {
+            if (!File.Exists(path)) continue;
+            var hash = FileHash(path);
+            if (string.Equals(stored, hash, StringComparison.OrdinalIgnoreCase)) continue;
+            Execute("UPDATE input_files SET sha256 = $hash WHERE path = $path", connection, transaction, ("$hash", hash), ("$path", path));
+            Execute("UPDATE fingerprints SET sha256 = $hash WHERE path = $path", connection, transaction, ("$hash", hash), ("$path", path));
+            var relative = Path.GetRelativePath(solutionDirectory, path).Replace('\\', '/');
+            Execute("UPDATE files SET content_hash = $hash WHERE path = $path", connection, transaction, ("$hash", hash), ("$path", relative));
+        }
+    }
+
+    private static List<(string Path, string? Hash)> ReadInputHashes(SqliteConnection connection, SqliteTransaction transaction)
+    {
+        var result = new List<(string, string?)>();
+        using var command = connection.CreateCommand();
+        command.Transaction = transaction;
+        command.CommandText = "SELECT path, sha256 FROM input_files";
+        using var reader = command.ExecuteReader();
+        while (reader.Read()) result.Add((reader.GetString(0), reader.IsDBNull(1) ? null : reader.GetString(1)));
+        return result;
+    }
+
+    private static string FileHash(string path)
+    {
+        using var stream = File.OpenRead(path);
+        return Convert.ToHexString(SHA256.HashData(stream));
     }
 
     private static void RequireFileRows(string relativeFile, MethodInfo[] methods,

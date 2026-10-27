@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using CodeAtlas.Persistence;
 using CodeAtlas.Storage;
 using Xunit;
 
@@ -126,6 +127,65 @@ public sealed class SqliteFileUpdateTests
         var actual = ReadRows(workingCopy);
         Assert.Equal(before.Methods, actual.Methods);
         EqualReferences(before.References, actual.References);
+    }
+
+    [Fact]
+    public async Task PublishingTheWorkingCopyEqualsAFullRebuild()
+    {
+        // Arrange
+        using var sourceFixture = await SampleCopy.CreateAsync();
+        var published = await IndexStore.PublishAsync(await SolutionAnalysis.CreateIndexAsync(sourceFixture.Solution));
+        var previousDatabase = published.IndexPath;
+        var previousBytes = await File.ReadAllBytesAsync(previousDatabase);
+        var beforeReferences = IndexStore.FindReferences(published.Index, Calculate);
+        var workingCopy = Path.Combine(sourceFixture.Root, "working.db");
+        File.Copy(previousDatabase, workingCopy);
+        var edited = EditedCalculator(await File.ReadAllTextAsync(sourceFixture.Calculator));
+        using (var analysis = await SolutionAnalysis.LoadAsync(sourceFixture.Solution))
+            await analysis.UpdateWorkingCopyAsync(workingCopy, sourceFixture.Calculator, edited);
+        using var editedFixture = await SampleCopy.CreateAsync();
+        await File.WriteAllTextAsync(editedFixture.Calculator, edited);
+        var expected = await IndexAsync(editedFixture.Solution, Path.Combine(editedFixture.Root, "expected.db"));
+
+        // Act
+        await IndexStore.PublishWorkingCopyAsync(sourceFixture.Solution, workingCopy);
+
+        // Assert
+        var opened = await IndexStore.OpenSnapshotAsync(IndexStore.DefaultPath(sourceFixture.Solution));
+        var freshness = await IndexStore.CheckFreshnessAsync(opened.Index);
+        var actualReferences = SnapshotQueries.FindReferences(opened, Calculate, new QueryRequest()).Items;
+        var actual = ReadRows(opened.IndexPath);
+        Assert.False(freshness.IsStale);
+        Assert.Equal(beforeReferences.Count + 1, actualReferences.Length);
+        Assert.Equal(FindReferences(expected.Database, Calculate), actualReferences);
+        Assert.Equal(expected.Rows.Methods, actual.Methods);
+        EqualReferences(expected.Rows.References, actual.References);
+        Assert.Equal(previousBytes, await File.ReadAllBytesAsync(previousDatabase));
+    }
+
+    [Fact]
+    public async Task FailedPublicationLeavesTheCurrentGenerationUnchanged()
+    {
+        // Arrange
+        using var fixture = await SampleCopy.CreateAsync();
+        var published = await IndexStore.PublishAsync(await SolutionAnalysis.CreateIndexAsync(fixture.Solution));
+        var previousDatabase = published.IndexPath;
+        var previousBytes = await File.ReadAllBytesAsync(previousDatabase);
+        var workingCopy = Path.Combine(fixture.Root, "working.db");
+        File.Copy(previousDatabase, workingCopy);
+
+        // Act
+        var failure = await Record.ExceptionAsync(() => IndexStore.PublishWorkingCopyAsync(fixture.Solution, workingCopy,
+            (point, _) => point == PublishCheckpoint.BeforeManifestCommit
+                ? Task.FromException(new IOException("injected disk failure"))
+                : Task.CompletedTask));
+
+        // Assert
+        Assert.Equal("snapshot_io_failed", Assert.IsType<IndexFormatException>(failure).Code);
+        Assert.Equal(previousBytes, await File.ReadAllBytesAsync(previousDatabase));
+        var opened = await IndexStore.OpenSnapshotAsync(IndexStore.DefaultPath(fixture.Solution));
+        Assert.Equal(published.Index.IndexId, opened.Index.IndexId);
+        Assert.Equal(IndexStore.FindReferences(published.Index, Calculate), SnapshotQueries.FindReferences(opened, Calculate, new QueryRequest()).Items);
     }
 
     [Fact]

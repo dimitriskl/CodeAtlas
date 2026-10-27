@@ -73,6 +73,8 @@ Those rows come from the loaded workspace after `ApplyDocumentText`, via `FileRo
 
 `UpdateWorkingCopyAsync` is that sequence for one file: apply the text in memory, build the rows, then `ReplaceFileRows` on the private copy. A path that is not an open document throws `AnalysisException` and leaves the copy unchanged. The call does not publish a generation, update the file hash, manifest, or generation header, or start a watcher.
 
+`PublishWorkingCopyAsync` publishes that private copy through the same generation transaction as a full index: a new directory, hashes of `index.db` and the previous generation's reports, then one replacement of `current.json`. The published database keeps the copy's method and reference rows. Its generation id is changed so the header matches the new manifest. Tracked file hashes (input manifest, fingerprints, and `files.content_hash`) are rewritten to the bytes on disk at publish, which is what the freshness check reads, so opening the generation does not refuse it. Symbol, fact, search and duplicate rows, and the copied reports, stay as they were. The previous generation file is not modified. A failure before the pointer commit leaves the current generation unchanged. No watcher is started.
+
 ## Legacy JSON
 
 - Generations written before 0.00.35 (manifest version 1, `index.json` and `catalog.json`) are still read through the previous full-load path, with its whole-file SHA-256 checks.
