@@ -148,7 +148,7 @@ A query that refuses a stale generation uses code `stale_index`, message `The sa
 
 In MCP, a failed tool call is an MCP error result that carries this same envelope with `success: false`. CLI exit codes do not apply to MCP.
 
-The full error-code catalog is extended by later tasks. This section records `invalid_arguments` and `stale_index` because the CLI produces them.
+The full error-code catalog is extended by later tasks. This section records `invalid_arguments` because the CLI produces it, and `stale_index` because a query refuses a stale generation. A CLI query uses exit code 3 for that refusal. `index` does not refuse a stale generation.
 
 ## Example: `coverage` with no index
 
@@ -476,11 +476,9 @@ MCP input:
 | ----------- | ---------------- | ------------------------------------------------------------------------------------------------------------------ |
 | `workspace` | string, optional | Path to the workspace directory. Relative paths resolve from the server's current directory. Omit it for no index. |
 
-CLI: `codeatlas-ng coverage [--workspace <path>]`. `--workspace` defaults to the current directory. Any other arguments exit 2 with `invalid_arguments` and message `Coverage accepts only --workspace <path>.` Stdout is empty and stderr is the error envelope.
-
-With no workspace argument in MCP, or when the workspace has no `current.json`, the result is the no-index `coverage` envelope from the example above: `success` true, freshness `unknown`, static coverage, and the zero page with `snapshotId` null. It does not create `.codeatlas`. A missing workspace path is the same result.
+With no `workspace` argument, or when the workspace has no `current.json`, the result is the no-index `coverage` envelope from the example above: `success` true, freshness `unknown`, static coverage, and the zero page with `snapshotId` null. It does not create `.codeatlas`. A missing workspace path is the same result.
 
 When `current.json` exists, the tool hashes the tracked inputs:
 
-- A stale-making change returns the `stale_index` refusal from Freshness scope. `command` is `coverage`. The CLI exits 3.
+- A stale-making change returns the `stale_index` refusal from Freshness scope. `command` is `coverage`. The tool result is an MCP error.
 - Otherwise it succeeds. `freshness.state` is `fresh`. `warningCount` and `freshness.diagnostics` carry style and asset warnings. `coverage` is the generation coverage (`templateCoverage` from the generation, `limitations` `[]`). `pagination.snapshotId` is the generation id. The other pagination fields stay the zero page. There is no `result` object. `coverage` does not page rows.

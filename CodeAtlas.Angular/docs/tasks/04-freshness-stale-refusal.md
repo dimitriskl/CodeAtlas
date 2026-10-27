@@ -26,9 +26,10 @@ Status: in-test
 - [x] MCP seam test: after editing `package-lock.json` or `angular.json`, the index is stale.
 - [x] MCP seam test: after editing a stylesheet, the index stays `fresh` and `warningCount` goes up, with a warning naming the file.
 - [x] MCP seam test: adding a file under `node_modules` does not change freshness.
-- [x] CLI seam test: a stale condition on a CLI query path exits 3.
+- [ ] CLI seam test: a stale condition on a CLI query path exits 3.
 - [x] Freshness scope and tracked-input rules are documented in `MCP-CONTRACT.md`.
 
 ## Review log
 
 - 2026-10-27: Queries hash the tracked inputs stored in the generation. `coverage` (MCP, with `workspace`, and CLI `codeatlas-ng coverage`) refuses a stale generation with `success: false`, `stale_index`, freshness `stale`, `changedFiles`, and CLI exit 3. TypeScript, templates, `angular.json`, `package.json`, `package-lock.json`, and `tsconfig*.json` are stale-making. Styles and assets stay `fresh` and add `Style or asset changed: <path>.` to `freshness.diagnostics`, increasing `warningCount`. `node_modules` is not hashed. `index` and `index_status` still report staleness and do not refuse. Rules are in `docs/MCP-CONTRACT.md`.
+- 2026-10-27: QA scope fix. Removed the CLI `coverage` command. The PRD lists only `index`, `refresh`, `describe`, and `configure-ai` as CLI commands, and `coverage` is an MCP tool. `refresh` and `describe` do not exist on this branch, so they were not added. The CLI exit-3 path is deferred until the first PRD CLI query command exists. `staleIndexError` still carries exit code 3, so that command gets it without a new error type. MCP `coverage` still refuses a stale index. The CLI seam criterion is unticked.

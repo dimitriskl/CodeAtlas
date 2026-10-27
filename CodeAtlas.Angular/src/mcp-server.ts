@@ -1,16 +1,53 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
-import { queryCoverage } from "./coverage-command.js";
 import {
   commandErrorEnvelope,
   coverageEnvelope,
   formatEnvelope,
+  indexedCoverageEnvelope,
   indexStatusEmptyEnvelope,
   indexSuccessEnvelope,
+  staleIndexError,
+  type ErrorEnvelope,
+  type SuccessEnvelope,
 } from "./envelope.js";
 import { asCommandError } from "./errors.js";
 import { readPublishedIndex } from "./generation-store.js";
 import { appVersion } from "./version.js";
+
+/** Load the published generation and refuse it when a stale-making input changed. */
+function queryCoverage(workspacePath: string): {
+  exitCode: 0 | 1 | 2 | 3;
+  envelope: SuccessEnvelope | ErrorEnvelope;
+} {
+  try {
+    const status = readPublishedIndex(workspacePath);
+    if (status === null) return { exitCode: 0, envelope: coverageEnvelope() };
+    if (status.changedFiles.length > 0) {
+      const error = staleIndexError({
+        changedFiles: status.changedFiles,
+        warnings: status.warnings,
+        templateCoverage: status.templateCoverage,
+      });
+      return { exitCode: error.exitCode, envelope: commandErrorEnvelope("coverage", error) };
+    }
+    return {
+      exitCode: 0,
+      envelope: indexedCoverageEnvelope({
+        generationId: status.generationId,
+        templateCoverage: status.templateCoverage,
+        changedFiles: status.changedFiles,
+        warnings: status.warnings,
+      }),
+    };
+  } catch (error) {
+    const commandError = asCommandError(error);
+    return {
+      exitCode: commandError.exitCode,
+      envelope: commandErrorEnvelope("coverage", commandError),
+    };
+  }
+}
 
 /** In-process MCP server. The stdio executable connects this to stdin and stdout. */
 export function createMcpServer(): McpServer {
