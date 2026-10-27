@@ -14,16 +14,18 @@ User stories: 1, 23, 31, 53, 56, 59. PRD: [Packaging and entry points](../prd/00
 
 None
 
-Status: ready
+Status: in-test
 
 ## Acceptance criteria
 
 - [ ] The package builds, and `npm pack` produces the same archive contents on Windows and Ubuntu.
 - [ ] CI runs lint, type-check, tests and pack on both OSes, for pushes to `angular/main` and for PRs to it.
-- [ ] MCP seam test: an in-process server and an SDK client list exactly the tool `coverage`.
-- [ ] MCP seam test: `coverage` returns `contractVersion: 1`, `command: "coverage"`, `success: true`, `responseToolVersion` (= package version), `warningCount: 0`, freshness `unknown` and a coverage block.
-- [ ] CLI seam test: `codeatlas-ng --version` prints the package version, and an unknown command exits 2 with an `invalid_arguments` JSON error.
-- [ ] The version is `0.00.01`. The contract, schema and app versions are separate constants.
-- [ ] `MCP-CONTRACT.md` exists, with the envelope section.
+- [x] MCP seam test: an in-process server and an SDK client list exactly the tool `coverage`.
+- [x] MCP seam test: `coverage` returns `contractVersion: 1`, `command: "coverage"`, `success: true`, `responseToolVersion` (= package version), `warningCount: 0`, freshness `unknown` and a coverage block.
+- [x] CLI seam test: `codeatlas-ng --version` prints the package version, and an unknown command exits 2 with an `invalid_arguments` JSON error.
+- [x] The version is `0.00.01`. The contract, schema and app versions are separate constants.
+- [x] `MCP-CONTRACT.md` exists, with the envelope section.
 
 ## Review log
+
+- 2026-10-27: Scaffolded `codeatlas-ng` (Node 24, strict TypeScript, ESM, ESLint, Prettier, Vitest, lockfile) with bins `codeatlas-ng` and `codeatlas-ng-mcp`. CLI `--version` prints `0.00.01`; an unknown command exits 2 with `invalid_arguments` JSON on stderr. The MCP server registers only `coverage`, which returns the shared envelope, freshness `unknown`, and the static coverage boundary from `docs/MCP-CONTRACT.md`. Contract, schema, and app versions are separate constants. Workflow `.github/workflows/codeatlas-angular.yml` runs lint, type-check, tests, and pack on Windows Server 2025 and Ubuntu 24.04 for `angular/main` and PRs to it, then diffs the packed file hashes. The two CI acceptance criteria stay open until that run is green.

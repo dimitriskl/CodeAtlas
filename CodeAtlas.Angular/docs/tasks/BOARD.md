@@ -6,7 +6,7 @@ Can start now (no blockers): 01. After 01 is done, 02 and 17 can start.
 
 | # | Task | Blocked by | Status |
 |---|---|---|---|
-| 01 | [Scaffold package, CI and MCP server skeleton](01-scaffold-package-ci-mcp-skeleton.md) | None | ready |
+| 01 | [Scaffold package, CI and MCP server skeleton](01-scaffold-package-ci-mcp-skeleton.md) | None | in-test |
 | 02 | [Index a minimal workspace and report index status](02-index-minimal-workspace-index-status.md) | 01 | ready |
 | 03 | [find_symbol for plain TypeScript](03-find-symbol-typescript.md) | 02 | ready |
 | 04 | [Freshness and stale refusal](04-freshness-stale-refusal.md) | 02 | ready |

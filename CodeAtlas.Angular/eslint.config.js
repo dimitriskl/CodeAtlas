@@ -10,6 +10,15 @@ export default tseslint.config(
   ...tseslint.configs.recommended,
   prettier,
   {
+    files: ["scripts/**/*.mjs"],
+    languageOptions: {
+      globals: {
+        process: "readonly",
+        URL: "readonly",
+      },
+    },
+  },
+  {
     files: ["src/**/*.ts", "tests/**/*.ts", "vitest.config.ts"],
     languageOptions: {
       parserOptions: {
