@@ -1,15 +1,17 @@
 import { createHash } from "node:crypto";
-import { existsSync, readFileSync, readdirSync, realpathSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync, realpathSync, statSync } from "node:fs";
 import path from "node:path";
 import ts from "typescript";
 import { CommandError, workspaceNotFoundMessage } from "./errors.js";
 import {
-  changedTrackedFiles,
+  compareCodeUnit,
+  trackedContentHash,
   workspaceStorage,
   type WorkspaceStorage,
 } from "./workspace-storage.js";
 
-export { changedTrackedFiles };
+const styleExtensions = new Set([".css", ".scss", ".sass", ".less"]);
+const skippedDirectories = new Set(["node_modules", ".codeatlas", ".git"]);
 
 export type TemplateCoverage = "complete" | "partial" | "unknown";
 
@@ -79,9 +81,14 @@ export function loadWorkspace(workspacePath: string): LoadedWorkspace {
     const project = readProject(name, value);
     projects.push(project);
     const tsconfig = resolveTsConfig(storage.canonical, value);
-    if (tsconfig === undefined) continue;
-    track(files, storage.canonical, tsconfig);
-    symbols.push(...classesInProject(storage.canonical, project.name, tsconfig, files));
+    if (tsconfig !== undefined) {
+      track(files, storage.canonical, tsconfig);
+      symbols.push(...classesInProject(storage.canonical, project.name, tsconfig, files));
+    }
+    trackTemplates(storage.canonical, project, value, files);
+    for (const entry of styleAndAssetEntries(value)) {
+      trackOptionalPath(files, storage.canonical, entry);
+    }
   }
 
   return {
@@ -205,6 +212,170 @@ function angularMajor(manifest: unknown): number | null {
   if (typeof version !== "string") return null;
   const match = /\d+/.exec(version);
   return match === null ? null : Number(match[0]);
+}
+
+/** Compare stored hashes. Style and asset edits become warnings; other tracked edits are stale. */
+export function assessTrackedFreshness(
+  canonical: string,
+  files: readonly TrackedFile[],
+): { changedFiles: string[]; warnings: string[] } {
+  const roots = warningInputRoots(canonical);
+  const changedFiles: string[] = [];
+  const warningPaths: string[] = [];
+  for (const file of files) {
+    if (trackedContentHash(canonical, file.path) === file.sha256) continue;
+    if (isWarningInput(file.path, roots)) warningPaths.push(file.path);
+    else changedFiles.push(file.path);
+  }
+  changedFiles.sort(compareCodeUnit);
+  warningPaths.sort(compareCodeUnit);
+  return {
+    changedFiles,
+    warnings: warningPaths.map((filePath) => `Style or asset changed: ${filePath}.`),
+  };
+}
+
+function isWarningInput(filePath: string, roots: readonly string[]): boolean {
+  if (styleExtensions.has(path.posix.extname(filePath).toLowerCase())) return true;
+  return roots.some((root) => filePath === root || filePath.startsWith(`${root}/`));
+}
+
+function warningInputRoots(canonical: string): string[] {
+  try {
+    const angular = JSON.parse(
+      readFileSync(path.join(canonical, "angular.json"), "utf8"),
+    ) as unknown;
+    if (!isRecord(angular) || !isRecord(angular.projects)) return [];
+    const roots: string[] = [];
+    for (const project of Object.values(angular.projects)) {
+      if (!isRecord(project)) continue;
+      for (const entry of styleAndAssetEntries(project)) {
+        const relative = normalizeRelative(entry);
+        if (isSafeRelative(relative)) roots.push(relative);
+      }
+    }
+    return roots;
+  } catch {
+    return [];
+  }
+}
+
+function trackTemplates(
+  canonical: string,
+  project: ProjectRecord,
+  raw: Record<string, unknown>,
+  files: Map<string, string>,
+): void {
+  if (project.sourceRoot.length > 0) {
+    const absolute = path.join(canonical, ...project.sourceRoot.split("/"));
+    if (existsSync(absolute)) {
+      const real = realpathSync(absolute);
+      if (statSync(real).isDirectory()) {
+        walkFiles(real, (file) => {
+          if (file.endsWith(".html")) track(files, canonical, file);
+        });
+      }
+    }
+  }
+  for (const indexPath of indexHtmlEntries(raw)) trackOptionalPath(files, canonical, indexPath);
+}
+
+function styleAndAssetEntries(project: Record<string, unknown>): string[] {
+  const entries: string[] = [];
+  for (const options of architectOptions(project)) {
+    entries.push(...readInputList(options.styles, "angular.json styles"));
+    entries.push(...readInputList(options.assets, "angular.json assets"));
+  }
+  return entries;
+}
+
+function indexHtmlEntries(project: Record<string, unknown>): string[] {
+  const paths: string[] = [];
+  for (const options of architectOptions(project)) {
+    const index = options.index;
+    if (typeof index === "string") paths.push(index);
+    else if (isRecord(index) && typeof index.input === "string") paths.push(index.input);
+    else if (index !== undefined) {
+      throw new CommandError("analysis_failed", "angular.json index must be a path.");
+    }
+  }
+  return paths;
+}
+
+function architectOptions(project: Record<string, unknown>): Record<string, unknown>[] {
+  const architect = project.architect;
+  if (architect === undefined) return [];
+  if (!isRecord(architect)) {
+    throw new CommandError("analysis_failed", "angular.json build options are invalid.");
+  }
+  const options: Record<string, unknown>[] = [];
+  for (const target of Object.values(architect)) {
+    if (!isRecord(target) || target.options === undefined) continue;
+    if (!isRecord(target.options)) {
+      throw new CommandError("analysis_failed", "angular.json build options are invalid.");
+    }
+    options.push(target.options);
+  }
+  return options;
+}
+
+function readInputList(value: unknown, label: string): string[] {
+  if (value === undefined) return [];
+  if (!Array.isArray(value)) {
+    throw new CommandError("analysis_failed", `${label} must be an array.`);
+  }
+  const paths: string[] = [];
+  for (const entry of value) {
+    if (typeof entry === "string" && entry.length > 0) {
+      paths.push(entry);
+      continue;
+    }
+    if (isRecord(entry) && typeof entry.input === "string" && entry.input.length > 0) {
+      paths.push(entry.input);
+      continue;
+    }
+    throw new CommandError("analysis_failed", `${label} entries must be paths.`);
+  }
+  return paths;
+}
+
+function trackOptionalPath(files: Map<string, string>, canonical: string, raw: string): void {
+  const relative = normalizeRelative(raw);
+  if (!isSafeRelative(relative)) return;
+  const absolute = path.join(canonical, ...relative.split("/"));
+  if (!existsSync(absolute)) return;
+  let real: string;
+  try {
+    real = realpathSync(absolute);
+  } catch {
+    return;
+  }
+  const info = statSync(real);
+  if (info.isDirectory()) walkFiles(real, (file) => track(files, canonical, file));
+  else if (info.isFile()) track(files, canonical, real);
+}
+
+function walkFiles(directory: string, visit: (file: string) => void): void {
+  for (const entry of readdirSync(directory, { withFileTypes: true })) {
+    if (skippedDirectories.has(entry.name)) continue;
+    const full = path.join(directory, entry.name);
+    if (entry.isSymbolicLink()) {
+      try {
+        if (statSync(full).isFile()) visit(full);
+      } catch {
+        // A broken symlink is not a tracked input.
+      }
+      continue;
+    }
+    if (entry.isDirectory()) walkFiles(full, visit);
+    else if (entry.isFile()) visit(full);
+  }
+}
+
+function isSafeRelative(relative: string): boolean {
+  if (relative.length === 0) return false;
+  const parts = relative.split("/");
+  return !parts.includes("..") && !parts.includes("node_modules");
 }
 
 function track(files: Map<string, string>, canonical: string, absolute: string): void {

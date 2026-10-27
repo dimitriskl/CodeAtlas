@@ -8,6 +8,8 @@ const publishedPaths = [
   "README.md",
   "dist/cli.d.ts",
   "dist/cli.js",
+  "dist/coverage-command.d.ts",
+  "dist/coverage-command.js",
   "dist/coverage.d.ts",
   "dist/coverage.js",
   "dist/envelope.d.ts",

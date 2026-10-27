@@ -44,23 +44,18 @@ export function workspaceFile(canonical: string, storedPath: string): string {
   return path.join(canonical, ...storedPath.split("/"));
 }
 
-export function changedTrackedFiles(
-  canonical: string,
-  files: readonly { path: string; sha256: string }[],
-): string[] {
-  const changed: string[] = [];
-  for (const file of files) {
-    let hash: string;
-    try {
-      hash = createHash("sha256")
-        .update(readFileSync(workspaceFile(canonical, file.path)))
-        .digest("hex");
-    } catch {
-      changed.push(file.path);
-      continue;
-    }
-    if (hash !== file.sha256) changed.push(file.path);
+/** Ascending UTF-16 code-unit order, the same order as string comparison in JSON examples. */
+export function compareCodeUnit(left: string, right: string): number {
+  return left < right ? -1 : left > right ? 1 : 0;
+}
+
+/** SHA-256 of the stored path's current bytes, or null when the file cannot be read. */
+export function trackedContentHash(canonical: string, storedPath: string): string | null {
+  try {
+    return createHash("sha256")
+      .update(readFileSync(workspaceFile(canonical, storedPath)))
+      .digest("hex");
+  } catch {
+    return null;
   }
-  changed.sort((left, right) => (left < right ? -1 : left > right ? 1 : 0));
-  return changed;
 }

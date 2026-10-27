@@ -1,5 +1,6 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
+import { queryCoverage } from "./coverage-command.js";
 import {
   commandErrorEnvelope,
   coverageEnvelope,
@@ -21,12 +22,28 @@ export function createMcpServer(): McpServer {
     "coverage",
     {
       description:
-        "Return the coverage boundary. With no index loaded, freshness is unknown and coverage is the static edition boundary.",
-      inputSchema: {},
+        "Return the coverage boundary. Without a workspace, freshness is unknown. With a workspace, load the published generation, hash tracked inputs, and refuse a stale index.",
+      inputSchema: {
+        workspace: z
+          .string()
+          .optional()
+          .describe(
+            "Path to the Angular workspace directory. Relative paths resolve from the server's current directory. Omit it when no index is loaded.",
+          ),
+      },
     },
-    () => ({
-      content: [{ type: "text", text: formatEnvelope(coverageEnvelope()) }],
-    }),
+    async ({ workspace }) => {
+      if (workspace === undefined) {
+        return {
+          content: [{ type: "text", text: formatEnvelope(coverageEnvelope()) }],
+        };
+      }
+      const outcome = queryCoverage(workspace);
+      return {
+        isError: outcome.exitCode !== 0,
+        content: [{ type: "text", text: formatEnvelope(outcome.envelope) }],
+      };
+    },
   );
   server.registerTool(
     "index_status",
@@ -60,7 +77,7 @@ export function createMcpServer(): McpServer {
                   indexPath: status.indexPath,
                   templateCoverage: status.templateCoverage,
                   changedFiles: status.changedFiles,
-                  warningCount: 0,
+                  warnings: status.warnings,
                 }),
               ),
             },

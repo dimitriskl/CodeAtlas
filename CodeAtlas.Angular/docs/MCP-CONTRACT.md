@@ -34,15 +34,15 @@ Every MCP tool result, and every CLI JSON output, is a JSON object with these fi
 
 ### Freshness
 
-| Field           | Type         | Meaning                                                                       |
-| --------------- | ------------ | ----------------------------------------------------------------------------- |
-| `state`         | string       | `fresh`, `stale`, or `unknown`.                                               |
-| `checkedAtUtc`  | string       | When the check ran, UTC, `YYYY-MM-DDTHH:mm:ss.sssZ`.                          |
-| `isStale`       | boolean      | `true` only when `state` is `stale`. `unknown` is not stale.                  |
-| `changedFiles`  | string array | Workspace-relative files that differ. Empty when nothing was compared.        |
-| `scope`         | string       | `tracked-input-content-hashes`, the same freshness model as the .NET edition. |
-| `inputCoverage` | object       | `status`, `scope`, `issueCount`, and `reasonCodes`.                           |
-| `diagnostics`   | string array | Extra freshness diagnostics. Empty when there are none.                       |
+| Field           | Type         | Meaning                                                                                             |
+| --------------- | ------------ | --------------------------------------------------------------------------------------------------- |
+| `state`         | string       | `fresh`, `stale`, or `unknown`.                                                                     |
+| `checkedAtUtc`  | string       | When the check ran, UTC, `YYYY-MM-DDTHH:mm:ss.sssZ`.                                                |
+| `isStale`       | boolean      | `true` only when `state` is `stale`. `unknown` is not stale.                                        |
+| `changedFiles`  | string array | Workspace-relative stale-making files that differ or are missing. Empty when none of those changed. |
+| `scope`         | string       | `tracked-input-content-hashes`, the same freshness model as the .NET edition.                       |
+| `inputCoverage` | object       | `status`, `scope`, `issueCount`, and `reasonCodes`.                                                 |
+| `diagnostics`   | string array | Style and asset warnings. Empty when there are none.                                                |
 
 With no index loaded, freshness is unknown:
 
@@ -53,6 +53,42 @@ With no index loaded, freshness is unknown:
 - `inputCoverage.scope` is `no-index`
 - `inputCoverage.issueCount` is `0`
 - `inputCoverage.reasonCodes` is `[]`
+
+### Freshness scope
+
+Every query hashes the tracked inputs stored in the generation. `node_modules` is never hashed. Adding a file under `node_modules` does not change freshness. A file that was not tracked at publish is not part of the comparison until the next `index`.
+
+A tracked input is stale-making or warning-only.
+
+Stale-making. A byte change, or a file that can no longer be read, adds the workspace-relative path to `changedFiles`. `state` becomes `stale` and `isStale` becomes true:
+
+- TypeScript sources, including specs: each non-declaration file in a project's program that sits inside the workspace and is not under `node_modules`. An inline template is part of that file's bytes.
+- Templates: every `.html` file under a project's non-empty `sourceRoot`, and each architect target's `options.index` when that value is a path (or an object with `input`) to a file inside the workspace. Paths under `node_modules` are skipped. An `.html` file that is also a style or asset is warning-only instead.
+- `angular.json`.
+- `package.json` and `package-lock.json`, when they exist.
+- Every workspace-root file whose name matches `tsconfig*.json`, and each project's `architect.build.options.tsConfig`.
+
+Warning-only. A byte change, or a file that can no longer be read, does not make the index stale. `state` stays `fresh`, `isStale` stays false, and the path is not added to `changedFiles`. Each such path adds one diagnostic, `Style or asset changed: <path>.`, sorted by the path in ascending code-unit order. `warningCount` is the number of those diagnostics. `freshness.diagnostics` lists them.
+
+- Styles named by any architect target's `options.styles`. An entry is a string path or an object with `input`. Files whose extension is `.css`, `.scss`, `.sass`, or `.less` are warning-only even when that list cannot be read.
+- Assets named by `options.assets`, in the same entry shapes. A directory entry hashes every file under it. A changed file is warning-only when its path equals one of those entries or sits inside a directory entry.
+
+Entries are literal paths, not globs. A path that does not exist at publish is not tracked. `options` on every architect target is read. Paths that contain `node_modules` or `..` are ignored. Directory walks also skip `.codeatlas` and `.git`.
+
+`changedFiles` is sorted in ascending code-unit order.
+
+`index` and `index_status` report this freshness and do not refuse a stale generation. Every other query refuses one. `coverage` is that query in this edition until later tools exist. The refusal is:
+
+- `success` is false
+- `error.code` is `stale_index`
+- `error.message` is `The saved index is stale.`
+- `error.diagnostics` is `[]`
+- `freshness` is the stale object above, not null
+- `coverage` is the generation coverage, not null
+- pagination is omitted
+- `warningCount` still counts style and asset warnings
+- in MCP, the tool result is an error
+- on the CLI, the process exits 3, stdout is empty, and stderr is this envelope
 
 ### Coverage
 
@@ -108,9 +144,11 @@ Present only when `success` is `false`.
 
 An unknown CLI command uses code `invalid_arguments`, message `Unknown command.`, and exit code `2`. The JSON is written to stderr and stdout is empty. This matches the .NET edition: error JSON is not written to stdout, and invalid arguments exit 2.
 
+A query that refuses a stale generation uses code `stale_index`, message `The saved index is stale.`, and exit code `3`. Freshness and coverage are present, as specified under Freshness scope. Stdout is empty and stderr is the envelope.
+
 In MCP, a failed tool call is an MCP error result that carries this same envelope with `success: false`. CLI exit codes do not apply to MCP.
 
-The full error-code catalog is extended by later tasks. This section records `invalid_arguments` because the CLI produces it.
+The full error-code catalog is extended by later tasks. This section records `invalid_arguments` and `stale_index` because the CLI produces them.
 
 ## Example: `coverage` with no index
 
@@ -267,14 +305,17 @@ Publication writes a new `generations/<generationId>/` directory and its `index.
 | `tracked_files` | `path` TEXT primary key, `sha256` TEXT. `path` is workspace-relative. `sha256` is the lowercase hex SHA-256 of the file bytes.                                                         |
 | `symbols`       | `id` TEXT primary key, `project` TEXT, `path` TEXT, `qualified_name` TEXT, `kind` TEXT, `line` INTEGER, `column` INTEGER. `line` and `column` are 1-based and point at the class name. |
 
-Tracked paths are:
+Tracked paths, and whether a change is stale-making or warning-only, are the Freshness scope list. In short:
 
-- `angular.json`
-- `package.json`, when it exists
-- `package-lock.json`, when it exists
-- every workspace-root file whose name matches `tsconfig*.json`
-- each project's `architect.build.options.tsConfig`, when that file is not already included
-- each non-declaration TypeScript file in that project's program that sits inside the workspace and is not under `node_modules`
+- `angular.json` (stale)
+- `package.json` and `package-lock.json`, when they exist (stale)
+- every workspace-root file whose name matches `tsconfig*.json` (stale)
+- each project's `architect.build.options.tsConfig`, when that file is not already included (stale)
+- each non-declaration TypeScript file in that project's program that sits inside the workspace and is not under `node_modules` (stale)
+- `.html` templates under a non-empty `sourceRoot`, and `options.index` HTML (stale, unless the file is a style or asset)
+- `options.styles` and `options.assets` (warning-only)
+
+`node_modules` is not a tracked path.
 
 `angular.json` paths (`root`, `sourceRoot`, `architect.build.options.tsConfig`) are workspace-relative. When `tsConfig` is omitted, the project uses `tsconfig.json` at the workspace root if that file exists. A named class declaration at the top level of one of those sources is a symbol of kind `class`, owned by the project whose program contained the file.
 
@@ -323,9 +364,9 @@ Other `index` failures:
 
 `pagination.snapshotId` is that `generationId`. The other pagination fields are the zero page (`offset` 0, `limit` 0, `returned` 0, `total` 0, `hasMore` false, `nextOffset` null, `continuationSupported` false). `index` does not page rows.
 
-Freshness after a publish is `fresh`: the check re-hashes the tracked files and finds no differences. `inputCoverage.status` is `complete` and `inputCoverage.scope` is `tracked-input-content-hashes`. `changedFiles`, `reasonCodes`, and `diagnostics` are empty. `isStale` is false.
+Freshness after a publish re-hashes the tracked inputs. When nothing differs, it is `fresh`: `inputCoverage.status` is `complete`, `inputCoverage.scope` is `tracked-input-content-hashes`, `changedFiles`, `reasonCodes`, and `diagnostics` are empty, and `isStale` is false. `index` reports that state and does not refuse it. `warningCount` counts style and asset warnings from that re-hash. A publish that just wrote those bytes records none, so `warningCount` is 0. This command stores no warnings.
 
-Coverage is the edition boundary. `templateCoverage` is the value stored in the generation. `limitations` is `[]` because a generation is loaded (`no-index` is removed). `warningCount` is 0; this command stores no warnings.
+Coverage is the edition boundary. `templateCoverage` is the value stored in the generation. `limitations` is `[]` because a generation is loaded (`no-index` is removed).
 
 ## MCP tool `index_status`
 
@@ -337,7 +378,7 @@ Input:
 | ----------- | ---------------- | -------------------------------------------------------------------------------------------- |
 | `workspace` | string, required | Path to the workspace directory. Relative paths resolve from the server's current directory. |
 
-When `current.json` exists for that workspace, the tool returns a success envelope with `command` `index_status` and the same `result` fields as `index`. The versions and counts are read from the published generation. `result.index` is the absolute path of `current.json`. `pagination.snapshotId` is the generation id. Freshness is computed by hashing the tracked files again: `changedFiles` lists the stored paths whose bytes differ, in ascending code-unit order. An empty list is `fresh`; a non-empty list is `stale` with `isStale` true. `index_status` reports that state and does not refuse a stale generation.
+When `current.json` exists for that workspace, the tool returns a success envelope with `command` `index_status` and the same `result` fields as `index`. The versions and counts are read from the published generation. `result.index` is the absolute path of `current.json`. `pagination.snapshotId` is the generation id. Freshness is the Freshness scope check. `changedFiles` lists stale-making paths whose bytes differ or are missing. Style and asset changes stay `fresh` and increase `warningCount`. `index_status` reports that state and does not refuse a stale generation.
 
 When the workspace has no `current.json`, the tool still succeeds. It does not create `.codeatlas`. `result.generationId`, `result.schemaVersion`, `result.appVersion`, and `result.index` are null. `result.contractVersion` is the answering contract version (`1`), because there is no generation to read. `result.counts` is `{ "projects": 0, "files": 0, "symbols": 0 }`. Freshness and coverage are the no-index values from the envelope section. `pagination.snapshotId` is null and the rest of the page is the zero page.
 
@@ -424,3 +465,22 @@ When the workspace has no `current.json`, the tool still succeeds. It does not c
   }
 }
 ```
+
+## Query `coverage`
+
+Read-only. It does not write the index and it does not call a provider.
+
+MCP input:
+
+| Field       | Type             | Meaning                                                                                                            |
+| ----------- | ---------------- | ------------------------------------------------------------------------------------------------------------------ |
+| `workspace` | string, optional | Path to the workspace directory. Relative paths resolve from the server's current directory. Omit it for no index. |
+
+CLI: `codeatlas-ng coverage [--workspace <path>]`. `--workspace` defaults to the current directory. Any other arguments exit 2 with `invalid_arguments` and message `Coverage accepts only --workspace <path>.` Stdout is empty and stderr is the error envelope.
+
+With no workspace argument in MCP, or when the workspace has no `current.json`, the result is the no-index `coverage` envelope from the example above: `success` true, freshness `unknown`, static coverage, and the zero page with `snapshotId` null. It does not create `.codeatlas`. A missing workspace path is the same result.
+
+When `current.json` exists, the tool hashes the tracked inputs:
+
+- A stale-making change returns the `stale_index` refusal from Freshness scope. `command` is `coverage`. The CLI exits 3.
+- Otherwise it succeeds. `freshness.state` is `fresh`. `warningCount` and `freshness.diagnostics` carry style and asset warnings. `coverage` is the generation coverage (`templateCoverage` from the generation, `limitations` `[]`). `pagination.snapshotId` is the generation id. The other pagination fields stay the zero page. There is no `result` object. `coverage` does not page rows.
