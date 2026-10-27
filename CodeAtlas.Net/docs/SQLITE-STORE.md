@@ -67,6 +67,8 @@ Why not hash or check the whole database on every query? Both cost time in propo
 
 On Windows, `File.Replace` can make the pointer name briefly unavailable to a reader that opens it at that instant. Readers now retry that short window (sharing violation, delete-pending, or an absent name for up to two retries). A concurrent-reader test publishes 8 generations while readers query.
 
+A live update does not write that generation. It copies `index.db` and calls `ReplaceFileRows` on the private copy: one transaction deletes that file's `methods` and `source_references` rows, drops `reference_keys` for methods removed from the file, and inserts the supplied rows. The file content hash, input manifest, symbol and fact rows, and generation header stay as copied until the copy is published as a new generation.
+
 ## Legacy JSON
 
 - Generations written before 0.00.35 (manifest version 1, `index.json` and `catalog.json`) are still read through the previous full-load path, with its whole-file SHA-256 checks.
