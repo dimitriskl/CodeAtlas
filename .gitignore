@@ -4,5 +4,6 @@ TestResults/
 .vs/
 .codeatlas/
 __pycache__/
-.\CodeAtlas.Net\docs\CodeAtlas-Project-Recap.md
+/CodeAtlas.Net/docs/CodeAtlas-Project-Recap.md
 [Aa][Gg][Ee][Nn][Tt][Ss].[Mm][Dd]
+/prd/

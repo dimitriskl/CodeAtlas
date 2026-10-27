@@ -1,6 +1,6 @@
 # CodeAtlas version history
 
-Version: **0.00.30**
+Version: **0.00.40**
 
 Version history starts at `0.00.01`; earlier work did not have assigned version numbers.
 
@@ -31,6 +31,46 @@ python scripts/bump-version.py --major-release --summary "Publish the qualified 
 This flag synchronizes the same files; it does not publish a package, create a tag, or waive release checks. Routine increments never change the major component automatically.
 
 ## History
+
+### 0.00.40
+
+- Apply an open document's text in memory so the next query sees the edit
+
+### 0.00.39
+
+- Release each project's fact and duplicate bindings before the next project
+
+### 0.00.38
+
+- Write reference rows during analysis and release them before facts and duplicates
+
+### 0.00.37
+
+- Hash only environment variables the solution references, so a query from another shell is not stale
+
+### 0.00.36
+
+- Add Apache-2.0 SQLitePCLRaw license/NOTICE texts and the public-domain SQLite native record to the package notice inventory; verify every shipped native library
+
+### 0.00.35
+
+- Store each generation in one SQLite database (index.db) read row by row; add export-json, sqlite_unavailable and the start-menu SQLite prompt
+
+### 0.00.34
+
+- Add the interactive start menu with opt-in AI, hidden key entry and explicit describe batch choice; store AI keys in the OS keychain with an owner-only fallback file
+
+### 0.00.33
+
+- Agent benchmark: tolerant answer parsing (escaped, double-encoded, list, fenced, text fallback; path and symbol normalization) with unchanged content checks, parse recorded per run, and a rescore command for stored runs
+
+### 0.00.32
+
+- Add a local Ollama provider to the agent benchmark (no Anthropic key or login passed, cost 0, endpoint/model/context checks, isolated Claude home), a small local benchmark suite (`--suite small`: 2-project Shop solution, five find/impact/change tasks) and a compact agent mode for small models (`--compact-agent`: short system prompt and task prompt, minimal tools)
+
+### 0.00.31
+
+- Add the public agent benchmark (Jellyfin v10.11.9, six find/impact/change tasks, plain/LSP/CodeAtlas modes, dry run) and index explicit implementations of generic interfaces in generic types, which Roslyn cannot resolve from their declaration IDs
 
 ### 0.00.30
 

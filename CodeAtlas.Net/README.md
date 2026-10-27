@@ -1,18 +1,18 @@
 # CodeAtlas .NET
 
-Version: **0.00.30**
+Version: **0.00.40**
 
 See [version history](docs/VERSION.md) for what is implemented and the versioning rules. `Version.props` is the build's version source. Run `dotnet run --project src/CodeAtlas.Cli --no-build -- --version` to check the built CLI.
 
 CodeAtlas is a C# semantic-analysis library and CLI built with Roslyn. The CLI calls our library directly; there is no MCP layer.
 
-Map code, optionally generate class/type and method descriptions, and search those saved descriptions. Run `configure-ai --provider ollama --model qwen3:8b --effort none` for a locally installed Ollama model, or select a cloud provider and model. Setup tests the connection, requests a missing cloud key without echo, saves keys in Windows user environment variables and keeps non-secret options in `.codeatlas/appsettings.json`. Then run `describe --index <manifest>`. Assisted search uses saved descriptions without provider calls. See the [user guide](docs/USER-GUIDE.md#search-by-purpose-and-read-structural-facts) for providers, model/effort overrides and batching.
+Map code, optionally generate class/type and method descriptions, and search those saved descriptions. Run `codeatlas` with no arguments in a terminal for a numbered start menu where AI is opt-in. Or run `configure-ai --provider ollama --model qwen3:8b --effort none` for a locally installed Ollama model, or select a cloud provider and model. Setup tests the connection, requests a missing cloud key without echo, saves new keys in the OS keychain (or an owner-only fallback file) and keeps non-secret options in `.codeatlas/appsettings.json`. Then run `describe --index <manifest>`. Assisted search uses saved descriptions without provider calls. See the [user guide](docs/USER-GUIDE.md#search-by-purpose-and-read-structural-facts) for providers, model/effort overrides and batching.
 
 CodeAtlas scans all C# projects in a solution, saves a structured index and a readable overview, and answers method/reference queries from that index. Refresh can reuse references after verified method-body edits and safely rebuilds when reuse cannot be established. Bounded caller traversal and duplicate candidates are available with explicit static-analysis limits. Angular/TypeScript analysis remains outside the initial C# scope.
 
 Start with [end-user usage](docs/USAGE.md) for a short list of commands to map your project, choose a model, generate descriptions and search them, with output locations and uses. The [reference guide](docs/USER-GUIDE.md) covers detailed queries, warning reports, refresh, coding-agent usage and recovery.
 
-[Validation measurements](docs/QUALIFICATION-2026-10.md) record analysis timings, tests and package checks.
+[Validation measurements](docs/QUALIFICATION-2026-10.md) record analysis timings, tests and package checks. The [agent benchmark](benchmarks/agent/README.md) compares an agent's tokens, turns and task success with plain tools, LSP and CodeAtlas on a pinned public repository.
 
 Contributor documentation includes the [development roadmap](docs/ROADMAP.md) and its acceptance criteria.
 
@@ -60,13 +60,13 @@ dotnet run --project src/CodeAtlas.Cli --no-build -- index --solution CodeAtlas.
 
 Outputs commit as one immutable generation under `.codeatlas/solutions/<solution-file>-<absolute-path-hash>/`. The index command returns `index`, the stable `current.json` manifest to pass to queries, and immutable `snapshotIndex`, `overview`, `warningsFile`, and `timings` paths. Each solution has its own pointer even when solutions share a directory.
 
-- `index.json`: versioned projects, files, types, methods, references, warnings, fingerprints and input-coverage evidence.
-- `catalog.json`: symbol documentation, structural facts and bounded semantic duplicate evidence. Method and reference queries do not read it. A sibling `generation.json` mirror lets an immutable generation retain its verified identity after `current.json` advances.
+- `index.db`: one SQLite database with the complete analysis: files, projects, types, methods, references, symbol documentation, structural facts, bounded semantic duplicate evidence, input fingerprints, incremental state and purpose-search postings. Rows are keyed by file and indexed by symbol ID, name, containing type and project, so a query reads only the rows it needs. A sibling `generation.json` mirror lets an immutable generation retain its verified identity after `current.json` advances. See [SQLite store](docs/SQLITE-STORE.md).
+- Generations written before 0.00.35 contain `index.json` and `catalog.json` instead; they stay readable through the previous full-load path. `export-json --index <current.json> --output <new-directory>` writes that legacy layout from a SQLite generation for comparison tools.
 - `overview.md`: a compact project/type map with generation identity and query instructions.
 - `warnings.txt`: the complete warning report, including an explicit zero-warning report.
 - `timings.json`: measured indexing stages, bound to the same generation. Measurements include index, overview and warning staging; timing staging, final input validation, manifest commit and console output are excluded. `elapsedSeconds` includes publication.
 
-A per-solution writer lock excludes concurrent publication. After all artifacts are written and flushed and inputs verified, one atomic manifest replacement commits the generation. Readers resolve that manifest once and verify report hashes plus the index SHA-256 during its single deserialization. A failed or cancelled publication preserves the previous active generation; corrupt snapshots fail explicitly and require rebuilding. Old and incomplete generations are retained for diagnosis; storage currently grows with rebuilds. See [snapshot reliability and recovery](docs/SNAPSHOT-RELIABILITY.md).
+A per-solution writer lock excludes concurrent publication. After all artifacts are written, checked (`PRAGMA integrity_check`) and flushed and inputs verified, one atomic manifest replacement commits the generation. Readers resolve that manifest once, verify the report hashes and the database length, header, completeness marker and identity, and open the database read-only and immutable. `index-status` additionally hashes the whole database against the manifest SHA-256. A failed or cancelled publication preserves the previous active generation; corrupt snapshots fail explicitly and require rebuilding. Old and incomplete generations are retained for diagnosis; storage currently grows with rebuilds. See [snapshot reliability and recovery](docs/SNAPSHOT-RELIABILITY.md).
 
 These generated artifacts are Git-ignored and machine-local. Use the `index` path returned by the command in the examples below.
 
@@ -85,7 +85,7 @@ dotnet run --project src/CodeAtlas.Cli --no-build -- find-references \
   --symbol 'Library/Library.csproj::M:Sample.Calculator.Calculate(System.Int32)'
 ```
 
-Queries with `--index` deserialize the saved data and verify file fingerprints; they do not load Roslyn or evaluate MSBuild. Initial indexing collects references for every supported method, so it can be more expensive than one live query, but that analysis is reused across queries. JSON parsing and file hashing still scale with index and input size.
+Queries with `--index` read only the needed database rows and verify file fingerprints; they do not load Roslyn or evaluate MSBuild. Initial indexing collects references for every supported method, so it can be more expensive than one live query, but that analysis is reused across queries. Input hashing for the freshness check still scales with input size. CodeAtlas bundles SQLite (`SQLitePCLRaw.bundle_e_sqlite3`) and checks it before use; if it cannot load, commands fail with `sqlite_unavailable` and platform instructions, and the start menu offers `1 Show install instructions / 0 Back`. Nothing is installed automatically.
 
 Queries return at most 100 results by default; `--limit` accepts 1 through 1000. Inspect `pagination.hasMore` and continue with `--offset <nextOffset> --snapshot <snapshotId>` from the response. Continuations require the same fresh index generation. Live queries return only a bounded first page and cannot provide a stable continuation.
 
