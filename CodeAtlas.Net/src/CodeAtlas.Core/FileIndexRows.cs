@@ -1,4 +1,5 @@
 using System.Collections.Immutable;
+using CodeAtlas.Storage;
 using Microsoft.CodeAnalysis;
 
 namespace CodeAtlas;
@@ -34,6 +35,20 @@ public sealed partial class SolutionAnalysis
                 references[method.Id] = mine;
         }
         return new(inFile.ToArray(), references);
+    }
+
+    /// <summary>
+    /// Applies one file's text in memory, builds that file's rows, and replaces them in a private working copy.
+    /// A path that is not an open document throws <see cref="AnalysisException"/> and does not write.
+    /// The file hash, manifest, and generation header stay as copied.
+    /// </summary>
+    public async Task UpdateWorkingCopyAsync(string workingCopy, string path, string text, CancellationToken cancellationToken = default)
+    {
+        var updated = ApplyDocumentText(path, text);
+        if (updated.Length == 0)
+            throw new AnalysisException($"The path is not an open source document: {path}");
+        var rows = await FileRowsAsync(path, cancellationToken);
+        SqliteIndexWriter.ReplaceFileRows(workingCopy, updated[0], rows.Methods, rows.References);
     }
 
     private string OneRelativePath(Document[] documents, string path)

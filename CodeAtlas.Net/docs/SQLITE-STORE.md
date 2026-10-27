@@ -71,6 +71,8 @@ A live update does not write that generation. It copies `index.db` and calls `Re
 
 Those rows come from the loaded workspace after `ApplyDocumentText`, via `FileRowsAsync`. It uses the same method and reference builders as a full index and returns only that file's methods plus references located in that file. It does not write the database, update the file hash, manifest or generation header, or start a watcher.
 
+`UpdateWorkingCopyAsync` is that sequence for one file: apply the text in memory, build the rows, then `ReplaceFileRows` on the private copy. A path that is not an open document throws `AnalysisException` and leaves the copy unchanged. The call does not publish a generation, update the file hash, manifest, or generation header, or start a watcher.
+
 ## Legacy JSON
 
 - Generations written before 0.00.35 (manifest version 1, `index.json` and `catalog.json`) are still read through the previous full-load path, with its whole-file SHA-256 checks.

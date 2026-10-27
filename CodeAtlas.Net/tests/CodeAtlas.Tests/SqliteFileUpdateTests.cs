@@ -80,6 +80,55 @@ public sealed class SqliteFileUpdateTests
     }
 
     [Fact]
+    public async Task UpdatingOneFileInTheWorkingCopyEqualsAFullRebuild()
+    {
+        // Arrange
+        using var sourceFixture = await SampleCopy.CreateAsync();
+        var original = Path.Combine(sourceFixture.Root, "original.db");
+        await IndexAsync(sourceFixture.Solution, original);
+        var workingCopy = Path.Combine(sourceFixture.Root, "working.db");
+        File.Copy(original, workingCopy);
+        var edited = EditedCalculator(await File.ReadAllTextAsync(sourceFixture.Calculator));
+        using var analysis = await SolutionAnalysis.LoadAsync(sourceFixture.Solution);
+        var beforeReferences = FindReferences(workingCopy, Calculate);
+        using var editedFixture = await SampleCopy.CreateAsync();
+        await File.WriteAllTextAsync(editedFixture.Calculator, edited);
+        var expected = await IndexAsync(editedFixture.Solution, Path.Combine(editedFixture.Root, "expected.db"));
+
+        // Act
+        await analysis.UpdateWorkingCopyAsync(workingCopy, sourceFixture.Calculator, edited);
+
+        // Assert
+        var actual = ReadRows(workingCopy);
+        var actualReferences = FindReferences(workingCopy, Calculate);
+        Assert.Equal(beforeReferences.Length + 1, actualReferences.Length);
+        Assert.Equal(FindReferences(expected.Database, Calculate), actualReferences);
+        Assert.Equal(expected.Rows.Methods, actual.Methods);
+        EqualReferences(expected.Rows.References, actual.References);
+    }
+
+    [Fact]
+    public async Task UpdatingAPathThatIsNotOpenLeavesTheWorkingCopyUnchanged()
+    {
+        // Arrange
+        using var fixture = await SampleCopy.CreateAsync();
+        var workingCopy = Path.Combine(fixture.Root, "working.db");
+        await IndexAsync(fixture.Solution, workingCopy);
+        var before = ReadRows(workingCopy);
+        using var analysis = await SolutionAnalysis.LoadAsync(fixture.Solution);
+        var missing = Path.Combine(fixture.Root, "Library", "missing.cs");
+
+        // Act
+        var failure = await Record.ExceptionAsync(() => analysis.UpdateWorkingCopyAsync(workingCopy, missing, "class Missing {}"));
+
+        // Assert
+        Assert.Equal("The path is not an open source document: " + missing, Assert.IsType<AnalysisException>(failure).Message);
+        var actual = ReadRows(workingCopy);
+        Assert.Equal(before.Methods, actual.Methods);
+        EqualReferences(before.References, actual.References);
+    }
+
+    [Fact]
     public async Task InjectedFailureLeavesTheWorkingCopyUnchanged()
     {
         // Arrange
@@ -106,6 +155,11 @@ public sealed class SqliteFileUpdateTests
             SqliteIndexWriter.BeforeFileRowCommit = null;
         }
     }
+
+    private static string EditedCalculator(string source) => source.Replace(
+        "public static int LocalCaller() => Calculate(1);",
+        "public static int LocalCaller() => Calculate(1);\n    public static int Extra() => Calculate(4);",
+        StringComparison.Ordinal);
 
     private static Dictionary<string, SourceReference[]> FileReferences(
         Dictionary<string, SourceReference[]> all, MethodInfo[] methods)
