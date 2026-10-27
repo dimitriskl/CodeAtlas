@@ -190,6 +190,24 @@ public sealed class SqliteFileUpdateTests
     }
 
     [Fact]
+    public async Task LiveSessionEditIsVisibleWithoutAStaleRefusal()
+    {
+        // Arrange
+        using var fixture = await SampleCopy.CreateAsync();
+        await IndexStore.PublishAsync(await SolutionAnalysis.CreateIndexAsync(fixture.Solution));
+        using var session = await LiveIndexSession.OpenAsync(fixture.Solution);
+        var before = await session.FindReferencesAsync(Calculate);
+        var edited = EditedCalculator(await File.ReadAllTextAsync(fixture.Calculator));
+
+        // Act
+        await session.ApplyAsync(fixture.Calculator, edited);
+
+        // Assert
+        var after = await session.FindReferencesAsync(Calculate);
+        Assert.Equal(before.Count + 1, after.Count);
+    }
+
+    [Fact]
     public async Task FailedPublicationLeavesTheCurrentGenerationUnchanged()
     {
         // Arrange

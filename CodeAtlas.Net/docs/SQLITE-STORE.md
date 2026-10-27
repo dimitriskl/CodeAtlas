@@ -75,6 +75,8 @@ Those rows come from the loaded workspace after `ApplyDocumentText`, via `FileRo
 
 `PublishWorkingCopyAsync` publishes that private copy through the same generation transaction as a full index: a new directory, hashes of `index.db` and the previous generation's reports, then one replacement of `current.json`. The published database keeps the copy's method and reference rows and the tracked hashes already recorded for the text those rows were built from. It does not reread disk into those hashes. The existing freshness check compares them with disk and refuses the commit when they differ, so an unsaved edit does not become the current generation. Its generation id is changed so the header matches the new manifest. Symbol, fact, search and duplicate rows, and the copied reports, stay as they were. The previous generation file is not modified. A failure before the pointer commit leaves the current generation unchanged. No watcher is started.
 
+`LiveIndexSession` keeps that solution loaded. One edit calls `UpdateWorkingCopyAsync` and `PublishWorkingCopyAsync`, and find-references reads the new current generation. Symbol, fact, search and duplicate rows of the edited file stay as copied, so a method added by the edit is not in find-symbol.
+
 ## Legacy JSON
 
 - Generations written before 0.00.35 (manifest version 1, `index.json` and `catalog.json`) are still read through the previous full-load path, with its whole-file SHA-256 checks.
