@@ -18,16 +18,18 @@ User stories: 2, 32, 34, 35, 55, 56. PRD: [Modules](../prd/0001-initial.md#modul
 
 - [01 — Scaffold package, CI and MCP server skeleton](01-scaffold-package-ci-mcp-skeleton.md)
 
-Status: ready
+Status: in-test
 
 ## Acceptance criteria
 
-- [ ] CLI seam test: `index` on the fixture exits 0 and prints an envelope with `command: "index"`. A generation and `current.json` exist under `.codeatlas/workspaces/<workspace-name>-<path-hash>/`.
+- [x] CLI seam test: `index` on the fixture exits 0 and prints an envelope with `command: "index"`. A generation and `current.json` exist under `.codeatlas/workspaces/<workspace-name>-<path-hash>/`.
 - [ ] The same workspace path always yields the same folder name, on Windows and Ubuntu.
-- [ ] MCP seam test: `index_status` returns the generation id, the schema, contract and app versions, and project, file and symbol counts.
-- [ ] MCP seam test: `index_status` on a workspace with no index returns a defined, documented result (specified in `MCP-CONTRACT.md`).
-- [ ] A second concurrent `index` is refused by the writer lock with a documented error. The first index's generation stays intact.
-- [ ] Stored paths use forward slashes and are workspace-relative.
-- [ ] `MCP-CONTRACT.md` has the `index_status` section and the storage naming rules.
+- [x] MCP seam test: `index_status` returns the generation id, the schema, contract and app versions, and project, file and symbol counts.
+- [x] MCP seam test: `index_status` on a workspace with no index returns a defined, documented result (specified in `MCP-CONTRACT.md`).
+- [x] A second concurrent `index` is refused by the writer lock with a documented error. The first index's generation stays intact.
+- [x] Stored paths use forward slashes and are workspace-relative.
+- [x] `MCP-CONTRACT.md` has the `index_status` section and the storage naming rules.
 
 ## Review log
+
+- 2026-10-27: `codeatlas-ng index` on the minimal `shop` fixture (one project, class `Cart`) reads `angular.json`, publishes an immutable SQLite generation, and writes `current.json` under a writer lock. The success envelope uses `command: "index"`. MCP `index_status` returns the generation id, schema, contract and app versions, and project, file and symbol counts; with no index it returns the documented empty result and does not create `.codeatlas`. A second `index` while `.write.lock` is held exits 1 with `index_busy` and leaves the published generation unchanged. Stored paths are workspace-relative with forward slashes. Storage naming and the tool contract are in `docs/MCP-CONTRACT.md`. Local checks on Node 24.22.1: `npm run lint`, `npm run typecheck`, and `npm test` (17 passed). The cross-OS folder-name criterion stays open until the workflow is green on Windows and Ubuntu.

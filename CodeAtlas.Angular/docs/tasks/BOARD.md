@@ -6,8 +6,8 @@ Can start now (no blockers): 01. After 01 is done, 02 and 17 can start.
 
 | # | Task | Blocked by | Status |
 |---|---|---|---|
-| 01 | [Scaffold package, CI and MCP server skeleton](01-scaffold-package-ci-mcp-skeleton.md) | None | done-awaiting-merge |
-| 02 | [Index a minimal workspace and report index status](02-index-minimal-workspace-index-status.md) | 01 | ready |
+| 01 | [Scaffold package, CI and MCP server skeleton](01-scaffold-package-ci-mcp-skeleton.md) | None | done |
+| 02 | [Index a minimal workspace and report index status](02-index-minimal-workspace-index-status.md) | 01 | in-test |
 | 03 | [find_symbol for plain TypeScript](03-find-symbol-typescript.md) | 02 | ready |
 | 04 | [Freshness and stale refusal](04-freshness-stale-refusal.md) | 02 | ready |
 | 05 | [Angular declarations](05-angular-declarations.md) | 03 | ready |

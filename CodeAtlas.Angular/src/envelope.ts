@@ -1,4 +1,5 @@
-import { staticCoverage, type Coverage } from "./coverage.js";
+import { coverageForGeneration, staticCoverage, type Coverage } from "./coverage.js";
+import { type CommandError } from "./errors.js";
 import { appVersion, contractVersion } from "./version.js";
 
 export type Freshness = {
@@ -44,6 +45,25 @@ export type SuccessEnvelope = {
   pagination: Pagination;
 };
 
+export type IndexCounts = {
+  projects: number;
+  files: number;
+  symbols: number;
+};
+
+export type IndexResult = {
+  generationId: string | null;
+  schemaVersion: number | null;
+  contractVersion: number;
+  appVersion: string | null;
+  counts: IndexCounts;
+  index: string | null;
+};
+
+export type IndexSuccessEnvelope = SuccessEnvelope & {
+  result: IndexResult;
+};
+
 export type ErrorEnvelope = {
   contractVersion: number;
   command: string | null;
@@ -73,6 +93,41 @@ export function unknownFreshness(now: Date = new Date()): Freshness {
   };
 }
 
+export function emptyPagination(snapshotId: string | null): Pagination {
+  return {
+    offset: 0,
+    limit: 0,
+    returned: 0,
+    total: 0,
+    hasMore: false,
+    nextOffset: null,
+    snapshotId,
+    continuationSupported: false,
+  };
+}
+
+/** Freshness of a generation whose tracked file hashes were just compared. */
+export function trackedFreshness(
+  changedFiles: readonly string[],
+  now: Date = new Date(),
+): Freshness {
+  const stale = changedFiles.length > 0;
+  return {
+    state: stale ? "stale" : "fresh",
+    checkedAtUtc: now.toISOString(),
+    isStale: stale,
+    changedFiles: [...changedFiles],
+    scope: "tracked-input-content-hashes",
+    inputCoverage: {
+      status: "complete",
+      scope: "tracked-input-content-hashes",
+      issueCount: 0,
+      reasonCodes: [],
+    },
+    diagnostics: [],
+  };
+}
+
 export function coverageEnvelope(now: Date = new Date()): SuccessEnvelope {
   return {
     contractVersion,
@@ -82,15 +137,78 @@ export function coverageEnvelope(now: Date = new Date()): SuccessEnvelope {
     warningCount: 0,
     freshness: unknownFreshness(now),
     coverage: staticCoverage(),
-    pagination: {
-      offset: 0,
-      limit: 0,
-      returned: 0,
-      total: 0,
-      hasMore: false,
-      nextOffset: null,
-      snapshotId: null,
-      continuationSupported: false,
+    pagination: emptyPagination(null),
+  };
+}
+
+export function indexSuccessEnvelope(input: {
+  command: "index" | "index_status";
+  generationId: string;
+  schemaVersion: number;
+  contractVersion: number;
+  appVersion: string;
+  counts: IndexCounts;
+  indexPath: string;
+  templateCoverage: Coverage["templateCoverage"];
+  changedFiles: readonly string[];
+  warningCount: number;
+  now?: Date;
+}): IndexSuccessEnvelope {
+  return {
+    contractVersion,
+    command: input.command,
+    success: true,
+    responseToolVersion: appVersion,
+    warningCount: input.warningCount,
+    freshness: trackedFreshness(input.changedFiles, input.now),
+    coverage: coverageForGeneration(input.templateCoverage),
+    pagination: emptyPagination(input.generationId),
+    result: {
+      generationId: input.generationId,
+      schemaVersion: input.schemaVersion,
+      contractVersion: input.contractVersion,
+      appVersion: input.appVersion,
+      counts: input.counts,
+      index: input.indexPath,
+    },
+  };
+}
+
+/** `index_status` when the workspace has no current.json. Nothing is written. */
+export function indexStatusEmptyEnvelope(now: Date = new Date()): IndexSuccessEnvelope {
+  return {
+    contractVersion,
+    command: "index_status",
+    success: true,
+    responseToolVersion: appVersion,
+    warningCount: 0,
+    freshness: unknownFreshness(now),
+    coverage: staticCoverage(),
+    pagination: emptyPagination(null),
+    result: {
+      generationId: null,
+      schemaVersion: null,
+      contractVersion,
+      appVersion: null,
+      counts: { projects: 0, files: 0, symbols: 0 },
+      index: null,
+    },
+  };
+}
+
+export function commandErrorEnvelope(command: string | null, error: CommandError): ErrorEnvelope {
+  return {
+    contractVersion,
+    command,
+    success: false,
+    responseToolVersion: appVersion,
+    warningCount: 0,
+    freshness: null,
+    coverage: null,
+    error: {
+      code: error.code,
+      message: error.message,
+      diagnostics: [...error.diagnostics],
     },
   };
 }
@@ -112,6 +230,8 @@ export function invalidArgumentsEnvelope(command: string | null): ErrorEnvelope 
   };
 }
 
-export function formatEnvelope(envelope: SuccessEnvelope | ErrorEnvelope): string {
+export function formatEnvelope(
+  envelope: SuccessEnvelope | IndexSuccessEnvelope | ErrorEnvelope,
+): string {
   return `${JSON.stringify(envelope, null, 2)}\n`;
 }

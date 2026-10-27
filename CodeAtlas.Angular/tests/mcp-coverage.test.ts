@@ -48,7 +48,7 @@ const staticCoverage = {
 };
 
 describe("MCP coverage tool", () => {
-  it("lists exactly the tool coverage", async () => {
+  it("lists coverage and index_status", async () => {
     // Arrange
     const connection = await connectInProcess();
 
@@ -57,7 +57,7 @@ describe("MCP coverage tool", () => {
       const listed = await connection.client.listTools();
 
       // Assert
-      expect(listed.tools.map((tool) => tool.name)).toEqual(["coverage"]);
+      expect(listed.tools.map((tool) => tool.name)).toEqual(["coverage", "index_status"]);
     } finally {
       await connection.close();
     }
