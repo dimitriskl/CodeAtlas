@@ -1,6 +1,6 @@
 <Project>
   <PropertyGroup>
-    <CodeAtlasVersion>0.00.40</CodeAtlasVersion>
+    <CodeAtlasVersion>0.00.41</CodeAtlasVersion>
     <Version>$(CodeAtlasVersion)</Version>
     <InformationalVersion>$(CodeAtlasVersion)</InformationalVersion>
     <IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
