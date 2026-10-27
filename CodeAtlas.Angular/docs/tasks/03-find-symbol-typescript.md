@@ -13,16 +13,16 @@ User stories: 5, 6, 7, 26, 27, 28, 29. PRD: [Identity and schema](../prd/0001-in
 
 - [02 — Index a minimal workspace and report index status](02-index-minimal-workspace-index-status.md)
 
-Status: ready
+Status: in-test
 
 ## Acceptance criteria
 
-- [ ] MCP seam test: `find_symbol` with `name: "<project_name>Service"` returns its id, kind, file, line and column.
-- [ ] MCP seam test: a function overload set returns one id with every signature listed.
-- [ ] MCP seam test: the kind and project filters exclude look-alike names in the fixture.
-- [ ] MCP seam test: page 2 with the page-1 `snapshotId` succeeds. After a re-index, page 2 returns `snapshot_mismatch`.
-- [ ] Spec files are indexed, and their symbols are returned.
-- [ ] The pagination object has all its fields: `offset`, `limit`, `returned`, `total`, `hasMore`, `nextOffset`, `snapshotId`, `continuationSupported`.
-- [ ] `MCP-CONTRACT.md` has the `find_symbol` section and the qualified-name rules for nested members.
+- [x] MCP seam test: `find_symbol` with `name: "<project_name>Service"` returns its id, kind, file, line and column.
+- [x] MCP seam test: a function overload set returns one id with every signature listed.
+- [x] MCP seam test: the kind and project filters exclude look-alike names in the fixture.
+- [x] MCP seam test: page 2 with the page-1 `snapshotId` succeeds. After a re-index, page 2 returns `snapshot_mismatch`.
+- [x] Spec files are indexed, and their symbols are returned.
+- [x] The pagination object has all its fields: `offset`, `limit`, `returned`, `total`, `hasMore`, `nextOffset`, `snapshotId`, `continuationSupported`.
+- [x] `MCP-CONTRACT.md` has the `find_symbol` section and the qualified-name rules for nested members.
 
 ## Review log
