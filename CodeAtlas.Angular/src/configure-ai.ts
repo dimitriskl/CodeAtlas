@@ -374,7 +374,9 @@ async function readPipedKey(stdin: SecretInput): Promise<string | null> {
   } catch {
     return null;
   }
-  if (!stat.isFIFO() && !stat.isSocket()) {
+  // A regular file, including an empty redirect, can be read in full. A pipe must not be:
+  // Windows pipes are not FIFOs, and readFileSync on an open pipe waits until it closes.
+  if (stat.isFile()) {
     try {
       return normalizeStreamedKey(readFileSync(fd, "utf8"));
     } catch {
@@ -391,6 +393,7 @@ async function readPipedKey(stdin: SecretInput): Promise<string | null> {
       stdin.off("readable", onReadable);
       stdin.off("end", onEnd);
       stdin.pause();
+      stdin.unref?.();
       resolve(value);
     };
     const take = (): boolean => {
