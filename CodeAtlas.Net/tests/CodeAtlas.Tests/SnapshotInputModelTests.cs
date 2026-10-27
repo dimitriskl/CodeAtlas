@@ -329,5 +329,164 @@ public sealed class SnapshotInputModelTests : IDisposable
         Assert.False((await SnapshotInputs.CheckFreshnessAsync(rebuilt)).IsStale);
     }
 
+    [Fact]
+    public async Task UnreferencedShellVariablesDoNotInvalidateOrDiscloseValues()
+    {
+        // Arrange
+        var indexing = new Dictionary<string, string>(SnapshotInputModel.PathComparer)
+        {
+            ["BUILD_FLAVOR"] = "Debug", ["PWD"] = @"C:\indexing-shell", ["OLDPWD"] = @"C:\old", ["CODEX_TOOL_CALL_ID"] = "index-call"
+        };
+        var manifest = await SnapshotInputModel.CaptureAsync([], [], [], indexing, CompleteEvidence, relevantEnvironment: ["build_flavor"]);
+        var query = new Dictionary<string, string>(SnapshotInputModel.PathComparer)
+        {
+            ["BUILD_FLAVOR"] = "Debug", ["PWD"] = @"C:\query-shell", ["OLDPWD"] = @"C:\other", ["CODEX_TOOL_CALL_ID"] = "query-call"
+        };
+
+        // Act
+        var fresh = await SnapshotInputModel.CheckAsync(manifest, query);
+        query["BUILD_FLAVOR"] = "private-value-not-for-reports";
+        var changed = await SnapshotInputModel.CheckAsync(manifest, query);
+        query.Remove("BUILD_FLAVOR");
+        var removed = await SnapshotInputModel.CheckAsync(manifest, query);
+
+        // Assert
+        Assert.Equal(["BUILD_FLAVOR"], manifest.RelevantEnvironment!);
+        Assert.Equal("fresh", fresh.Status);
+        Assert.DoesNotContain("<environment>", fresh.ChangedInputs);
+        Assert.Equal("stale", changed.Status);
+        Assert.Contains("<environment>", changed.ChangedInputs);
+        Assert.Equal("stale", removed.Status);
+        var serialized = System.Text.Json.JsonSerializer.Serialize(changed) + System.Text.Json.JsonSerializer.Serialize(manifest);
+        Assert.DoesNotContain("private-value-not-for-reports", serialized);
+        Assert.DoesNotContain("query-shell", serialized);
+    }
+
+    [Fact]
+    public async Task LegacyManifestStillHashesTheWholeEnvironment()
+    {
+        // Arrange
+        var manifest = await SnapshotInputModel.CaptureAsync([], [], [], EnvironmentContext, CompleteEvidence);
+        var otherShell = new Dictionary<string, string>(EnvironmentContext, SnapshotInputModel.PathComparer) { ["PWD"] = @"C:\other-shell" };
+
+        // Act
+        var result = await SnapshotInputModel.CheckAsync(manifest, otherShell);
+
+        // Assert
+        Assert.Null(manifest.RelevantEnvironment);
+        Assert.Contains("<environment>", result.ChangedInputs);
+    }
+
+    [Fact]
+    public void MissingRelevantEnvironmentLoadsAsALegacyManifest()
+    {
+        // Arrange
+        var options = new System.Text.Json.JsonSerializerOptions { PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase };
+        var manifest = new SnapshotInputManifest(1, [], [], new(SnapshotInputModel.PathComparer), new(SnapshotInputModel.PathComparer),
+            [], new string('A', 64), CompleteEvidence, new("complete", "scope", []), ["BUILD_FLAVOR"]);
+        var node = System.Text.Json.JsonSerializer.SerializeToNode(manifest, options)!.AsObject();
+        node.Remove("relevantEnvironment");
+
+        // Act
+        var legacy = System.Text.Json.JsonSerializer.Deserialize<SnapshotInputManifest>(node, options);
+
+        // Assert
+        Assert.NotNull(legacy);
+        Assert.Null(legacy.RelevantEnvironment);
+        SnapshotInputModel.Validate(legacy);
+    }
+
+    [Fact]
+    public void ReferencedBuildVariablesAreKeptAndSdkOrShellVariablesAreNot()
+    {
+        // Arrange
+        var xml = """
+            <Project>
+              <PropertyGroup Condition="'$(CODEATLAS_FIXTURE_FLAVOR)' == 'alpha'">
+                <DefineConstants>$(CODEATLAS_FIXTURE_FLAVOR);$(Configuration)</DefineConstants>
+              </PropertyGroup>
+            </Project>
+            $([System.Environment]::GetEnvironmentVariable('EXTRA_BUILD_INPUT'))
+            """;
+
+        // Act
+        var selected = BuildEnvironment.Select(BuildEnvironment.ReferencesIn(xml),
+            ["CODEATLAS_FIXTURE_FLAVOR", "PWD", "PATH"],
+            ["Configuration", "TargetFramework"]);
+        var unset = BuildEnvironment.Select(["BUILD_FLAVOR", "Configuration"], ["PATH"], ["Configuration"]);
+
+        // Assert
+        Assert.Equal(["CODEATLAS_FIXTURE_FLAVOR", "EXTRA_BUILD_INPUT"], selected);
+        Assert.Equal(["BUILD_FLAVOR"], unset);
+        Assert.True(BuildEnvironment.IsOutputPath(@"C:\repo\obj\project.assets.json"));
+        Assert.True(BuildEnvironment.IsSdkOrPackage(@"C:\Program Files\dotnet\sdk\10.0.402\Sdk.targets", @"C:\Program Files\dotnet"));
+        Assert.False(BuildEnvironment.IsSdkOrPackage(@"C:\repo\Directory.Build.props", @"C:\Program Files\dotnet"));
+    }
+
+    [Fact]
+    public async Task DifferentShellDoesNotInvalidateAReferencedBuildVariableDoes()
+    {
+        // Arrange
+        var projectDirectory = Directory.CreateDirectory(Path.Combine(root.FullName, "shell-repo"));
+        var project = Path.Combine(projectDirectory.FullName, "Example.csproj");
+        var solution = Path.Combine(projectDirectory.FullName, "Example.slnx");
+        await File.WriteAllTextAsync(project, """
+            <Project Sdk="Microsoft.NET.Sdk">
+              <PropertyGroup>
+                <TargetFramework>net10.0</TargetFramework>
+                <DefineConstants>$(CODEATLAS_FIXTURE_FLAVOR)</DefineConstants>
+              </PropertyGroup>
+            </Project>
+            """);
+        await File.WriteAllTextAsync(Path.Combine(projectDirectory.FullName, "Example.cs"), "public class Example { public void Run() {} }");
+        await File.WriteAllTextAsync(solution, "<Solution><Project Path=\"Example.csproj\" /></Solution>");
+        var start = new ProcessStartInfo("dotnet")
+            { WorkingDirectory = projectDirectory.FullName, RedirectStandardOutput = true, RedirectStandardError = true };
+        start.ArgumentList.Add("restore");
+        start.ArgumentList.Add(solution);
+        using (var process = Process.Start(start)!)
+        {
+            var output = process.StandardOutput.ReadToEndAsync();
+            var errors = process.StandardError.ReadToEndAsync();
+            await process.WaitForExitAsync();
+            Assert.True(process.ExitCode == 0, await output + await errors);
+        }
+        string[] names = ["PWD", "OLDPWD", "CODEX_TOOL_CALL_ID", "CODEATLAS_FIXTURE_FLAVOR"];
+        var original = names.Select(Environment.GetEnvironmentVariable).ToArray();
+        try
+        {
+            Environment.SetEnvironmentVariable("PWD", @"C:\indexing-shell");
+            Environment.SetEnvironmentVariable("OLDPWD", @"C:\old");
+            Environment.SetEnvironmentVariable("CODEX_TOOL_CALL_ID", "index-call");
+            Environment.SetEnvironmentVariable("CODEATLAS_FIXTURE_FLAVOR", "alpha");
+
+            // Act
+            var index = await SolutionAnalysis.CreateIndexAsync(solution);
+            Environment.SetEnvironmentVariable("PWD", @"C:\query-shell");
+            Environment.SetEnvironmentVariable("OLDPWD", @"C:\other");
+            Environment.SetEnvironmentVariable("CODEX_TOOL_CALL_ID", "query-call");
+            var otherShell = await SnapshotInputs.CheckFreshnessAsync(index);
+            Environment.SetEnvironmentVariable("CODEATLAS_FIXTURE_FLAVOR", "beta");
+            var flavor = await SnapshotInputs.CheckFreshnessAsync(index);
+
+            // Assert
+            Assert.NotNull(index.InputManifest!.RelevantEnvironment);
+            Assert.Contains("CODEATLAS_FIXTURE_FLAVOR", index.InputManifest.RelevantEnvironment);
+            Assert.DoesNotContain(index.InputManifest.RelevantEnvironment, name =>
+                name.Equals("PWD", StringComparison.OrdinalIgnoreCase)
+                || name.Equals("OLDPWD", StringComparison.OrdinalIgnoreCase)
+                || name.Equals("CODEX_TOOL_CALL_ID", StringComparison.OrdinalIgnoreCase));
+            Assert.False(otherShell.IsStale, string.Join(", ", otherShell.ChangedFiles));
+            Assert.DoesNotContain("<environment>", otherShell.ChangedFiles);
+            Assert.True(flavor.IsStale);
+            Assert.Contains("<environment>", flavor.ChangedFiles);
+            Assert.DoesNotContain("beta", System.Text.Json.JsonSerializer.Serialize(flavor));
+        }
+        finally
+        {
+            for (var i = 0; i < names.Length; i++) Environment.SetEnvironmentVariable(names[i], original[i]);
+        }
+    }
+
     public void Dispose() => root.Delete(recursive: true);
 }

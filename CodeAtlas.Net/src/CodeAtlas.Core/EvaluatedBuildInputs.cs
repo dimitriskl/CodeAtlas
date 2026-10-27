@@ -15,6 +15,8 @@ public sealed partial class SolutionAnalysis
             ["BuildProjectReferences"] = "false", ["Configuration"] = "Debug", ["Platform"] = "AnyCPU"
         });
         var imports = new HashSet<string>(evaluatedImports, SnapshotInputModel.PathComparer);
+        var names = new HashSet<string>(SnapshotInputModel.PathComparer);
+        var dotnetRoot = selectedMSBuildPath is { } sdk ? Directory.GetParent(sdk)?.Parent?.FullName : null;
         foreach (var roslynProject in solution.Projects)
         {
             var path = Path.GetFullPath(roslynProject.FilePath!);
@@ -31,12 +33,15 @@ public sealed partial class SolutionAnalysis
             evaluatedProperties[path] = evaluated.AllEvaluatedProperties.GroupBy(property => property.Name, StringComparer.OrdinalIgnoreCase)
                 .ToDictionary(group => group.Key, group => group.Last().EvaluatedValue, StringComparer.OrdinalIgnoreCase);
             if (targets.Length > 0) evaluatedProperties[path]["TargetFrameworks"] = targetFrameworks;
-            imports.UnionWith(evaluated.Imports.Select(import => import.ImportedProject.FullPath));
+            imports.UnionWith(evaluated.Imports.Where(import => import.ImportedProject?.FullPath is not null)
+                .Select(import => import.ImportedProject.FullPath));
+            names.UnionWith(BuildEnvironment.FromProject(evaluated, dotnetRoot));
         }
         evaluatedImports = imports.ToArray();
+        relevantEnvironment = names.Order(SnapshotInputModel.PathComparer).ToArray();
     }
 
-    private (string[] Files, InputDiscoveryScope[] Scopes, string[] Inventories, BuildInputEvidence Evidence) CollectBuildInputs(
+    private (string[] Files, InputDiscoveryScope[] Scopes, string[] Inventories, BuildInputEvidence Evidence, string[] RelevantEnvironment) CollectBuildInputs(
         string[] roots, string[] initialFiles, bool detectGenerators = true)
     {
         EvaluateBuildInputs();
@@ -116,6 +121,7 @@ public sealed partial class SolutionAnalysis
         }
         issues.Add(new("evaluation_context_replayed", "MSBuild inputs were evaluated with explicit design-time defaults; custom workspace evaluation context is not fully verifiable."));
         return (files.Order(SnapshotInputModel.PathComparer).ToArray(), scopes.ToArray(), inventories.Order(SnapshotInputModel.PathComparer).ToArray(),
-            new(true, propertiesCovered, referencesCovered, toolchainCovered, true, false, projects.ToArray(), issues.ToArray()));
+            new(true, propertiesCovered, referencesCovered, toolchainCovered, true, false, projects.ToArray(), issues.ToArray()),
+            relevantEnvironment);
     }
 }

@@ -29,7 +29,8 @@ public sealed record SnapshotInputManifest(
     DirectoryInventory[] DirectoryInventories,
     string EnvironmentDigest,
     BuildInputEvidence Evidence,
-    CoverageSummary Coverage);
+    CoverageSummary Coverage,
+    string[]? RelevantEnvironment = null);
 public sealed record InputFreshnessResult(string Status, bool TrackedInputsChanged,
     DateTimeOffset CheckedAtUtc, string[] ChangedInputs, CoverageSummary Coverage, string[] Diagnostics);
 
@@ -53,6 +54,8 @@ public static class SnapshotInputModel
             || manifest.DirectoryInventories is null || manifest.DirectoryInventories.Any(inventory => inventory is null
                 || !Paths([inventory.Directory]) || inventory.ChildDirectoryNames is null || inventory.ChildDirectoryNames.Any(name => name is null))
             || !Hash(manifest.EnvironmentDigest) || manifest.Evidence is null || !Issues(manifest.Evidence.OtherIssues)
+            || (manifest.RelevantEnvironment is { } relevant && (relevant.Any(name => string.IsNullOrWhiteSpace(name))
+                || relevant.Distinct(PathComparer).Count() != relevant.Length))
             || manifest.Evidence.Projects is null || manifest.Evidence.Projects.Any(project => project is null
                 || string.IsNullOrWhiteSpace(project.Project) || project.TargetFrameworks is null || project.SourceGenerators is null
                 || project.TargetFrameworks.Concat(project.SourceGenerators).Any(value => value is null))
@@ -90,11 +93,17 @@ public static class SnapshotInputModel
     }
 
     // Caller supplies environment captured at process entry, before MSBuildLocator/workspace mutation.
-    // No raw environment values are persisted. No variables are excluded speculatively.
-    public static string EnvironmentDigest(IReadOnlyDictionary<string, string> environment)
+    // Raw values are never persisted. A null name list is a legacy manifest and hashes the whole
+    // captured environment. A list, including an empty one, hashes only those variables, so an
+    // unreferenced shell variable such as PWD does not make a query from another shell stale.
+    public static string EnvironmentDigest(IReadOnlyDictionary<string, string> environment,
+        IReadOnlyCollection<string>? relevantNames = null)
     {
         using var hash = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
-        foreach (var (name, value) in environment.OrderBy(p => p.Key, PathComparer))
+        var rows = relevantNames is null
+            ? environment.Select(pair => (Name: pair.Key, Value: pair.Value ?? ""))
+            : relevantNames.Select(name => (Name: name, Value: EnvironmentValue(environment, name)));
+        foreach (var (name, value) in rows.OrderBy(row => row.Name, PathComparer))
         {
             Append(OperatingSystem.IsWindows() ? name.ToUpperInvariant() : name);
             Append(value);
@@ -114,7 +123,7 @@ public static class SnapshotInputModel
     public static async Task<SnapshotInputManifest> CaptureAsync(IEnumerable<string> explicitFiles,
         IEnumerable<InputDiscoveryScope> discoveryScopes, IEnumerable<string> inventoryDirectories,
         IReadOnlyDictionary<string, string> environmentAtProcessEntry, BuildInputEvidence evidence,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default, IReadOnlyCollection<string>? relevantEnvironment = null)
     {
         var explicitPaths = explicitFiles.Select(Path.GetFullPath).Distinct(PathComparer).Order(PathComparer).ToArray();
         var scopes = discoveryScopes.Select(scope => scope with { Directory = Path.GetFullPath(scope.Directory) }).ToArray();
@@ -150,8 +159,9 @@ public static class SnapshotInputModel
                     ? Directory.EnumerateDirectories(path).Select(Path.GetFileName).OfType<string>().Order(PathComparer).ToArray()
                     : []);
             }).ToArray();
-        return new(1, explicitPaths, scopes, rootStates, fingerprints, inventories, EnvironmentDigest(environmentAtProcessEntry),
-            evidence, Classify(evidence, discovered));
+        var relevant = NormalizeRelevant(relevantEnvironment);
+        return new(1, explicitPaths, scopes, rootStates, fingerprints, inventories,
+            EnvironmentDigest(environmentAtProcessEntry, relevant), evidence, Classify(evidence, discovered), relevant);
     }
 
     public static async Task<InputFreshnessResult> CheckAsync(SnapshotInputManifest previous,
@@ -164,7 +174,8 @@ public static class SnapshotInputModel
         try
         {
             var current = await CaptureAsync(previous.ExplicitFiles, previous.DiscoveryScopes,
-                previous.DirectoryInventories.Select(i => i.Directory), environmentAtProcessEntry, previous.Evidence, cancellationToken);
+                previous.DirectoryInventories.Select(i => i.Directory), environmentAtProcessEntry, previous.Evidence,
+                cancellationToken, previous.RelevantEnvironment);
             // Rehydrate OS-aware comparison after JSON deserialization, which loses comparer identity.
             var oldFiles = new Dictionary<string, FileFingerprint>(previous.Files, PathComparer);
             var changed = oldFiles.Keys.Union(current.Files.Keys, PathComparer)
@@ -192,6 +203,22 @@ public static class SnapshotInputModel
             return new("unknown", false, DateTimeOffset.UtcNow, [], previous.Coverage,
                 ["Could not verify tracked inputs: " + exception.Message]);
         }
+    }
+
+    private static string EnvironmentValue(IReadOnlyDictionary<string, string> environment, string name)
+    {
+        if (environment.TryGetValue(name, out var direct)) return direct ?? "";
+        foreach (var pair in environment)
+            if (PathComparer.Equals(pair.Key, name))
+                return pair.Value ?? "";
+        return "";
+    }
+
+    private static string[]? NormalizeRelevant(IReadOnlyCollection<string>? names)
+    {
+        if (names is null) return null;
+        return names.Where(name => !string.IsNullOrWhiteSpace(name)).Select(BuildEnvironment.Canonical)
+            .Distinct(PathComparer).Order(PathComparer).ToArray();
     }
 
     private static bool DirectoryPresent(string path)

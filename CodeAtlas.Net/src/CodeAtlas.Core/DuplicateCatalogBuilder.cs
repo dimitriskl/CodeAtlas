@@ -40,13 +40,18 @@ public static class DuplicateCatalogBuilder
             string? contextHash = null;
             if (!ambiguousContext && !projectContextHashes.TryGetValue(projectPath, out contextHash))
                 throw new AnalysisException("Duplicate extraction needs the current realized compilation-context hash.");
+            // Bound bodies are collected with this clone. The finally releases them before the next project.
+            CSharpCompilation? scratch = null;
+            try
+            {
+            scratch = await BindingScratch.CloneAsync(project, cancellationToken);
             foreach (var document in project.Documents.OrderBy(d => d.FilePath, StringComparer.Ordinal))
             {
                 cancellationToken.ThrowIfCancellationRequested();
                 var root = await document.GetSyntaxRootAsync(cancellationToken);
-                var model = await document.GetSemanticModelAsync(cancellationToken);
-                if (root is null || model is null || document.FilePath is null)
+                if (root is null || document.FilePath is null || !scratch.ContainsSyntaxTree(root.SyntaxTree))
                     throw new AnalysisException("Duplicate extraction needs a syntax tree, model and source path.");
+                var model = scratch.GetSemanticModel(root.SyntaxTree, ignoreAccessibility: false);
                 var text = await document.GetTextAsync(cancellationToken);
                 var fileHash = DuplicateDigest.Of(text.ToString()); // decoded-text digest, not M4's byte fingerprint
                 DuplicateRange Range(SyntaxNode node)
@@ -128,6 +133,12 @@ public static class DuplicateCatalogBuilder
                         omissions.Add(new(id, "unresolved-or-unsupported-binding", range));
                     }
                 }
+            }
+            }
+            finally
+            {
+                scratch = null;
+                BindingScratch.Release();
             }
         }
         CatalogComplete:

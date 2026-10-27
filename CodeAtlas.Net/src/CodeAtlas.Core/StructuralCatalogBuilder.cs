@@ -1,10 +1,13 @@
 using Microsoft.CodeAnalysis;
+using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Microsoft.CodeAnalysis.FindSymbols;
 
 namespace CodeAtlas;
 
 // Extract on the same loaded solution as documentation. Does not open a workspace or read external files.
+// Each project's semantic questions use a clone so its bound bodies can be released before the next project.
+// Source identity still comes from the loaded solution.
 public sealed class StructuralCatalogBuilder
 {
     private readonly Solution solution;
@@ -45,23 +48,36 @@ public sealed class StructuralCatalogBuilder
     private async Task CollectAsync()
     {
         foreach (var project in solution.Projects.OrderBy(p => p.FilePath, StringComparer.Ordinal))
-        foreach (var document in project.Documents.OrderBy(d => d.FilePath, StringComparer.Ordinal))
         {
             cancellationToken.ThrowIfCancellationRequested();
             if (project.Language != LanguageNames.CSharp || project.FilePath is null)
                 throw new AnalysisException("Structural facts require a C# project with a source path.");
-            var root = await document.GetSyntaxRootAsync(cancellationToken);
-            var model = await document.GetSemanticModelAsync(cancellationToken);
-            if (root is null || model is null)
-                throw new AnalysisException("Structural facts require loaded source syntax and semantics.");
-            foreach (var node in root.DescendantNodes())
+            CSharpCompilation? scratch = null;
+            try
             {
-                if (node is VariableDeclaratorSyntax { Parent.Parent: FieldDeclarationSyntax })
-                    await DescribeAsync(project, model.GetDeclaredSymbol(node, cancellationToken), node, model);
-                else if (node is BaseTypeDeclarationSyntax or DelegateDeclarationSyntax
-                         or MethodDeclarationSyntax or PropertyDeclarationSyntax
-                         or IndexerDeclarationSyntax or EnumMemberDeclarationSyntax)
-                    await DescribeAsync(project, model.GetDeclaredSymbol(node, cancellationToken), node, model);
+                scratch = await BindingScratch.CloneAsync(project, cancellationToken);
+                foreach (var document in project.Documents.OrderBy(d => d.FilePath, StringComparer.Ordinal))
+                {
+                    cancellationToken.ThrowIfCancellationRequested();
+                    var root = await document.GetSyntaxRootAsync(cancellationToken);
+                    if (root is null || !scratch.ContainsSyntaxTree(root.SyntaxTree))
+                        throw new AnalysisException("Structural facts require loaded source syntax and semantics.");
+                    var model = scratch.GetSemanticModel(root.SyntaxTree, ignoreAccessibility: false);
+                    foreach (var node in root.DescendantNodes())
+                    {
+                        if (node is VariableDeclaratorSyntax { Parent.Parent: FieldDeclarationSyntax })
+                            await DescribeAsync(project, model.GetDeclaredSymbol(node, cancellationToken), node, model);
+                        else if (node is BaseTypeDeclarationSyntax or DelegateDeclarationSyntax
+                                 or MethodDeclarationSyntax or PropertyDeclarationSyntax
+                                 or IndexerDeclarationSyntax or EnumMemberDeclarationSyntax)
+                            await DescribeAsync(project, model.GetDeclaredSymbol(node, cancellationToken), node, model);
+                    }
+                }
+            }
+            finally
+            {
+                scratch = null;
+                BindingScratch.Release();
             }
         }
     }
