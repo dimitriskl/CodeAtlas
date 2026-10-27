@@ -14,16 +14,20 @@ User stories: 1, 23, 31, 53, 56, 59. PRD: [Packaging and entry points](../prd/00
 
 None
 
-Status: ready
+Status: done-awaiting-merge
 
 ## Acceptance criteria
 
-- [ ] The package builds, and `npm pack` produces the same archive contents on Windows and Ubuntu.
-- [ ] CI runs lint, type-check, tests and pack on both OSes, for pushes to `angular/main` and for PRs to it.
-- [ ] MCP seam test: an in-process server and an SDK client list exactly the tool `coverage`.
-- [ ] MCP seam test: `coverage` returns `contractVersion: 1`, `command: "coverage"`, `success: true`, `responseToolVersion` (= package version), `warningCount: 0`, freshness `unknown` and a coverage block.
-- [ ] CLI seam test: `codeatlas-ng --version` prints the package version, and an unknown command exits 2 with an `invalid_arguments` JSON error.
-- [ ] The version is `0.00.01`. The contract, schema and app versions are separate constants.
-- [ ] `MCP-CONTRACT.md` exists, with the envelope section.
+- [x] The package builds, and `npm pack` produces the same archive contents on Windows and Ubuntu.
+- [x] CI runs lint, type-check, tests and pack on both OSes, for pushes to `angular/main` and for PRs to it.
+- [x] MCP seam test: an in-process server and an SDK client list exactly the tool `coverage`.
+- [x] MCP seam test: `coverage` returns `contractVersion: 1`, `command: "coverage"`, `success: true`, `responseToolVersion` (= package version), `warningCount: 0`, freshness `unknown` and a coverage block.
+- [x] CLI seam test: `codeatlas-ng --version` prints the package version, and an unknown command exits 2 with an `invalid_arguments` JSON error.
+- [x] The version is `0.00.01`. The contract, schema and app versions are separate constants.
+- [x] `MCP-CONTRACT.md` exists, with the envelope section.
 
 ## Review log
+
+- 2026-10-27: Scaffolded `codeatlas-ng` (Node 24, strict TypeScript, ESM, ESLint, Prettier, Vitest, lockfile) with bins `codeatlas-ng` and `codeatlas-ng-mcp`. CLI `--version` prints `0.00.01`; an unknown command exits 2 with `invalid_arguments` JSON on stderr. The MCP server registers only `coverage`, which returns the shared envelope, freshness `unknown`, and the static coverage boundary from `docs/MCP-CONTRACT.md`. Contract, schema, and app versions are separate constants. Workflow `.github/workflows/codeatlas-angular.yml` runs lint, type-check, tests, and pack on Windows Server 2025 and Ubuntu 24.04 for `angular/main` and PRs to it, then diffs the packed file hashes. Run [40510458967](https://github.com/dimitriskl/CodeAtlas/actions/runs/40510458967) is green on both operating systems, and the packed file hashes match. Git's tar on Windows treats `C:` as a remote host, so the manifest step reads the ustar archive in Node.
+- 2026-10-27 Tester PASS, attempt 1. HEAD tested `19b30a2` (tests added in `b86d8e7`). Commands: `npm ci`, lint, typecheck, test (10/10 passed on Node 24.22.1); pack manifest identical to both CI artifacts. Non-blocking notes for QA: tautological `not.toBe` lines in `tests/versions.test.ts`; in-process coverage test accepts any ISO `checkedAtUtc`; unknown MCP tool returns SDK error not shared envelope; coverage accepts unknown args; `--help`/`-h` treated as unknown command; workflow path filters; unused direct dependency `zod`; root `AGENTS.md` absent on task branch, `angular/main` and `codex/production-roadmap` and is gitignored.
+- 2026-10-27 QA APPROVE, attempt 1. HEAD reviewed `d37b758` against `angular/main` `5545d42`; CI run [40512257300](https://github.com/dimitriskl/CodeAtlas/actions/runs/40512257300) green on both OSes; local `npm ci`, lint, typecheck, test (10/10) pass. Spec: all 7 acceptance criteria met (package and bins, CI matrix and pack-hash diff, in-process and stdio MCP seam tests list only `coverage`, envelope with freshness `unknown` and coverage block, CLI `--version` and exit-2 `invalid_arguments`, `0.00.01` with separate contract/schema/app constants, `MCP-CONTRACT.md` envelope section); no scope creep, changes limited to `CodeAtlas.Angular/` and the new workflow, envelope fields match .NET `ResponseContract`. Standards: strict TS/ESM, ESLint and Prettier clean, Vitest Arrange/Act/Assert with one Act, SHA-pinned actions with read-only permissions, no secrets or unsafe input; Tester notes are non-blocking (MCP error envelope is task 16, `zod` is a required peer of `@modelcontextprotocol/sdk` 1.32.2); optional follow-ups: shared test helper for the duplicated `isTextBlock`, a fixed `now` for the in-process `checkedAtUtc`, drop the redundant `not.toBe` lines.
