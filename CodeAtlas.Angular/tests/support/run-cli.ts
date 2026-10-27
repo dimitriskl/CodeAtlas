@@ -12,7 +12,14 @@ export function readPackageVersion(): string {
   return manifest.version;
 }
 
-export function runCli(args: readonly string[]): Promise<{
+export function runCli(
+  args: readonly string[],
+  options: {
+    cwd?: string;
+    env?: NodeJS.ProcessEnv;
+    stdin?: string;
+  } = {},
+): Promise<{
   exitCode: number;
   stdout: string;
   stderr: string;
@@ -20,8 +27,9 @@ export function runCli(args: readonly string[]): Promise<{
   const cli = path.join(packageRoot, "dist", "cli.js");
   return new Promise((resolve, reject) => {
     const child = spawn(process.execPath, [cli, ...args], {
-      cwd: packageRoot,
-      stdio: ["ignore", "pipe", "pipe"],
+      cwd: options.cwd ?? packageRoot,
+      env: options.env ?? process.env,
+      stdio: ["pipe", "pipe", "pipe"],
     });
     const stdout: Buffer[] = [];
     const stderr: Buffer[] = [];
@@ -39,5 +47,10 @@ export function runCli(args: readonly string[]): Promise<{
         stderr: Buffer.concat(stderr).toString("utf8"),
       });
     });
+    child.stdin.on("error", () => {
+      // The process can exit before the pipe is read.
+    });
+    if (options.stdin === undefined) child.stdin.end();
+    else child.stdin.end(options.stdin);
   });
 }
