@@ -18,16 +18,17 @@ public class AnalysisException(string message, IReadOnlyList<string>? diagnostic
     public IReadOnlyList<string> Diagnostics { get; } = diagnostics ?? [];
 }
 
-/// <summary>A read-only semantic snapshot. Reload after changing source or build configuration.</summary>
+/// <summary>A loaded semantic workspace. Source text can be replaced in memory; reload after a build-configuration change.</summary>
 public sealed partial class SolutionAnalysis : IDisposable
 {
     private readonly MSBuildWorkspace workspace;
-    private readonly Solution solution;
+    private Solution solution;
     private readonly string directory;
     private readonly IReadOnlyList<string> warnings;
     private bool ownsWorkspace = true;
     private Dictionary<string, Dictionary<string, string>> evaluatedProperties = new(SnapshotInputModel.PathComparer);
     private string[] evaluatedImports = [];
+    private string[] relevantEnvironment = [];
     private static string? selectedMSBuildPath;
 
     private SolutionAnalysis(MSBuildWorkspace workspace, Solution solution, string path, IReadOnlyList<string> warnings)
