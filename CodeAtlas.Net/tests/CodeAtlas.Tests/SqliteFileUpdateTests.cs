@@ -46,6 +46,40 @@ public sealed class SqliteFileUpdateTests
     }
 
     [Fact]
+    public async Task InMemoryEditThenReplacingFileRowsEqualsAFullRebuild()
+    {
+        // Arrange
+        using var sourceFixture = await SampleCopy.CreateAsync();
+        var original = Path.Combine(sourceFixture.Root, "original.db");
+        await IndexAsync(sourceFixture.Solution, original);
+        var workingCopy = Path.Combine(sourceFixture.Root, "working.db");
+        File.Copy(original, workingCopy);
+        var source = await File.ReadAllTextAsync(sourceFixture.Calculator);
+        var edited = source.Replace(
+            "public static int LocalCaller() => Calculate(1);",
+            "public static int LocalCaller() => Calculate(1);\n    public static int Extra() => Calculate(4);",
+            StringComparison.Ordinal);
+        using var analysis = await SolutionAnalysis.LoadAsync(sourceFixture.Solution);
+        analysis.ApplyDocumentText(sourceFixture.Calculator, edited);
+        var beforeReferences = FindReferences(workingCopy, Calculate);
+        using var editedFixture = await SampleCopy.CreateAsync();
+        await File.WriteAllTextAsync(editedFixture.Calculator, edited);
+        var expected = await IndexAsync(editedFixture.Solution, Path.Combine(editedFixture.Root, "expected.db"));
+
+        // Act
+        var rows = await analysis.FileRowsAsync(sourceFixture.Calculator);
+
+        // Assert
+        SqliteIndexWriter.ReplaceFileRows(workingCopy, CalculatorFile, rows.Methods, rows.References);
+        var actual = ReadRows(workingCopy);
+        var actualReferences = FindReferences(workingCopy, Calculate);
+        Assert.Equal(beforeReferences.Length + 1, actualReferences.Length);
+        Assert.Equal(FindReferences(expected.Database, Calculate), actualReferences);
+        Assert.Equal(expected.Rows.Methods, actual.Methods);
+        EqualReferences(expected.Rows.References, actual.References);
+    }
+
+    [Fact]
     public async Task InjectedFailureLeavesTheWorkingCopyUnchanged()
     {
         // Arrange

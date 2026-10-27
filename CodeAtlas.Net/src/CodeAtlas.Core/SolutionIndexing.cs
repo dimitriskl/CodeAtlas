@@ -114,6 +114,12 @@ public sealed partial class SolutionAnalysis
         }
     }
 
+    private async Task<(ISymbol[] Symbols, MethodInfo[] Methods)> SourceDeclarationsAsync(CancellationToken cancellationToken)
+    {
+        var symbols = (await SymbolFinder.FindSourceDeclarationsAsync(solution, _ => true, SymbolFilter.TypeAndMember, cancellationToken)).ToArray();
+        return (symbols, DescribeMethods(symbols).ToArray());
+    }
+
     /// <summary>
     /// Analyses the loaded solution and writes each section to a temporary database.
     /// Reference rows are written and dropped before documentation, facts and duplicates.
@@ -128,8 +134,7 @@ public sealed partial class SolutionAnalysis
         var analysis = this;
         var projects = solution.Projects.ToArray();
         progress?.Report(new(IndexStage.DiscoveringSymbols));
-        var symbols = (await SymbolFinder.FindSourceDeclarationsAsync(analysis.solution, _ => true, SymbolFilter.TypeAndMember, cancellationToken)).ToArray();
-        var methods = analysis.DescribeMethods(symbols).ToArray();
+        var (symbols, methods) = await analysis.SourceDeclarationsAsync(cancellationToken);
         var indexId = Guid.NewGuid().ToString("N");
         var incrementalCapture = await analysis.CaptureIncrementalStateAsync(indexId, beforeIndexing, cancellationToken);
         var refreshed = await analysis.CollectRefreshReferencesAsync(previousIndex, incrementalCapture,

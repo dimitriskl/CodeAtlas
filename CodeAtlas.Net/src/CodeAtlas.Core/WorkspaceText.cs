@@ -12,12 +12,7 @@ public sealed partial class SolutionAnalysis
     /// </summary>
     public string[] ApplyDocumentText(string path, string text)
     {
-        var full = Path.GetFullPath(path, directory);
-        var ids = solution.Projects.SelectMany(project => project.Documents)
-            .Where(document => document.FilePath is not null && SnapshotInputModel.PathComparer.Equals(document.FilePath, full))
-            .Select(document => document.Id)
-            .Distinct()
-            .ToArray();
+        var ids = DocumentsAt(path).Select(document => document.Id).ToArray();
         if (ids.Length == 0)
             return [];
         var updated = solution;
@@ -31,6 +26,15 @@ public sealed partial class SolutionAnalysis
         solution = workspace.CurrentSolution;
         return ids.Select(id => Relative(solution.GetDocument(id)!.FilePath!))
             .Distinct(StringComparer.Ordinal)
+            .ToArray();
+    }
+
+    private Document[] DocumentsAt(string path)
+    {
+        var full = Path.GetFullPath(path, directory);
+        return solution.Projects.SelectMany(project => project.Documents)
+            .Where(document => document.FilePath is not null && SnapshotInputModel.PathComparer.Equals(document.FilePath, full))
+            .DistinctBy(document => document.Id)
             .ToArray();
     }
 }

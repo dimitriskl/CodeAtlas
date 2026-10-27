@@ -69,6 +69,8 @@ On Windows, `File.Replace` can make the pointer name briefly unavailable to a re
 
 A live update does not write that generation. It copies `index.db` and calls `ReplaceFileRows` on the private copy: one transaction deletes that file's `methods` and `source_references` rows, drops `reference_keys` for methods removed from the file, and inserts the supplied rows. The file content hash, input manifest, symbol and fact rows, and generation header stay as copied until the copy is published as a new generation.
 
+Those rows come from the loaded workspace after `ApplyDocumentText`, via `FileRowsAsync`. It uses the same method and reference builders as a full index and returns only that file's methods plus references located in that file. It does not write the database, update the file hash, manifest or generation header, or start a watcher.
+
 ## Legacy JSON
 
 - Generations written before 0.00.35 (manifest version 1, `index.json` and `catalog.json`) are still read through the previous full-load path, with its whole-file SHA-256 checks.
