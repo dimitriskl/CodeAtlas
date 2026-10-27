@@ -18,8 +18,8 @@ Status: in-test
 
 ## Acceptance criteria
 
-- [ ] The package builds, and `npm pack` produces the same archive contents on Windows and Ubuntu.
-- [ ] CI runs lint, type-check, tests and pack on both OSes, for pushes to `angular/main` and for PRs to it.
+- [x] The package builds, and `npm pack` produces the same archive contents on Windows and Ubuntu.
+- [x] CI runs lint, type-check, tests and pack on both OSes, for pushes to `angular/main` and for PRs to it.
 - [x] MCP seam test: an in-process server and an SDK client list exactly the tool `coverage`.
 - [x] MCP seam test: `coverage` returns `contractVersion: 1`, `command: "coverage"`, `success: true`, `responseToolVersion` (= package version), `warningCount: 0`, freshness `unknown` and a coverage block.
 - [x] CLI seam test: `codeatlas-ng --version` prints the package version, and an unknown command exits 2 with an `invalid_arguments` JSON error.
@@ -28,4 +28,4 @@ Status: in-test
 
 ## Review log
 
-- 2026-10-27: Scaffolded `codeatlas-ng` (Node 24, strict TypeScript, ESM, ESLint, Prettier, Vitest, lockfile) with bins `codeatlas-ng` and `codeatlas-ng-mcp`. CLI `--version` prints `0.00.01`; an unknown command exits 2 with `invalid_arguments` JSON on stderr. The MCP server registers only `coverage`, which returns the shared envelope, freshness `unknown`, and the static coverage boundary from `docs/MCP-CONTRACT.md`. Contract, schema, and app versions are separate constants. Workflow `.github/workflows/codeatlas-angular.yml` runs lint, type-check, tests, and pack on Windows Server 2025 and Ubuntu 24.04 for `angular/main` and PRs to it, then diffs the packed file hashes. The two CI acceptance criteria stay open until that run is green.
+- 2026-10-27: Scaffolded `codeatlas-ng` (Node 24, strict TypeScript, ESM, ESLint, Prettier, Vitest, lockfile) with bins `codeatlas-ng` and `codeatlas-ng-mcp`. CLI `--version` prints `0.00.01`; an unknown command exits 2 with `invalid_arguments` JSON on stderr. The MCP server registers only `coverage`, which returns the shared envelope, freshness `unknown`, and the static coverage boundary from `docs/MCP-CONTRACT.md`. Contract, schema, and app versions are separate constants. Workflow `.github/workflows/codeatlas-angular.yml` runs lint, type-check, tests, and pack on Windows Server 2025 and Ubuntu 24.04 for `angular/main` and PRs to it, then diffs the packed file hashes. Run [40510458967](https://github.com/dimitriskl/CodeAtlas/actions/runs/40510458967) is green on both operating systems, and the packed file hashes match. Git's tar on Windows treats `C:` as a remote host, so the manifest step reads the ustar archive in Node.
