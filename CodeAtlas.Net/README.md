@@ -104,6 +104,8 @@ The original live queries remain available: replace `--index <index.json>` with 
 
 `edit` takes `path` and `text` and publishes a new generation. `find-symbol` takes `name` and optional `kind` (`method` by default). `search` takes `query` and optional `mode` and `kind` (defaults `assisted` and `method`, the same as `search-symbols`). `find-references` takes `symbol`. Each answer is read from the current generation. After `edit`, a later query compares each tracked file's length and last-write time with the stamp taken at publication and hashes only files whose stamp changed. A content change outside the process is `stale_index`. Publishing the generation still hashes every input.
 
+Each source file is indexed once, at its real path relative to the solution. A symlink to a file already in the solution does not add a second file or symbol. A symlink to a file outside the solution is skipped and listed in the warning report. An edit through either path updates that one file.
+
 ## Freshness and agent workflow
 
 Check the snapshot before relying on the overview:

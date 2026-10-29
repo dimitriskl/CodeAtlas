@@ -56,7 +56,10 @@ public sealed partial class SolutionAnalysis
             ?? throw new AnalysisException("The working copy has no incremental state.");
         var duplicates = await DuplicateFinder.CreateAsync(solution, SolutionPath, state, cancellationToken);
         var (contentHash, surfaceHash) = await AppliedTreeHashAsync(path, cancellationToken);
-        SqliteIndexWriter.UpdateWorkingCopy(workingCopy, Path.GetFullPath(path, directory), updated[0], text,
+        var absolute = DocumentsAt(path).Select(document => SourcePaths.Real(document.FilePath!)).Distinct(SnapshotInputModel.PathComparer).ToArray();
+        if (absolute.Length != 1)
+            throw new AnalysisException($"Open documents do not share one path: {path}");
+        SqliteIndexWriter.UpdateWorkingCopy(workingCopy, absolute[0], updated[0], text,
             rows.Methods, rows.References, symbols, catalog, duplicates, IndexedTypes(declared), contentHash, surfaceHash);
     }
 

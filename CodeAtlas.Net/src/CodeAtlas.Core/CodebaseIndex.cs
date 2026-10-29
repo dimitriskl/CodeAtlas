@@ -86,18 +86,20 @@ internal static class InputTracker
         return result;
     }
 
-    private static void Collect(DirectoryInfo directory, HashSet<string> files, CancellationToken cancellationToken)
+    private static void Collect(DirectoryInfo directory, HashSet<string> files, CancellationToken cancellationToken, string? root = null)
     {
+        root ??= directory.FullName;
         foreach (var entry in directory.EnumerateFileSystemInfos())
         {
             cancellationToken.ThrowIfCancellationRequested();
             if (entry is DirectoryInfo child)
             {
                 if (!ExcludedDirectories.Contains(child.Name) && !child.Attributes.HasFlag(FileAttributes.ReparsePoint))
-                    Collect(child, files, cancellationToken);
+                    Collect(child, files, cancellationToken, root);
             }
             else if (Extensions.Contains(entry.Extension) || entry.Name is ".editorconfig" or ".globalconfig")
-                files.Add(entry.FullName);
+                if (SourcePaths.Tracked(root, entry.FullName) is { } tracked)
+                    files.Add(tracked);
         }
     }
 

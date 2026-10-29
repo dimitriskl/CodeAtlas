@@ -176,7 +176,7 @@ public sealed class StructuralCatalogBuilder
     private static ISymbol Canonical(ISymbol symbol) => symbol is IMethodSymbol method
         ? method.OriginalDefinition.PartialDefinitionPart ?? method.OriginalDefinition : symbol.OriginalDefinition;
 
-    private string Relative(string path) => Path.GetRelativePath(directory, path).Replace('\\', '/');
+    private string Relative(string path) => SourcePaths.Relative(directory, path);
     private DocumentationRange Range(Location location)
     {
         var span = location.GetLineSpan();

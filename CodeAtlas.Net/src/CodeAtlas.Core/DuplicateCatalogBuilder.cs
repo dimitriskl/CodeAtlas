@@ -16,7 +16,7 @@ public static class DuplicateCatalogBuilder
     {
         limits ??= new(); limits.Validate();
         var directory = Path.GetDirectoryName(Path.GetFullPath(solutionPath))!;
-        string Relative(string path) => Path.GetRelativePath(directory, path).Replace('\\', '/');
+        string Relative(string path) => SourcePaths.Relative(directory, path);
         var vocabulary = new List<string>();
         var vocabularyIds = new Dictionary<string, int>(StringComparer.Ordinal);
         var bodies = new List<DuplicateBody>();

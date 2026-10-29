@@ -31,9 +31,9 @@ public sealed partial class SolutionAnalysis
 
     private Document[] DocumentsAt(string path)
     {
-        var full = Path.GetFullPath(path, directory);
+        var full = SourcePaths.Real(Path.GetFullPath(path, directory));
         return solution.Projects.SelectMany(project => project.Documents)
-            .Where(document => document.FilePath is not null && SnapshotInputModel.PathComparer.Equals(document.FilePath, full))
+            .Where(document => document.FilePath is not null && SnapshotInputModel.PathComparer.Equals(SourcePaths.Real(document.FilePath), full))
             .DistinctBy(document => document.Id)
             .ToArray();
     }

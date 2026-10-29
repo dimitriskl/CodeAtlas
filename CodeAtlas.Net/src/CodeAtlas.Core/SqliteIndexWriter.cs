@@ -181,7 +181,7 @@ internal sealed partial class SqliteIndexWriter : IDisposable
         var solutionDirectory = Path.GetDirectoryName(solution)!;
         foreach (var (path, fingerprint) in manifest.Files)
             if (fingerprint.Exists && fingerprint.Sha256 is { } hash && Path.IsPathFullyQualified(path))
-                contentHashes.TryAdd(Path.GetRelativePath(solutionDirectory, path).Replace('\\', '/'), hash);
+                contentHashes.TryAdd(SourcePaths.Relative(solutionDirectory, path), hash);
     }
 
     public void WriteHeader(CodebaseIndex index)

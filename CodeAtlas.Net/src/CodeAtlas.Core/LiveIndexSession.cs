@@ -154,7 +154,7 @@ public sealed class LiveIndexSession : IDisposable
             cancellationToken.ThrowIfCancellationRequested();
             if (!manifest.Files.TryGetValue(path, out var recorded) || !recorded.Exists || !File.Exists(path)
                 || !string.Equals(await HashAsync(path, cancellationToken), recorded.Sha256, StringComparison.OrdinalIgnoreCase))
-                stale.Add(Path.GetRelativePath(Path.GetDirectoryName(solution)!, path).Replace('\\', '/'));
+                stale.Add(SourcePaths.Relative(Path.GetDirectoryName(solution)!, path));
         }
         return stale.ToArray();
     }

@@ -45,13 +45,13 @@ public static class DuplicateFinder
         // share one path, so none of their context hashes can represent that identity.
         // The builder reports their method omissions instead of selecting one TFM.
         foreach (var project in solution.Projects.GroupBy(project =>
-                     Path.GetRelativePath(directory,project.FilePath!).Replace('\\','/'),StringComparer.Ordinal)
+                     SourcePaths.Relative(directory, project.FilePath!), StringComparer.Ordinal)
                      .Where(group => group.Count() == 1).Select(group => group.Single()))
         {
             cancellationToken.ThrowIfCancellationRequested();
             var compilation = await project.GetCompilationAsync(cancellationToken)
                 ?? throw new AnalysisException("Duplicate extraction requires a compilation.");
-            contexts.Add(Path.GetRelativePath(directory,project.FilePath!).Replace('\\','/'),
+            contexts.Add(SourcePaths.Relative(directory, project.FilePath!),
                 DuplicateDigest.Json(new { project.Name, project.AssemblyName, Options = compilation.Options.ToString(),
                     References = compilation.References.Select(r => r.Display).ToArray() }));
         }

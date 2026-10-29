@@ -25,7 +25,7 @@ One database per generation. Rows that describe source carry a `file_id`, so ste
 | Table | Rows | Key / indexes |
 | --- | --- | --- |
 | `meta` | Identity (`indexId`, `solution`), schema and tool version, creation time, warnings, input roots, refresh summary, documentation and structural coverage, input manifest without its file list, incremental and duplicate headers (JSON) | `key` |
-| `files` | Solution-relative path, content SHA-256 from the input manifest | `id`, unique `path` |
+| `files` | Real file's solution-relative path, content SHA-256 from the input manifest | `id`, unique `path` |
 | `projects` | Path, name, dependencies, files | `ordinal` |
 | `types`, `methods` | Records with file and position | `id`, `name`, `containing_type`, `project`, `file_id` |
 | `reference_keys`, `source_references` | References grouped by method key | `method_id`; `(key_ordinal, ordinal)`; `file_id` |
@@ -77,7 +77,7 @@ Those rows come from the loaded workspace after `ApplyDocumentText`, via `FileRo
 
 `LiveIndexSession` keeps that solution loaded. One edit calls `UpdateWorkingCopyAsync` and `PublishWorkingCopyAsync`. Find-references, find-symbol and search read the new current generation. The edited file's type, symbol, fact, search and duplicate rows, and its incremental tree hash, match a full rebuild of that text. A later edit in the same session publishes from the updated hash.
 
-`codeatlas live --solution <path>` is that session as a process. It loads the solution once, then reads one JSON request per stdin line (`edit` with `path` and `text`, `find-symbol`, `search`, `find-references`) and writes one JSON response per line with the existing CLI envelope. It does not start a file watcher. A query of the generation that session just published compares each tracked file's length and last-write time with the stamp taken when the generation was published, and hashes only files whose stamp changed. Other commands still hash every input. A file that appears outside the tracked set, or an environment change, is not detected until a full check.
+`codeatlas live --solution <path>` is that session as a process. It loads the solution once, then reads one JSON request per stdin line (`edit` with `path` and `text`, `find-symbol`, `search`, `find-references`) and writes one JSON response per line with the existing CLI envelope. It does not start a file watcher. A query of the generation that session just published compares each tracked file's length and last-write time with the stamp taken when the generation was published, and hashes only files whose stamp changed. Other commands still hash every input. A file that appears outside the tracked set, or an environment change, is not detected until a full check. Source paths in that generation are real paths, so an edit made through a symlink updates the same rows. A symlink to a file outside the solution is not indexed; the warning report names it.
 
 ## Legacy JSON
 

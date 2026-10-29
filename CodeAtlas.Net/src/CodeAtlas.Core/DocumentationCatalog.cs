@@ -365,7 +365,7 @@ public sealed class DocumentationCatalog
         return Regex.Replace(raw, @"(?m)^[ \t]*/// ?", "");
     }
 
-    private string Relative(string path) => System.IO.Path.GetRelativePath(directory, path).Replace('\\', '/');
+    private string Relative(string path) => SourcePaths.Relative(directory, path);
     private SourcePosition Position(Location location) => Range(location).Start;
     private DocumentationRange Range(Location location)
     {

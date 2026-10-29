@@ -52,7 +52,7 @@ public sealed partial class SolutionAnalysis
                 // Exact path and ordinal conservatively reject reorder/case/path changes.
                 var key = JsonSerializer.Serialize(new[] { projectPath, project.Name, tree.FilePath, (ordinal++).ToString(CultureInfo.InvariantCulture) });
                 var physical = document?.FilePath is { } file && Path.IsPathFullyQualified(file)
-                    ? Path.GetFullPath(file) : null;
+                    ? SourcePaths.Real(file) : null;
                 // GetLineSpan(), used by the full index, uses the tree's original path.
                 // Use exactly the same Relative helper so origin removal matches it.
                 var originPath = string.IsNullOrEmpty(tree.FilePath) ? "" : Relative(tree.FilePath);

@@ -230,7 +230,7 @@ public sealed partial class SolutionAnalysis
             .Append(Path.GetDirectoryName(path)!).Distinct(SnapshotInputModel.PathComparer).Order(SnapshotInputModel.PathComparer).ToArray();
         var inputs = projects.SelectMany(project => project.Documents.Cast<TextDocument>()
                 .Concat(project.AdditionalDocuments).Concat(project.AnalyzerConfigDocuments))
-            .Select(document => document.FilePath).OfType<string>()
+            .Select(document => document.FilePath).OfType<string>().Select(SourcePaths.Real)
             .Concat(projects.Select(project => project.FilePath!))
             .Concat(roots.SelectMany(InputTracker.ConfigurationPaths))
             .Concat(projects.Select(project => Path.Combine(Path.GetDirectoryName(project.FilePath!)!, "obj", "project.assets.json")))

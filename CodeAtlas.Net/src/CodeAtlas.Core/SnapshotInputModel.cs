@@ -251,7 +251,8 @@ public static class SnapshotInputModel
             }
             else if (scope.Extensions.Contains(entry.Extension, StringComparer.OrdinalIgnoreCase)
                 || scope.FileNames.Contains(entry.Name, PathComparer))
-                files.Add(entry.FullName);
+                if (SourcePaths.Tracked(scope.Directory, entry.FullName) is { } tracked)
+                    files.Add(tracked);
         }
     }
 }

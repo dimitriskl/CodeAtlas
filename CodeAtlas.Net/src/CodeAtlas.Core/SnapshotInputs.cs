@@ -39,7 +39,7 @@ public static class SnapshotInputs
 
     private static IndexFreshness Describe(InputFreshnessResult result, string solution) =>
         new(result.TrackedInputsChanged, result.ChangedInputs.Select(path => Path.IsPathFullyQualified(path)
-            ? Path.GetRelativePath(Path.GetDirectoryName(solution)!, path).Replace('\\', '/') : path).ToArray())
+            ? SourcePaths.Relative(Path.GetDirectoryName(solution)!, path) : path).ToArray())
         { Status = result.Status, CheckedAtUtc = result.CheckedAtUtc, Coverage = result.Coverage, Diagnostics = result.Diagnostics };
 }
 
