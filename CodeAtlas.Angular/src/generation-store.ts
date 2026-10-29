@@ -39,6 +39,23 @@ export type PublishedStatus = {
   changedFiles: string[];
 };
 
+export type StoredSymbol = {
+  id: string;
+  project: string;
+  path: string;
+  qualifiedName: string;
+  kind: string;
+  line: number;
+  column: number;
+  signatures: string[];
+};
+
+type OpenedGeneration = {
+  storage: WorkspaceStorage;
+  manifest: Manifest;
+  database: Database.Database;
+};
+
 type Manifest = {
   manifestVersion: 1;
   generationId: string;
@@ -141,6 +158,30 @@ function isProcessAlive(pid: number): boolean {
 
 /** The published generation, or null when this workspace has no current.json. */
 export function readPublishedIndex(workspacePath: string): PublishedStatus | null {
+  const opened = openGeneration(workspacePath);
+  if (opened === null) return null;
+  try {
+    return statusFrom(opened, workspacePath);
+  } finally {
+    opened.database.close();
+  }
+}
+
+/** The published generation and its symbols, or null when no current.json exists. */
+export function readPublishedSymbols(workspacePath: string): {
+  status: PublishedStatus;
+  symbols: StoredSymbol[];
+} | null {
+  const opened = openGeneration(workspacePath);
+  if (opened === null) return null;
+  try {
+    return { status: statusFrom(opened, workspacePath), symbols: readSymbols(opened.database) };
+  } finally {
+    opened.database.close();
+  }
+}
+
+function openGeneration(workspacePath: string): OpenedGeneration | null {
   let storage: WorkspaceStorage;
   try {
     storage = workspaceStorage(workspacePath);
@@ -149,7 +190,7 @@ export function readPublishedIndex(workspacePath: string): PublishedStatus | nul
     throw error;
   }
   if (!existsSync(storage.currentJson)) return null;
-  const manifest = readManifest(storage);
+  const manifest = readManifest(storage, workspacePath);
   const databasePath = path.join(
     storage.directory,
     "generations",
@@ -165,46 +206,109 @@ export function readPublishedIndex(workspacePath: string): PublishedStatus | nul
   if (bytes.length !== artifact.length || digest !== artifact.sha256) {
     throw new CommandError("invalid_index", "Snapshot artifact checksum mismatch: index.db.");
   }
-  const database = new Database(databasePath, { readonly: true, fileMustExist: true });
-  try {
-    const metadata = readMetadata(database);
-    if (metadata.get("schemaVersion") !== String(schemaVersion)) {
-      throw new CommandError("unsupported_index", "Unsupported index schema.");
-    }
-    if (metadata.get("generationId") !== manifest.generationId) {
-      throw new CommandError("invalid_index", "Snapshot and index identities disagree.");
-    }
-    const templateCoverage = metadata.get("templateCoverage");
-    if (!isTemplateCoverage(templateCoverage)) {
-      throw new CommandError("invalid_index", "Invalid template coverage in the generation.");
-    }
-    const storedContract = Number(metadata.get("contractVersion"));
-    const storedApp = metadata.get("appVersion");
-    if (!Number.isInteger(storedContract) || storedApp === undefined || storedApp.length === 0) {
-      throw new CommandError("invalid_index", "Invalid versions in the generation.");
-    }
-    const files = database.prepare<[], TrackedFile>("SELECT path, sha256 FROM tracked_files").all();
-    return {
-      generationId: manifest.generationId,
-      schemaVersion,
-      contractVersion: storedContract,
-      appVersion: storedApp,
-      templateCoverage,
-      counts: {
-        projects: countRows(database, "projects"),
-        files: countRows(database, "tracked_files"),
-        symbols: countRows(database, "symbols"),
-      },
-      indexPath: storage.currentJson,
-      canonical: storage.canonical,
-      changedFiles: changedTrackedFiles(storage.canonical, files),
-    };
-  } finally {
-    database.close();
-  }
+  return {
+    storage,
+    manifest,
+    database: new Database(databasePath, { readonly: true, fileMustExist: true }),
+  };
 }
 
-function readManifest(storage: WorkspaceStorage): Manifest {
+function statusFrom(opened: OpenedGeneration, workspacePath: string): PublishedStatus {
+  const metadata = readMetadata(opened.database);
+  if (metadata.get("schemaVersion") !== String(schemaVersion)) {
+    throw unsupportedIndex(workspacePath);
+  }
+  if (metadata.get("generationId") !== opened.manifest.generationId) {
+    throw new CommandError("invalid_index", "Snapshot and index identities disagree.");
+  }
+  const templateCoverage = metadata.get("templateCoverage");
+  if (!isTemplateCoverage(templateCoverage)) {
+    throw new CommandError("invalid_index", "Invalid template coverage in the generation.");
+  }
+  const storedContract = Number(metadata.get("contractVersion"));
+  const storedApp = metadata.get("appVersion");
+  if (!Number.isInteger(storedContract) || storedApp === undefined || storedApp.length === 0) {
+    throw new CommandError("invalid_index", "Invalid versions in the generation.");
+  }
+  const files = opened.database
+    .prepare<[], TrackedFile>("SELECT path, sha256 FROM tracked_files")
+    .all();
+  return {
+    generationId: opened.manifest.generationId,
+    schemaVersion,
+    contractVersion: storedContract,
+    appVersion: storedApp,
+    templateCoverage,
+    counts: {
+      projects: countRows(opened.database, "projects"),
+      files: countRows(opened.database, "tracked_files"),
+      symbols: countRows(opened.database, "symbols"),
+    },
+    indexPath: opened.storage.currentJson,
+    canonical: opened.storage.canonical,
+    changedFiles: changedTrackedFiles(opened.storage.canonical, files),
+  };
+}
+
+function readSymbols(database: Database.Database): StoredSymbol[] {
+  const rows = database
+    .prepare<
+      [],
+      {
+        id: string;
+        project: string;
+        path: string;
+        qualifiedName: string;
+        kind: string;
+        line: number;
+        column: number;
+      }
+    >("SELECT id, project, path, qualified_name AS qualifiedName, kind, line, column FROM symbols")
+    .all();
+  const signatures = readSignatures(database);
+  return rows.map((row) => ({
+    id: row.id,
+    project: row.project,
+    path: row.path,
+    qualifiedName: row.qualifiedName,
+    kind: row.kind,
+    line: row.line,
+    column: row.column,
+    signatures: signatures.get(row.id) ?? [],
+  }));
+}
+
+function readSignatures(database: Database.Database): Map<string, string[]> {
+  const table = database
+    .prepare<[], { name: string }>(
+      "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'symbol_signatures'",
+    )
+    .get();
+  if (table === undefined) {
+    throw new CommandError("invalid_index", "Snapshot is missing the symbol_signatures table.");
+  }
+  const signatures = new Map<string, string[]>();
+  const rows = database
+    .prepare<[], { symbol_id: string; signature: string }>(
+      "SELECT symbol_id, signature FROM symbol_signatures ORDER BY symbol_id, ordinal",
+    )
+    .all();
+  for (const row of rows) {
+    const existing = signatures.get(row.symbol_id);
+    if (existing === undefined) signatures.set(row.symbol_id, [row.signature]);
+    else existing.push(row.signature);
+  }
+  return signatures;
+}
+
+function unsupportedIndex(workspacePath: string): CommandError {
+  return new CommandError(
+    "unsupported_index",
+    `Unsupported index schema. Run codeatlas-ng index --workspace ${workspacePath} to rebuild it.`,
+  );
+}
+
+function readManifest(storage: WorkspaceStorage, workspacePath: string): Manifest {
   let parsed: unknown;
   try {
     parsed = JSON.parse(readFileSync(storage.currentJson, "utf8")) as unknown;
@@ -229,9 +333,14 @@ function readManifest(storage: WorkspaceStorage): Manifest {
     typeof index.length !== "number" ||
     typeof index.sha256 !== "string" ||
     !/^[0-9a-f]{64}$/.test(index.sha256) ||
-    parsed.schemaVersion !== schemaVersion ||
     parsed.workspace !== storage.identity
   ) {
+    throw new CommandError("invalid_index", "Invalid snapshot manifest.");
+  }
+  if (parsed.schemaVersion !== schemaVersion) {
+    if (typeof parsed.schemaVersion === "number" && Number.isInteger(parsed.schemaVersion)) {
+      throw unsupportedIndex(workspacePath);
+    }
     throw new CommandError("invalid_index", "Invalid snapshot manifest.");
   }
   return {
@@ -305,6 +414,12 @@ function writeDatabase(
         line INTEGER NOT NULL,
         column INTEGER NOT NULL
       );
+      CREATE TABLE symbol_signatures (
+        symbol_id TEXT NOT NULL,
+        ordinal INTEGER NOT NULL,
+        signature TEXT NOT NULL,
+        PRIMARY KEY (symbol_id, ordinal)
+      );
     `);
     const insert = database.transaction(() => {
       const metadata = database.prepare("INSERT INTO metadata (key, value) VALUES (?, ?)");
@@ -324,6 +439,9 @@ function writeDatabase(
       const symbol = database.prepare(
         "INSERT INTO symbols (id, project, path, qualified_name, kind, line, column) VALUES (?, ?, ?, ?, ?, ?, ?)",
       );
+      const signature = database.prepare(
+        "INSERT INTO symbol_signatures (symbol_id, ordinal, signature) VALUES (?, ?, ?)",
+      );
       for (const item of workspace.symbols) {
         symbol.run(
           item.id,
@@ -334,6 +452,9 @@ function writeDatabase(
           item.line,
           item.column,
         );
+        item.signatures.forEach((text, ordinal) => {
+          signature.run(item.id, ordinal, text);
+        });
       }
     });
     insert();

@@ -19,7 +19,7 @@ export const contractVersion = 1;
  * Persisted index schema. Independent of {@link contractVersion} and {@link appVersion}.
  * `index` writes this schema into each generation.
  */
-export const schemaVersion = 1;
+export const schemaVersion = 2;
 
 /**
  * Application version (`x.xx.xx`). This is the package version and `responseToolVersion`.

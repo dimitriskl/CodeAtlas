@@ -25,5 +25,6 @@ Status: ready
 - [ ] CLI seam test: a fake provider error on item 2 stops the batch, keeps item 1, and exits non-zero.
 - [ ] A test for each of openai, azure, anthropic, kimi, ollama and openrouter, against a fake HTTP server.
 - [ ] MCP seam test: no query triggers an HTTP call to any provider.
+- [ ] CLI seam test: `describe` against a stale index exits 3 with the stale message and calls no provider. (Moved from task 04, which had no CLI query command to test it with.)
 
 ## Review log
