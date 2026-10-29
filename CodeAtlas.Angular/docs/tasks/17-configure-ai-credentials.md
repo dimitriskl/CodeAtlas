@@ -17,7 +17,7 @@ User stories: 36, 37, 38, 60. PRD: [Modules](../prd/0001-initial.md#modules) (pr
 
 - [01 — Scaffold package, CI and MCP server skeleton](01-scaffold-package-ci-mcp-skeleton.md)
 
-Status: in-qa
+Status: rejected
 
 ## Acceptance criteria
 
@@ -117,3 +117,48 @@ Status: in-qa
   Live `node dist/cli.js` with a fake `secret-tool`: an open pipe and a keychain exits 1 at 2227 ms, envelope `ai_configuration_invalid`, and does not create or change `.codeatlas/appsettings.json` (sha256 and mtime unchanged). `CODEATLAS_STDIN_FIRST_BYTE_TIMEOUT_MS=300` exits 1 at 520 ms; `0` falls back to 2224 ms. A first byte at 1700 ms then `part2` saves `part1part2`; a first byte at 2800 ms exits 1 at 2225 ms with no key and no settings. `(printf part1; sleep 1; printf part2)` saves `part1part2`. `printf key |` saves the key. `printf 'key\n'` and `printf 'key\r\n'` save the key without the line ending. A newline-only pipe exits 1 in 217 ms and saves nothing. Closed stdin, empty stdin, an empty file, and `</dev/null` exit 1 in about 210 ms and save no key. A socket reset after `part1` (`ECONNRESET`) exits 1, writes no settings, and stores no key. No keychain: `</dev/null`, a closed pipe, an open pipe, `script -qec`, and a Python PTY all exit 1 in under 260 ms, name `CODEATLAS_AI_OPENAI_KEY`, write provider, model, and endpoint, and do not prompt. Python PTY with a keychain stays alive at the hidden prompt (not exit 13), does not echo `sk-pty-hidden-7f3a`, saves that key, and exits 0. Ctrl+C on that PTY exits 1 with `An API key is required. Set CODEATLAS_AI_OPENAI_KEY.` and saves nothing. PowerShell and `reg.exe` are absolute System32 paths, `shell: false`, and `rg CredentialStoreError src` is empty. Invalid arguments exit 2 through the same `CommandError`. Exit code 3 stays on task 18 (`describe` against a stale index); PR #4 is unmerged and says that seam was deferred. Success and error envelopes are `configureAiSuccessEnvelope` and `commandErrorEnvelope`.
 
   Non-blocking: a whitespace-only pipe (`   \n`) exits 1 immediately and saves nothing, with the shared endpoint message rather than the missing-key sentence.
+- 2026-10-29 QA REJECT, attempt 3. HEAD reviewed `34028e8` (`34028e82aa17146b96f1d97f25d82753b17a3565`; Developer code `11ca1de`, Tester tests in `34028e8`) against `angular/main` `8af3f1a`, which is already the merge base, so a local merge is clean. CI run [40865455025](https://github.com/dimitriskl/CodeAtlas/actions/runs/40865455025) on `34028e8` failed. `lint, type-check, test, pack (ubuntu-24.04)` passed. `lint, type-check, test, pack (windows-2025)` failed at Test. `pack contents match on Windows and Ubuntu` was skipped. The earlier run [40862556009](https://github.com/dimitriskl/CodeAtlas/actions/runs/40862556009) on `11ca1de` passed on both OSes. Locally on Node 24.22.1 (Linux), `npm ci` (better-sqlite3 binary copied in), lint, typecheck and test (168/168) passed. `npm pack --dry-run` produced 43 files, 29.4 kB, shasum `62b2349be68bc0d1c723a4932922f9663411c484`.
+
+  **Spec**
+
+  The production code meets acceptance criteria 1–8 and QA required changes 1–5 from attempt 1. I reproduced these against the built CLI with a fake `secret-tool` and a loopback provider:
+  - With a keychain and an open pipe that never writes, the command exits 1 after 2.27 s with `An API key is required. Run configure-ai in an interactive terminal or set CODEATLAS_AI_OPENAI_KEY.` and writes no settings. A key piped after 5 s gets the same result. That message is true there.
+  - `(sleep 1; printf part1; sleep 1.5; printf part2)` stores `part1part2`, which is rule (d).
+  - `</dev/null` and an empty pipe fail in about 230 ms, which is rule (c).
+  - With no keychain, stdin is never read, including an open pipe that already holds a key. The command exits 1 in about 240 ms with `No OS keychain is available, so the API key was not saved. Set CODEATLAS_AI_OPENAI_KEY.` and writes provider, model and endpoint, which is rule (b). It also covers the optional piped-key wording.
+  - `CODEATLAS_STDIN_FIRST_BYTE_TIMEOUT_MS=300` exits in 533 ms. `-5`, `abc`, `0`, `1e3` and `99999999999999999999` all fall back to the 2 s wait, which is rule (a). The value is digits only, must be greater than 0, and is clamped to 2147483647.
+  - Python PTY with a keychain: the prompt goes to stderr, the typed key is not echoed and is stored, Backspace works, Esc and Ctrl+C cancel with `An API key is required. Set CODEATLAS_AI_OPENAI_KEY.` and save nothing, a 9006-character entry is stored as 8192 characters, and an empty Enter fails without saving. Python PTY with no keychain: no prompt, exit 1 naming the variable, and settings saved.
+  - The secret reached `secret-tool` only on stdin. It was never in argv.
+  - `reg.exe` and `powershell.exe` run from absolute `%SystemRoot%\System32` paths with `shell: false`. PowerShell gets `-ExecutionPolicy Bypass -File`, and the secret goes on stdin.
+  - Success envelopes come from `configureAiSuccessEnvelope` and errors from `commandErrorEnvelope`. `CommandError` exists only in `src/errors.ts`, including after the merge with `8af3f1a`.
+  - The in-process seam test `does not save a partial key when the stdin pipe errors after the first byte` covers a pipe error after the first byte.
+
+  The whitespace-only piped key (Tester note) is not blocking. It gets the .NET `AiConfiguration.Invalid` sentence, which .NET also shows for a typed whitespace key (`AiSetup.ConfigureAsync` → `selected.Create(key)`), and the sentence ("requires … a valid cloud-provider key") is true for that input.
+
+  The env var is a production-visible test seam. It is labelled internal in `stdinFirstByteTimeoutMs`, is not in the user docs or the MCP contract, and parses safely. The worst case is a longer wait that the user chose, so I accept it. No scope creep: only `CodeAtlas.Angular/` changed, and BOARD changes only row 17.
+
+  The spec failure is that the head is not mergeable. The CodeAtlas Angular workflow runs the suite on Windows, and the head commit fails there. The new Tester test `discards a partial key when stdin resets after the first byte` (`tests/configure-ai-key-entry.test.ts:1237`) passes a TCP socket as the child's stdin. Windows rejects that (`Error: spawn ENOTSUP`, line 1314). The test has no `child.on("error")` handler, so the promise never settles, and it fails with `Test timed out in 60000ms`. Because of that, the pack and cross-OS pack-match jobs did not run.
+
+  Why it matters: a red required check blocks the merge, and "pack contents match on Windows and Ubuntu" was not checked on this head. The failure is in test code only. The same behaviour is already covered cross-platform by the in-process seam test, and the production code on `11ca1de` was green on Windows.
+
+  **Standards**
+
+  Strict TS/ESM, ESLint and Prettier are clean. Tests are Arrange/Act/Assert with one Act each and use synthetic secrets. I found no tautologies. One documented-standard breach and one DRY breach are in the new test:
+  - It hangs instead of failing when spawn errors.
+  - `cliEnv` copies `childEnv` from `tests/support/run-cli.ts` line for line, including the Windows `SystemRoot` preload. A second copy will drift.
+
+  The production code does not log secrets. Provider error bodies are omitted, and keychain errors do not include the secret.
+
+  **Required changes**
+  1. Make CI on the PR head pass on both OSes. In `discards a partial key when stdin resets after the first byte`, skip the test on `win32`, where a socket cannot be a child's stdio (the in-process seam test already covers the behaviour there), or feed the reset another way that Windows supports. Also reject on `child.on("error")` so a spawn failure fails at once instead of timing out after 60 s.
+  2. Remove the `cliEnv` copy. Export `childEnv` from `tests/support/run-cli.ts`, or let `runCli` accept a custom stdio, and reuse it.
+
+  **Optional suggestions (non-blocking)**
+  - When there is no keychain, settings are saved before `assertModel`. A model with a control character (for example, a tab) is written to `appsettings.json`, and the error does not mention it. Validate the model before that save.
+  - `readPipedKey` keeps reading a pipe with no size limit until EOF, and only `assertKey` rejects more than 8192 characters. Stop reading after 8192 characters plus a line ending.
+  - In the hidden prompt, any ESC byte cancels, so an arrow key or a bracketed paste cancels entry. .NET `Console.ReadKey` treats arrow keys as keys, not Esc. Consider ignoring ESC sequences.
+  - The Windows helper script is written to a fixed `%TEMP%\codeatlas-ng-win-credential.ps1` and then run with `Bypass`. Write it to a unique `mkdtemp` directory so a same-user race cannot replace it.
+  - A whitespace-only key could get the missing-key sentence instead of the endpoint sentence. The current behaviour matches .NET, so this is optional.
+  - Consider moving the first-byte wait into `ConfigureAiDependencies` for in-process tests, and keep the env var only for spawned CLI tests.
+  - `isJsonObject` appears in `ai-provider.ts`, `ai-settings.ts` and `credentials.ts`. `configure-ai-key-entry.test.ts` (1572 lines) repeats its Arrange blocks. Shared fixtures would shorten it.
+  - These suggestions from attempt 1 are still open: read the keychain entry back after writing it; make the `reg query` parser a pure function; remove the `.js` extension in `resolveCommand`; remove the `rmSync` before `renameSync` in `saveAiSettings`.
