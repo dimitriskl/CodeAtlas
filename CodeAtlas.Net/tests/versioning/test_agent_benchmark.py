@@ -281,19 +281,19 @@ class AgentBenchmarkAgentTests(unittest.TestCase):
     def test_codeatlas_instruction_names_wrapper_manifest_and_refresh(self):
         # Arrange
         root = Path("C:/bench")
-        setup = {"wrapper": str(root / "tools" / "codeatlas.py"),
-                 "manifest": str(root / "work" / "codeatlas" / ".codeatlas" / "current.json"),
-                 "overview": str(root / "overview.md"),
-                 "solution": str(root / "work" / "codeatlas" / "App.sln")}
+        setup = {"wrapper": (root / "tools" / "codeatlas.py").as_posix(),
+                 "manifest": (root / "work" / "codeatlas" / ".codeatlas" / "current.json").as_posix(),
+                 "overview": (root / "overview.md").as_posix(),
+                 "solution": (root / "work" / "codeatlas" / "App.sln").as_posix()}
 
         # Act
         text = benchmark.mode_instruction("codeatlas", setup)
 
         # Assert
         self.assertIn(benchmark.codeatlas_cli(setup), text)
-        self.assertIn(Path(setup["wrapper"]).as_posix(), text)
-        self.assertIn(f'find-references --index "{Path(setup["manifest"]).as_posix()}"', text)
-        self.assertIn(f'refresh --solution "{Path(setup["solution"]).as_posix()}"', text)
+        self.assertIn("C:/bench/tools/codeatlas.py", text)
+        self.assertIn('find-references --index "C:/bench/work/codeatlas/.codeatlas/current.json"', text)
+        self.assertIn('refresh --solution "C:/bench/work/codeatlas/App.sln"', text)
         self.assertIsNone(benchmark.mode_instruction("plain"))
         with self.assertRaises(ValueError):
             benchmark.mode_instruction("codeatlas", None)
