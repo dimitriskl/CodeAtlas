@@ -15,12 +15,13 @@ import path from "node:path";
 import Database from "better-sqlite3";
 import { CommandError, nodeErrorCode } from "./errors.js";
 import { appVersion, contractVersion, schemaVersion } from "./version.js";
-import type { LoadedWorkspace, TemplateCoverage, TrackedFile } from "./workspace.js";
 import {
-  changedTrackedFiles,
-  workspaceStorage,
-  type WorkspaceStorage,
-} from "./workspace-storage.js";
+  assessTrackedFreshness,
+  type LoadedWorkspace,
+  type TemplateCoverage,
+  type TrackedFile,
+} from "./workspace.js";
+import { workspaceStorage, type WorkspaceStorage } from "./workspace-storage.js";
 
 export type PublishedGeneration = {
   generationId: string;
@@ -37,6 +38,7 @@ export type PublishedStatus = {
   indexPath: string;
   canonical: string;
   changedFiles: string[];
+  warnings: string[];
 };
 
 export type StoredSymbol = {
@@ -233,6 +235,7 @@ function statusFrom(opened: OpenedGeneration, workspacePath: string): PublishedS
   const files = opened.database
     .prepare<[], TrackedFile>("SELECT path, sha256 FROM tracked_files")
     .all();
+  const assessed = assessTrackedFreshness(opened.storage.canonical, files);
   return {
     generationId: opened.manifest.generationId,
     schemaVersion,
@@ -246,7 +249,8 @@ function statusFrom(opened: OpenedGeneration, workspacePath: string): PublishedS
     },
     indexPath: opened.storage.currentJson,
     canonical: opened.storage.canonical,
-    changedFiles: changedTrackedFiles(opened.storage.canonical, files),
+    changedFiles: assessed.changedFiles,
+    warnings: assessed.warnings,
   };
 }
 
