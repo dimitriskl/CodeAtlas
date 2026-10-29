@@ -1896,4 +1896,40 @@ describe("MCP freshness and stale refusal", () => {
       await workspace.remove();
     }
   });
+
+  it("stays fresh when an unreferenced html file outside sourceRoot changes", async () => {
+    // Arrange
+    const workspace = await copyMinimalWorkspace();
+    const notes = path.join(workspace.path, "notes");
+    mkdirSync(notes);
+    const readme = path.join(notes, "readme.html");
+    writeFileSync(readme, "<p>Notes</p>\n");
+    await indexWorkspace(workspace.path);
+    writeFileSync(readme, "<p>Notes changed</p>\n");
+    const connection = await connectInProcess();
+
+    try {
+      // Act
+      const result = await connection.client.callTool({
+        name: "coverage",
+        arguments: { workspace: workspace.path },
+      });
+
+      // Assert
+      expect(result.isError).toBeFalsy();
+      const envelope = toolEnvelope(result) as {
+        success: boolean;
+        warningCount: number;
+        freshness: { state: string; isStale: boolean; changedFiles: string[] };
+      };
+      expect(envelope.success).toBe(true);
+      expect(envelope.freshness.state).toBe("fresh");
+      expect(envelope.freshness.isStale).toBe(false);
+      expect(envelope.freshness.changedFiles).toEqual([]);
+      expect(envelope.warningCount).toBe(0);
+    } finally {
+      await connection.close();
+      await workspace.remove();
+    }
+  });
 });
