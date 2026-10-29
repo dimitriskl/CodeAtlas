@@ -17,7 +17,7 @@ User stories: 36, 37, 38, 60. PRD: [Modules](../prd/0001-initial.md#modules) (pr
 
 - [01 — Scaffold package, CI and MCP server skeleton](01-scaffold-package-ci-mcp-skeleton.md)
 
-Status: in-qa
+Status: done-awaiting-merge
 
 ## Acceptance criteria
 
@@ -167,3 +167,35 @@ Status: in-qa
   2. Removed the copied `cliEnv`. Exported `childEnv` from `tests/support/run-cli.ts` and the reset test calls it. Behavior is unchanged.
   Local Node v24.22.1: `npm ci`, lint, typecheck, and test passed, 168/168.
   Merged `origin/angular/main` (`9aedf9b`) afterwards so the pull request is not conflicted and Actions can run. `envelope.ts` keeps both `configureAiSuccessEnvelope` and main's coverage and stale helpers. No configure-ai behavior change. After that merge, lint, typecheck, and test passed, 215/215, on the same Node.
+- 2026-10-29 QA APPROVE, attempt 4. HEAD reviewed `2ddd0c7` (`2ddd0c7bd3520298e1df8acd4043f93348eb01e7`; Tester test fix `77bfdd1`, then a merge of `angular/main` `9aedf9b`) against `angular/main` `9aedf9b`, which is now an ancestor. CI run [40870170808](https://github.com/dimitriskl/CodeAtlas/actions/runs/40870170808) on `2ddd0c7` is green. `lint, type-check, test, pack (ubuntu-24.04)`, `lint, type-check, test, pack (windows-2025)` and `pack contents match on Windows and Ubuntu` all passed. Local Node 24 with `npm ci --ignore-scripts` plus the prebuilt Node 24 `better-sqlite3` binary: lint, typecheck, test (215/215) and `npm pack --dry-run` (43 files) pass.
+
+  **Spec**
+
+  Both attempt-3 required changes are done.
+  - `discards a partial key when stdin resets after the first byte` is skipped on `win32` with a comment, and the in-process seam test still covers that case on Windows.
+  - `child.on("error")` settles once and rejects, so a spawn failure no longer hangs. The test still passes on Linux.
+
+  `0adf2a7..77bfdd1` touches only `tests/configure-ai-key-entry.test.ts`, `tests/support/run-cli.ts` and the task and BOARD docs. No `src/` file changed.
+
+  The merge `2ddd0c7` brings only task 04 into the configure-ai production files. A local re-merge of `77bfdd1` with `9aedf9b` matches the head in every file except the conflicted `envelope.ts`, which differs only by the Tester's own log line. On the head, `envelope.ts` is main's file plus `ConfigureAiSuccessEnvelope`, `configureAiSuccessEnvelope` and the `formatEnvelope` union member.
+
+  `errors.ts` is main's file, and `CommandError` is still the only error class in `src/`. `configure-ai.ts`, `credentials.ts`, `keychain.ts`, `process-runner.ts`, `ai-*.ts` and `cli.ts` are byte-identical to `34028e8`. The task 04 stale gate is intact: `mcp-stale-refusal.test.ts` (46 tests) and `cli-index-after-change.test.ts` pass.
+
+  Live re-check on the head build passed:
+  - The split pipe `part1` / 300 ms / `part2` stored `part1part2`, exit 0.
+  - Empty stdin failed at once with the missing-key sentence, and nothing was saved.
+
+  **Standards**
+
+  Strict TS/ESM, ESLint and Prettier are clean. The DRY breach is gone: `cliEnv` was removed, and the test now imports the exported `childEnv` from `tests/support/run-cli.ts`. The test still follows Arrange/Act/Assert and uses synthetic secrets, and its timer and socket cleanup now run once through `settle()`.
+
+  **Optional suggestions (non-blocking, carried over from attempt 3)**
+  - Validate the model before the no-keychain save.
+  - Stop `readPipedKey` after 8192 characters plus a line ending.
+  - Ignore ESC sequences such as arrow keys or a paste in the hidden prompt.
+  - Write the Windows helper script to a unique `mkdtemp` directory.
+  - Optionally, give a whitespace-only key the missing-key sentence.
+  - Move the first-byte wait into `ConfigureAiDependencies`.
+  - Consolidate the three copies of `isJsonObject` and shorten the test file's Arrange blocks.
+  - Still open from attempt 1: read the keychain entry back after writing it, make the `reg query` parser a pure function, remove `.js` in `resolveCommand`, and remove `rmSync` before `renameSync`.
+  - New: `errors.ts` imports a type from `envelope.ts`, which imports `CommandError`. The cycle is type-only on one side and came from task 04.
