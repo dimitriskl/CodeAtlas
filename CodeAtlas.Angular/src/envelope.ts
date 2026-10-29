@@ -64,6 +64,23 @@ export type IndexSuccessEnvelope = SuccessEnvelope & {
   result: IndexResult;
 };
 
+export type FindSymbolHit = {
+  id: string;
+  kind: string;
+  qualifiedName: string;
+  project: string;
+  path: string;
+  line: number;
+  column: number;
+  signatures: string[];
+};
+
+export type FindSymbolEnvelope = SuccessEnvelope & {
+  result: {
+    symbols: FindSymbolHit[];
+  };
+};
+
 export type ErrorEnvelope = {
   contractVersion: number;
   command: string | null;
@@ -235,6 +252,36 @@ export function staleIndexError(input: {
   });
 }
 
+export function findSymbolEnvelope(input: {
+  symbols: readonly FindSymbolHit[];
+  pagination: Pagination;
+  freshness: Freshness;
+  coverage: Coverage;
+}): FindSymbolEnvelope {
+  return {
+    contractVersion,
+    command: "find_symbol",
+    success: true,
+    responseToolVersion: appVersion,
+    warningCount: 0,
+    freshness: input.freshness,
+    coverage: input.coverage,
+    pagination: input.pagination,
+    result: {
+      symbols: input.symbols.map((symbol) => ({
+        id: symbol.id,
+        kind: symbol.kind,
+        qualifiedName: symbol.qualifiedName,
+        project: symbol.project,
+        path: symbol.path,
+        line: symbol.line,
+        column: symbol.column,
+        signatures: [...symbol.signatures],
+      })),
+    },
+  };
+}
+
 export function commandErrorEnvelope(command: string | null, error: CommandError): ErrorEnvelope {
   return {
     contractVersion,
@@ -270,7 +317,7 @@ export function invalidArgumentsEnvelope(command: string | null): ErrorEnvelope 
 }
 
 export function formatEnvelope(
-  envelope: SuccessEnvelope | IndexSuccessEnvelope | ErrorEnvelope,
+  envelope: SuccessEnvelope | IndexSuccessEnvelope | FindSymbolEnvelope | ErrorEnvelope,
 ): string {
   return `${JSON.stringify(envelope, null, 2)}\n`;
 }
