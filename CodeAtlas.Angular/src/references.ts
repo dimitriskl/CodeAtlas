@@ -50,10 +50,32 @@ export function referencesInFile(
 }
 
 function resolveSymbol(checker: ts.TypeChecker, node: ts.Node): ts.Symbol | undefined {
-  const symbol = checker.getSymbolAtLocation(node);
+  const symbol = shorthandPropertySymbol(checker, node) ?? checker.getSymbolAtLocation(node);
   if (symbol === undefined) return undefined;
   if ((symbol.flags & ts.SymbolFlags.Alias) === 0) return symbol;
   return checker.getAliasedSymbol(symbol);
+}
+
+/**
+ * A shorthand name is the property being read, not only the local it introduces.
+ * Binding patterns (`const { total } = cart`, `function f({ total }: Cart)`) use the pattern's type.
+ * A destructuring assignment (`({ total } = cart)`) uses the assignment's property symbol.
+ */
+function shorthandPropertySymbol(checker: ts.TypeChecker, node: ts.Node): ts.Symbol | undefined {
+  if (!ts.isIdentifier(node)) return undefined;
+  const parent = node.parent;
+  if (
+    ts.isBindingElement(parent) &&
+    parent.name === node &&
+    parent.propertyName === undefined &&
+    ts.isObjectBindingPattern(parent.parent)
+  ) {
+    return checker.getTypeAtLocation(parent.parent).getProperty(node.text);
+  }
+  if (ts.isShorthandPropertyAssignment(parent) && parent.name === node) {
+    return checker.getPropertySymbolOfDestructuringAssignment(node);
+  }
+  return undefined;
 }
 
 function isDeclarationName(node: ts.Node, symbol: ts.Symbol): boolean {

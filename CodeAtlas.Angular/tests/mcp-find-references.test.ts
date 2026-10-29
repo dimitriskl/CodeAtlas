@@ -79,6 +79,19 @@ const cartTotalCalls: ReferenceHit[] = [
   hit(cartTotal, "invocation", "src/cart.ts", 7, 17),
 ];
 
+/**
+ * Shorthand reads of `Cart.total` in src/shorthand.ts.
+ * The names introduced by those bindings are not further references.
+ */
+const shorthandTotals: ReferenceHit[] = [
+  hit(cartTotal, "reference", "src/shorthand.ts", 4, 11),
+  hit(cartTotal, "reference", "src/shorthand.ts", 8, 24),
+  hit(cartTotal, "reference", "src/shorthand.ts", 14, 6),
+];
+
+/** Every stored use of `Cart.total`, in path, line, column order. */
+const cartTotalUses: ReferenceHit[] = [...cartTotalCalls, ...shorthandTotals];
+
 /** The only call of `Bag.total`. */
 const bagTotalCalls: ReferenceHit[] = [hit(bagTotal, "invocation", "src/bill.ts", 5, 44)];
 
@@ -91,6 +104,10 @@ const cartUses: ReferenceHit[] = [
   hit(cartClass, "reference", "src/label.ts", 1, 10),
   hit(cartClass, "reference", "src/label.ts", 3, 29),
   hit(cartClass, "reference", "src/label.ts", 3, 36),
+  hit(cartClass, "reference", "src/shorthand.ts", 1, 10),
+  hit(cartClass, "reference", "src/shorthand.ts", 3, 28),
+  hit(cartClass, "reference", "src/shorthand.ts", 8, 33),
+  hit(cartClass, "reference", "src/shorthand.ts", 12, 30),
 ];
 
 function hit(
@@ -254,7 +271,7 @@ describe("MCP find_references", () => {
       // Act
       const result = await connection.client.callTool({
         name: "find_references",
-        arguments: { workspace: workspace.path, id: cartTotal },
+        arguments: { workspace: workspace.path, id: cartTotal, kinds: ["invocation"] },
       });
 
       // Assert
@@ -362,8 +379,98 @@ describe("MCP find_references", () => {
       // Assert
       expect(cart.isError).toBeFalsy();
       expect(bag.isError).toBeFalsy();
-      expect(parseToolText(cart).result?.references).toEqual(cartTotalCalls);
+      expect(parseToolText(cart).result?.references).toEqual(cartTotalUses);
       expect(parseToolText(bag).result?.references).toEqual(bagTotalCalls);
+    } finally {
+      await connection.close();
+      await workspace.remove();
+    }
+  });
+
+  it("records a shorthand variable declaration as a reference to the property", async () => {
+    // Arrange
+    const workspace = await indexedReferencesWorkspace();
+    const connection = await connectInProcess();
+    const declared = shorthandTotals[0];
+    if (declared === undefined) throw new Error("missing shorthand declaration");
+
+    try {
+      // Act
+      const result = await connection.client.callTool({
+        name: "find_references",
+        arguments: { workspace: workspace.path, id: cartTotal },
+      });
+
+      // Assert
+      expect(result.isError).toBeFalsy();
+      const references = parseToolText(result).result?.references;
+      expect(
+        references?.filter((hit) => hit.path === "src/shorthand.ts" && hit.line === 4),
+      ).toEqual([declared]);
+      expect(
+        references?.filter((hit) => hit.path === "src/shorthand.ts" && hit.line === 5),
+      ).toEqual([]);
+    } finally {
+      await connection.close();
+      await workspace.remove();
+    }
+  });
+
+  it("records a shorthand parameter pattern as a reference to the property", async () => {
+    // Arrange
+    const workspace = await indexedReferencesWorkspace();
+    const connection = await connectInProcess();
+    const parameter = shorthandTotals[1];
+    if (parameter === undefined) throw new Error("missing shorthand parameter");
+
+    try {
+      // Act
+      const result = await connection.client.callTool({
+        name: "find_references",
+        arguments: { workspace: workspace.path, id: cartTotal },
+      });
+
+      // Assert
+      expect(result.isError).toBeFalsy();
+      const references = parseToolText(result).result?.references;
+      expect(
+        references?.filter((hit) => hit.path === "src/shorthand.ts" && hit.line === 8),
+      ).toEqual([parameter]);
+      expect(
+        references?.filter((hit) => hit.path === "src/shorthand.ts" && hit.line === 9),
+      ).toEqual([]);
+    } finally {
+      await connection.close();
+      await workspace.remove();
+    }
+  });
+
+  it("records a shorthand destructuring assignment as a reference to the property", async () => {
+    // Arrange
+    const workspace = await indexedReferencesWorkspace();
+    const connection = await connectInProcess();
+    const assigned = shorthandTotals[2];
+    if (assigned === undefined) throw new Error("missing shorthand assignment");
+
+    try {
+      // Act
+      const result = await connection.client.callTool({
+        name: "find_references",
+        arguments: { workspace: workspace.path, id: cartTotal },
+      });
+
+      // Assert
+      expect(result.isError).toBeFalsy();
+      const references = parseToolText(result).result?.references;
+      expect(
+        references?.filter((hit) => hit.path === "src/shorthand.ts" && hit.line === 14),
+      ).toEqual([assigned]);
+      expect(
+        references?.filter((hit) => hit.path === "src/shorthand.ts" && hit.line === 15),
+      ).toEqual([]);
+      expect(
+        references?.filter((hit) => hit.path === "src/shorthand.ts" && hit.line === 13),
+      ).toEqual([]);
     } finally {
       await connection.close();
       await workspace.remove();
@@ -393,7 +500,7 @@ describe("MCP find_references", () => {
           offset: 0,
           limit: 1,
           returned: 1,
-          total: cartTotalCalls.length,
+          total: cartTotalUses.length,
           hasMore: true,
           nextOffset: 1,
         }),

@@ -12,7 +12,7 @@ User stories: 8, 14, 26. PRD: [Identity and schema](../prd/0001-initial.md#ident
 
 - [03 — find_symbol for plain TypeScript](03-find-symbol-typescript.md)
 
-Status: rejected
+Status: in-test
 
 ## Acceptance criteria
 
@@ -49,3 +49,4 @@ Status: rejected
   - DRY: `queryCoverage` in `src/mcp-server.ts` still has its own stale gate; it could call `refuseStaleIndex`. The `find_symbol` and `find_references` tool callbacks have the same envelope-to-`isError` body. `IndexedReference`, `StoredReference` and `FindReferenceHit` are the same shape. `findReferencesEnvelope` still copies every field, so the Review entry's "without a second field copy" does not hold.
   - The contract says a missing `references` table is `invalid_index`. Only `find_references` checks for it, while `find_symbol` and `index_status` accept such a generation. Say that the check is per tool.
   - `tests/mcp-find-references-edges.test.ts` is 1714 lines. Split it by theme (call shapes, filters and pagination, index validity).
+- 2026-10-29: Developer note. Shorthand destructuring of an indexed property is a `reference` at the name. `src/references.ts` resolves both binding patterns (`const { total } = cart` and `function read({ total }: Cart)`) with `getTypeAtLocation(pattern).getProperty(name)`, and a destructuring assignment (`({ total } = cart)`) with `getPropertySymbolOfDestructuringAssignment` (`getShorthandAssignmentValueSymbol` is the local variable, not the property). The local variable is not a second reference. Seam tests in `tests/mcp-find-references.test.ts`: `records a shorthand variable declaration as a reference to the property`, `records a shorthand parameter pattern as a reference to the property`, and `records a shorthand destructuring assignment as a reference to the property`. The three uses are in `tests/fixtures/references-workspace/src/shorthand.ts`.
