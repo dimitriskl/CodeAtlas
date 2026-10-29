@@ -1,5 +1,5 @@
 import { coverageForGeneration, staticCoverage, type Coverage } from "./coverage.js";
-import { type CommandError } from "./errors.js";
+import { CommandError } from "./errors.js";
 import { appVersion, contractVersion } from "./version.js";
 
 export type Freshness = {
@@ -87,8 +87,8 @@ export type ErrorEnvelope = {
   success: false;
   responseToolVersion: string;
   warningCount: number;
-  freshness: null;
-  coverage: null;
+  freshness: Freshness | null;
+  coverage: Coverage | null;
   error: EnvelopeError;
 };
 
@@ -123,10 +123,14 @@ export function emptyPagination(snapshotId: string | null): Pagination {
   };
 }
 
-/** Freshness of a generation whose tracked file hashes were just compared. */
+/**
+ * Freshness of a generation whose tracked file hashes were just compared.
+ * Style and asset warnings stay out of `changedFiles`, so they do not make the index stale.
+ */
 export function trackedFreshness(
   changedFiles: readonly string[],
   now: Date = new Date(),
+  warnings: readonly string[] = [],
 ): Freshness {
   const stale = changedFiles.length > 0;
   return {
@@ -141,7 +145,7 @@ export function trackedFreshness(
       issueCount: 0,
       reasonCodes: [],
     },
-    diagnostics: [],
+    diagnostics: [...warnings],
   };
 }
 
@@ -168,7 +172,7 @@ export function indexSuccessEnvelope(input: {
   indexPath: string;
   templateCoverage: Coverage["templateCoverage"];
   changedFiles: readonly string[];
-  warningCount: number;
+  warnings: readonly string[];
   now?: Date;
 }): IndexSuccessEnvelope {
   return {
@@ -176,8 +180,8 @@ export function indexSuccessEnvelope(input: {
     command: input.command,
     success: true,
     responseToolVersion: appVersion,
-    warningCount: input.warningCount,
-    freshness: trackedFreshness(input.changedFiles, input.now),
+    warningCount: input.warnings.length,
+    freshness: trackedFreshness(input.changedFiles, input.now, input.warnings),
     coverage: coverageForGeneration(input.templateCoverage),
     pagination: emptyPagination(input.generationId),
     result: {
@@ -266,6 +270,41 @@ export function configureAiSuccessEnvelope(result: {
   };
 }
 
+/** Coverage of a loaded generation. `snapshotId` is that generation; the page itself stays empty. */
+export function indexedCoverageEnvelope(input: {
+  generationId: string;
+  templateCoverage: Coverage["templateCoverage"];
+  changedFiles: readonly string[];
+  warnings: readonly string[];
+  now?: Date;
+}): SuccessEnvelope {
+  return {
+    contractVersion,
+    command: "coverage",
+    success: true,
+    responseToolVersion: appVersion,
+    warningCount: input.warnings.length,
+    freshness: trackedFreshness(input.changedFiles, input.now, input.warnings),
+    coverage: coverageForGeneration(input.templateCoverage),
+    pagination: emptyPagination(input.generationId),
+  };
+}
+
+export const staleIndexMessage = "The saved index is stale.";
+
+/** Query refusal. `index` and `index_status` report staleness and do not use this. */
+export function staleIndexError(input: {
+  changedFiles: readonly string[];
+  warnings: readonly string[];
+  templateCoverage: Coverage["templateCoverage"];
+}): CommandError {
+  return new CommandError("stale_index", staleIndexMessage, 3, [], {
+    freshness: trackedFreshness(input.changedFiles, new Date(), input.warnings),
+    coverage: coverageForGeneration(input.templateCoverage),
+    warningCount: input.warnings.length,
+  });
+}
+
 export function findSymbolEnvelope(input: {
   symbols: readonly FindSymbolHit[];
   pagination: Pagination;
@@ -277,7 +316,7 @@ export function findSymbolEnvelope(input: {
     command: "find_symbol",
     success: true,
     responseToolVersion: appVersion,
-    warningCount: 0,
+    warningCount: input.freshness.diagnostics.length,
     freshness: input.freshness,
     coverage: input.coverage,
     pagination: input.pagination,
@@ -302,9 +341,9 @@ export function commandErrorEnvelope(command: string | null, error: CommandError
     command,
     success: false,
     responseToolVersion: appVersion,
-    warningCount: 0,
-    freshness: null,
-    coverage: null,
+    warningCount: error.warningCount,
+    freshness: error.freshness,
+    coverage: error.coverage,
     error: {
       code: error.code,
       message: error.message,

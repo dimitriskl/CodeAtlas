@@ -1,16 +1,18 @@
 import { createHash } from "node:crypto";
-import { existsSync, readFileSync, readdirSync, realpathSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync, realpathSync, statSync } from "node:fs";
 import path from "node:path";
 import ts from "typescript";
 import { CommandError, workspaceNotFoundMessage } from "./errors.js";
 import { indexSourceFile, type SourceSymbolKind } from "./symbols.js";
 import {
-  changedTrackedFiles,
+  compareCodeUnit,
+  trackedContentHash,
   workspaceStorage,
   type WorkspaceStorage,
 } from "./workspace-storage.js";
 
-export { changedTrackedFiles };
+const styleExtensions = new Set([".css", ".scss", ".sass", ".less"]);
+const skippedDirectories = new Set(["node_modules", ".codeatlas", ".git"]);
 
 export type TemplateCoverage = "complete" | "partial" | "unknown";
 
@@ -42,6 +44,8 @@ export type LoadedWorkspace = WorkspaceStorage & {
   projects: ProjectRecord[];
   files: TrackedFile[];
   symbols: IndexedSymbol[];
+  /** Workspace-relative `templateUrl` targets, including ones that no longer exist. */
+  templateFiles: readonly string[];
 };
 
 export function loadWorkspace(workspacePath: string): LoadedWorkspace {
@@ -71,6 +75,7 @@ export function loadWorkspace(workspacePath: string): LoadedWorkspace {
 
   const projects: ProjectRecord[] = [];
   const symbols: IndexedSymbol[] = [];
+  const templateFiles = new Set<string>();
   for (const [name, value] of Object.entries(angular.projects)) {
     if (!isRecord(value)) {
       throw new CommandError(
@@ -85,9 +90,22 @@ export function loadWorkspace(workspacePath: string): LoadedWorkspace {
       const tsconfig = resolveTsConfig(storage.canonical, value, target);
       if (tsconfig === undefined) continue;
       track(files, storage.canonical, tsconfig);
+      trackExtendsChain(storage.canonical, tsconfig, files);
       symbols.push(
-        ...symbolsInProject(storage.canonical, project.name, tsconfig, files, indexedPaths),
+        ...symbolsInProject(
+          storage.canonical,
+          project.name,
+          tsconfig,
+          files,
+          indexedPaths,
+          templateFiles,
+        ),
       );
+    }
+    trackTemplates(storage.canonical, project, value, files);
+    trackSourceRootStyles(storage.canonical, project, files);
+    for (const entry of styleAndAssetEntries(value)) {
+      trackOptionalPath(files, storage.canonical, entry);
     }
   }
 
@@ -97,6 +115,7 @@ export function loadWorkspace(workspacePath: string): LoadedWorkspace {
     projects,
     files: [...files.entries()].map(([filePath, sha256]) => ({ path: filePath, sha256 })),
     symbols,
+    templateFiles: [...templateFiles],
   };
 }
 
@@ -106,6 +125,7 @@ function symbolsInProject(
   tsconfigPath: string,
   files: Map<string, string>,
   indexedPaths: Set<string>,
+  templateFiles: Set<string>,
 ): IndexedSymbol[] {
   const config = ts.readConfigFile(tsconfigPath, ts.sys.readFile);
   if (config.error !== undefined) {
@@ -128,6 +148,15 @@ function symbolsInProject(
     const relative = workspacePathOf(canonical, sourcePath);
     if (relative === null || relative.split("/").includes("node_modules")) continue;
     track(files, canonical, sourcePath);
+    const references = componentFileReferences(sourceFile);
+    for (const spec of references.styles) {
+      trackReferencedFile(files, canonical, sourcePath, spec, isStyleFile);
+    }
+    for (const spec of references.templates) {
+      // Any file a templateUrl points to is tracked regardless of extension.
+      const templatePath = trackReferencedFile(files, canonical, sourcePath, spec, () => true);
+      if (templatePath !== null) templateFiles.add(templatePath);
+    }
     if (indexedPaths.has(relative)) continue;
     indexedPaths.add(relative);
     for (const declaration of indexSourceFile(sourceFile)) {
@@ -144,6 +173,62 @@ function symbolsInProject(
     }
   }
   return symbols;
+}
+
+/** Hash `extends` bases that stay inside the workspace. External bases are task 29. */
+function trackExtendsChain(canonical: string, start: string, files: Map<string, string>): void {
+  const pending = [start];
+  const seen = new Set<string>();
+  while (pending.length > 0) {
+    const current = pending.pop();
+    if (current === undefined) break;
+    let real: string;
+    try {
+      real = realpathSync(current);
+    } catch {
+      continue;
+    }
+    if (seen.has(real)) continue;
+    seen.add(real);
+    if (workspacePathOf(canonical, real) !== null) track(files, canonical, real);
+    const read = ts.readConfigFile(real, ts.sys.readFile);
+    if (read.error !== undefined || !isRecord(read.config)) continue;
+    const directory = path.dirname(real);
+    for (const spec of extendsSpecs(read.config.extends)) {
+      const resolved = resolveExtendsInsideWorkspace(directory, spec, canonical);
+      if (resolved !== null) pending.push(resolved);
+    }
+  }
+}
+
+function extendsSpecs(value: unknown): string[] {
+  if (typeof value === "string" && value.length > 0) return [value];
+  if (!Array.isArray(value)) return [];
+  return value.filter((entry): entry is string => typeof entry === "string" && entry.length > 0);
+}
+
+function resolveExtendsInsideWorkspace(
+  fromDir: string,
+  spec: string,
+  canonical: string,
+): string | null {
+  if (!spec.startsWith(".") && !path.isAbsolute(spec)) return null;
+  const absolute = path.resolve(fromDir, spec);
+  const candidates = absolute.endsWith(".json")
+    ? [absolute]
+    : [`${absolute}.json`, path.join(absolute, "tsconfig.json")];
+  for (const candidate of candidates) {
+    if (!existsSync(candidate)) continue;
+    try {
+      const real = realpathSync(candidate);
+      if (!statSync(real).isFile()) continue;
+      if (workspacePathOf(canonical, real) === null) return null;
+      return real;
+    } catch {
+      continue;
+    }
+  }
+  return null;
 }
 
 function resolveTsConfig(
@@ -219,6 +304,344 @@ function angularMajor(manifest: unknown): number | null {
   if (typeof version !== "string") return null;
   const match = /\d+/.exec(version);
   return match === null ? null : Number(match[0]);
+}
+
+/**
+ * Compare the current tracked inputs with the hashes stored at publish.
+ * A path that is tracked now and was not stored is a change. Style and asset
+ * changes become warnings; other tracked changes are stale. When discovery
+ * fails, only the stored paths are compared, so an unreadable tracked file
+ * still reports stale.
+ */
+export function assessTrackedFreshness(
+  canonical: string,
+  files: readonly TrackedFile[],
+): { changedFiles: string[]; warnings: string[] } {
+  const kinds = inputKinds(canonical);
+  const discovered = discoverTrackedInputs(canonical);
+  for (const filePath of discovered.templateFiles) kinds.templateFiles.push(filePath);
+  const stored = new Map(files.map((file) => [file.path, file.sha256]));
+  const paths = new Set(stored.keys());
+  for (const filePath of discovered.paths) paths.add(filePath);
+  const changedFiles: string[] = [];
+  const warningPaths: string[] = [];
+  for (const filePath of paths) {
+    const storedHash = stored.get(filePath);
+    if (storedHash !== undefined && trackedContentHash(canonical, filePath) === storedHash) {
+      continue;
+    }
+    // Stale-making inputs win over an asset or style directory that contains them.
+    if (isStaleMakingInput(filePath, kinds)) changedFiles.push(filePath);
+    else if (isWarningInput(filePath, kinds.warningRoots)) warningPaths.push(filePath);
+    else changedFiles.push(filePath);
+  }
+  changedFiles.sort(compareCodeUnit);
+  warningPaths.sort(compareCodeUnit);
+  return {
+    changedFiles,
+    warnings: warningPaths.map((filePath) => `Style or asset changed: ${filePath}.`),
+  };
+}
+
+/** Current tracked paths, or none when the workspace cannot be re-read. */
+function discoverTrackedInputs(canonical: string): {
+  paths: string[];
+  templateFiles: readonly string[];
+} {
+  try {
+    const loaded = loadWorkspace(canonical);
+    return { paths: loaded.files.map((file) => file.path), templateFiles: loaded.templateFiles };
+  } catch {
+    return { paths: [], templateFiles: [] };
+  }
+}
+
+type InputKinds = {
+  warningRoots: string[];
+  templateRoots: string[];
+  indexHtml: string[];
+  templateFiles: string[];
+};
+
+function isWarningInput(filePath: string, roots: readonly string[]): boolean {
+  if (isStyleFile(filePath)) return true;
+  return roots.some((root) => filePath === root || filePath.startsWith(`${root}/`));
+}
+
+/** TypeScript, templates, tsconfig, angular.json, and package files. Warning roots do not apply. */
+function isStaleMakingInput(filePath: string, kinds: InputKinds): boolean {
+  if (
+    filePath === "angular.json" ||
+    filePath === "package.json" ||
+    filePath === "package-lock.json"
+  ) {
+    return true;
+  }
+  if (/^tsconfig.*\.json$/.test(path.posix.basename(filePath))) return true;
+  if (isTypeScriptProgramFile(filePath)) return true;
+  if (kinds.templateFiles.includes(filePath)) return true;
+  return isTemplateHtml(filePath, kinds);
+}
+
+function isTypeScriptProgramFile(filePath: string): boolean {
+  const normalized = filePath.replaceAll("\\", "/");
+  const base = path.posix.basename(normalized);
+  if (base.endsWith(".d.ts") || base.endsWith(".d.mts") || base.endsWith(".d.cts")) return false;
+  const extension = path.posix.extname(normalized).toLowerCase();
+  return (
+    extension === ".ts" || extension === ".tsx" || extension === ".mts" || extension === ".cts"
+  );
+}
+
+function isTemplateHtml(filePath: string, kinds: InputKinds): boolean {
+  if (path.posix.extname(filePath.replaceAll("\\", "/")).toLowerCase() !== ".html") return false;
+  if (kinds.indexHtml.includes(filePath)) return true;
+  return kinds.templateRoots.some((root) => filePath === root || filePath.startsWith(`${root}/`));
+}
+
+function inputKinds(canonical: string): InputKinds {
+  const empty: InputKinds = {
+    warningRoots: [],
+    templateRoots: [],
+    indexHtml: [],
+    templateFiles: [],
+  };
+  try {
+    const angular = JSON.parse(
+      readFileSync(path.join(canonical, "angular.json"), "utf8"),
+    ) as unknown;
+    if (!isRecord(angular) || !isRecord(angular.projects)) return empty;
+    const kinds: InputKinds = {
+      warningRoots: [],
+      templateRoots: [],
+      indexHtml: [],
+      templateFiles: [],
+    };
+    for (const project of Object.values(angular.projects)) {
+      if (!isRecord(project)) continue;
+      if (typeof project.sourceRoot === "string") {
+        const sourceRoot = normalizeRelative(project.sourceRoot);
+        if (isSafeRelative(sourceRoot)) kinds.templateRoots.push(sourceRoot);
+      }
+      for (const entry of styleAndAssetEntries(project)) {
+        const relative = normalizeRelative(entry);
+        if (isSafeRelative(relative)) kinds.warningRoots.push(relative);
+      }
+      for (const indexPath of indexHtmlEntries(project)) {
+        const relative = normalizeRelative(indexPath);
+        if (isSafeRelative(relative)) kinds.indexHtml.push(relative);
+      }
+    }
+    return kinds;
+  } catch {
+    return empty;
+  }
+}
+
+function trackTemplates(
+  canonical: string,
+  project: ProjectRecord,
+  raw: Record<string, unknown>,
+  files: Map<string, string>,
+): void {
+  if (project.sourceRoot.length > 0) {
+    const absolute = path.join(canonical, ...project.sourceRoot.split("/"));
+    if (existsSync(absolute)) {
+      const real = realpathSync(absolute);
+      if (statSync(real).isDirectory()) {
+        walkFiles(real, (file) => {
+          if (file.endsWith(".html")) track(files, canonical, file);
+        });
+      }
+    }
+  }
+  for (const indexPath of indexHtmlEntries(raw)) trackOptionalPath(files, canonical, indexPath);
+}
+
+function trackSourceRootStyles(
+  canonical: string,
+  project: ProjectRecord,
+  files: Map<string, string>,
+): void {
+  if (project.sourceRoot.length === 0) return;
+  const absolute = path.join(canonical, ...project.sourceRoot.split("/"));
+  if (!existsSync(absolute)) return;
+  let real: string;
+  try {
+    real = realpathSync(absolute);
+  } catch {
+    return;
+  }
+  if (!statSync(real).isDirectory()) return;
+  walkFiles(real, (file) => {
+    if (isStyleFile(file)) track(files, canonical, file);
+  });
+}
+
+/** One walk collects `styleUrl`, `styleUrls`, and `templateUrl` string literals. */
+function componentFileReferences(sourceFile: ts.SourceFile): {
+  styles: string[];
+  templates: string[];
+} {
+  const styles: string[] = [];
+  const templates: string[] = [];
+  const visit = (node: ts.Node): void => {
+    if (ts.isPropertyAssignment(node) && ts.isIdentifier(node.name)) {
+      if (node.name.text === "styleUrl") collectStringLiteral(node.initializer, false, styles);
+      else if (node.name.text === "styleUrls") collectStringLiteral(node.initializer, true, styles);
+      else if (node.name.text === "templateUrl") {
+        collectStringLiteral(node.initializer, false, templates);
+      }
+    }
+    ts.forEachChild(node, visit);
+  };
+  visit(sourceFile);
+  return { styles, templates };
+}
+
+function collectStringLiteral(node: ts.Expression, asArray: boolean, refs: string[]): void {
+  if (!asArray && ts.isStringLiteralLike(node) && node.text.length > 0) {
+    refs.push(node.text);
+    return;
+  }
+  if (!asArray || !ts.isArrayLiteralExpression(node)) return;
+  for (const element of node.elements) {
+    if (ts.isStringLiteralLike(element) && element.text.length > 0) refs.push(element.text);
+  }
+}
+
+/**
+ * Resolve a component file reference relative to its source, the same way for
+ * styles and templates. Hash the file when it exists and `accept` allows it.
+ * Return the workspace-relative path even when the file is gone, so a deleted
+ * target stays stale-making. Targets in `node_modules` or outside the workspace
+ * are ignored.
+ */
+function trackReferencedFile(
+  files: Map<string, string>,
+  canonical: string,
+  sourcePath: string,
+  spec: string,
+  accept: (absolute: string) => boolean,
+): string | null {
+  const resolved = path.resolve(path.dirname(sourcePath), spec);
+  let absolute = resolved;
+  let present = false;
+  if (existsSync(resolved)) {
+    try {
+      absolute = realpathSync(resolved);
+      if (!statSync(absolute).isFile()) return null;
+      present = true;
+    } catch {
+      return null;
+    }
+  }
+  const relative = workspacePathOf(canonical, absolute);
+  if (relative === null) return null;
+  if (present && accept(absolute)) track(files, canonical, absolute);
+  return relative;
+}
+
+function isStyleFile(filePath: string): boolean {
+  return styleExtensions.has(path.posix.extname(filePath.replaceAll("\\", "/")).toLowerCase());
+}
+
+function styleAndAssetEntries(project: Record<string, unknown>): string[] {
+  const entries: string[] = [];
+  for (const options of architectOptions(project)) {
+    entries.push(...readInputList(options.styles, "angular.json styles"));
+    entries.push(...readInputList(options.assets, "angular.json assets"));
+  }
+  return entries;
+}
+
+function indexHtmlEntries(project: Record<string, unknown>): string[] {
+  const paths: string[] = [];
+  for (const options of architectOptions(project)) {
+    const index = options.index;
+    if (typeof index === "string") paths.push(index);
+    else if (isRecord(index) && typeof index.input === "string") paths.push(index.input);
+    else if (index !== undefined) {
+      throw new CommandError("analysis_failed", "angular.json index must be a path.");
+    }
+  }
+  return paths;
+}
+
+function architectOptions(project: Record<string, unknown>): Record<string, unknown>[] {
+  const architect = project.architect;
+  if (architect === undefined) return [];
+  if (!isRecord(architect)) {
+    throw new CommandError("analysis_failed", "angular.json build options are invalid.");
+  }
+  const options: Record<string, unknown>[] = [];
+  for (const target of Object.values(architect)) {
+    if (!isRecord(target) || target.options === undefined) continue;
+    if (!isRecord(target.options)) {
+      throw new CommandError("analysis_failed", "angular.json build options are invalid.");
+    }
+    options.push(target.options);
+  }
+  return options;
+}
+
+function readInputList(value: unknown, label: string): string[] {
+  if (value === undefined) return [];
+  if (!Array.isArray(value)) {
+    throw new CommandError("analysis_failed", `${label} must be an array.`);
+  }
+  const paths: string[] = [];
+  for (const entry of value) {
+    if (typeof entry === "string" && entry.length > 0) {
+      paths.push(entry);
+      continue;
+    }
+    if (isRecord(entry) && typeof entry.input === "string" && entry.input.length > 0) {
+      paths.push(entry.input);
+      continue;
+    }
+    throw new CommandError("analysis_failed", `${label} entries must be paths.`);
+  }
+  return paths;
+}
+
+function trackOptionalPath(files: Map<string, string>, canonical: string, raw: string): void {
+  const relative = normalizeRelative(raw);
+  if (!isSafeRelative(relative)) return;
+  const absolute = path.join(canonical, ...relative.split("/"));
+  if (!existsSync(absolute)) return;
+  let real: string;
+  try {
+    real = realpathSync(absolute);
+  } catch {
+    return;
+  }
+  const info = statSync(real);
+  if (info.isDirectory()) walkFiles(real, (file) => track(files, canonical, file));
+  else if (info.isFile()) track(files, canonical, real);
+}
+
+function walkFiles(directory: string, visit: (file: string) => void): void {
+  for (const entry of readdirSync(directory, { withFileTypes: true })) {
+    if (skippedDirectories.has(entry.name)) continue;
+    const full = path.join(directory, entry.name);
+    if (entry.isSymbolicLink()) {
+      try {
+        if (statSync(full).isFile()) visit(full);
+      } catch {
+        // A broken symlink is not a tracked input.
+      }
+      continue;
+    }
+    if (entry.isDirectory()) walkFiles(full, visit);
+    else if (entry.isFile()) visit(full);
+  }
+}
+
+function isSafeRelative(relative: string): boolean {
+  if (relative.length === 0) return false;
+  const parts = relative.split("/");
+  return !parts.includes("..") && !parts.includes("node_modules");
 }
 
 function track(files: Map<string, string>, canonical: string, absolute: string): void {

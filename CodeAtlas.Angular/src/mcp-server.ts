@@ -4,13 +4,51 @@ import {
   commandErrorEnvelope,
   coverageEnvelope,
   formatEnvelope,
+  indexedCoverageEnvelope,
   indexStatusEmptyEnvelope,
   indexSuccessEnvelope,
+  staleIndexError,
+  type ErrorEnvelope,
+  type SuccessEnvelope,
 } from "./envelope.js";
 import { asCommandError } from "./errors.js";
 import { executeFindSymbol } from "./find-symbol.js";
 import { readPublishedIndex } from "./generation-store.js";
 import { appVersion } from "./version.js";
+
+/** Load the published generation and refuse it when a stale-making input changed. */
+function queryCoverage(workspacePath: string): {
+  exitCode: 0 | 1 | 2 | 3;
+  envelope: SuccessEnvelope | ErrorEnvelope;
+} {
+  try {
+    const status = readPublishedIndex(workspacePath);
+    if (status === null) return { exitCode: 0, envelope: coverageEnvelope() };
+    if (status.changedFiles.length > 0) {
+      const error = staleIndexError({
+        changedFiles: status.changedFiles,
+        warnings: status.warnings,
+        templateCoverage: status.templateCoverage,
+      });
+      return { exitCode: error.exitCode, envelope: commandErrorEnvelope("coverage", error) };
+    }
+    return {
+      exitCode: 0,
+      envelope: indexedCoverageEnvelope({
+        generationId: status.generationId,
+        templateCoverage: status.templateCoverage,
+        changedFiles: status.changedFiles,
+        warnings: status.warnings,
+      }),
+    };
+  } catch (error) {
+    const commandError = asCommandError(error);
+    return {
+      exitCode: commandError.exitCode,
+      envelope: commandErrorEnvelope("coverage", commandError),
+    };
+  }
+}
 
 /** In-process MCP server. The stdio executable connects this to stdin and stdout. */
 export function createMcpServer(): McpServer {
@@ -22,12 +60,28 @@ export function createMcpServer(): McpServer {
     "coverage",
     {
       description:
-        "Return the coverage boundary. With no index loaded, freshness is unknown and coverage is the static edition boundary.",
-      inputSchema: {},
+        "Return the coverage boundary. Without a workspace, freshness is unknown. With a workspace, load the published generation, hash tracked inputs, and refuse a stale index.",
+      inputSchema: {
+        workspace: z
+          .string()
+          .optional()
+          .describe(
+            "Path to the Angular workspace directory. Relative paths resolve from the server's current directory. Omit it when no index is loaded.",
+          ),
+      },
     },
-    () => ({
-      content: [{ type: "text", text: formatEnvelope(coverageEnvelope()) }],
-    }),
+    async ({ workspace }) => {
+      if (workspace === undefined) {
+        return {
+          content: [{ type: "text", text: formatEnvelope(coverageEnvelope()) }],
+        };
+      }
+      const outcome = queryCoverage(workspace);
+      return {
+        isError: outcome.exitCode !== 0,
+        content: [{ type: "text", text: formatEnvelope(outcome.envelope) }],
+      };
+    },
   );
   server.registerTool(
     "index_status",
@@ -61,7 +115,7 @@ export function createMcpServer(): McpServer {
                   indexPath: status.indexPath,
                   templateCoverage: status.templateCoverage,
                   changedFiles: status.changedFiles,
-                  warningCount: 0,
+                  warnings: status.warnings,
                 }),
               ),
             },
