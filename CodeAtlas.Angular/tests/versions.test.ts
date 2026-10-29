@@ -12,7 +12,7 @@ describe("version constants", () => {
     // Assert
     expect(reported.appVersion).toBe(expectedAppVersion);
     expect(reported.contractVersion).toBe(1);
-    expect(reported.schemaVersion).toBe(3);
+    expect(reported.schemaVersion).toBe(4);
     expect(reported.appVersion).not.toBe(String(reported.contractVersion));
     expect(reported.appVersion).not.toBe(String(reported.schemaVersion));
   });

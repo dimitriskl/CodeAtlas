@@ -1659,11 +1659,11 @@ describe("MCP find_references freshness and schema", () => {
     }
   });
 
-  it("returns invalid_index when a schema 3 generation has no references table", async () => {
+  it("returns invalid_index when a schema 4 generation has no references table", async () => {
     // Arrange
     const workspace = await copyReferencesWorkspace();
     await indexWorkspace(workspace.path);
-    rewriteGeneration(workspace.path, 3, true);
+    rewriteGeneration(workspace.path, 4, true);
     const connection = await connectInProcess();
 
     try {

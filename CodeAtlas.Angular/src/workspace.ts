@@ -185,7 +185,9 @@ function symbolsInProject(
         signatures: declaration.signatures,
       });
       for (const name of declaration.names) {
-        idsByPosition.set(`${relative}:${name.line}:${name.column}`, id);
+        const key = `${relative}:${name.line}:${name.column}`;
+        // A model() Change output shares the property name's position. Keep the real declaration.
+        if (!idsByPosition.has(key)) idsByPosition.set(key, id);
       }
     }
   }

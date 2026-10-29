@@ -87,6 +87,7 @@ function isDeclarationName(node: ts.Node, symbol: ts.Symbol): boolean {
 
 function declarationName(declaration: ts.Declaration): ts.Node | undefined {
   if (ts.isParameter(declaration)) return identifierName(declaration.name);
+  if (ts.isVariableDeclaration(declaration)) return identifierName(declaration.name);
   if (
     ts.isClassDeclaration(declaration) ||
     ts.isInterfaceDeclaration(declaration) ||

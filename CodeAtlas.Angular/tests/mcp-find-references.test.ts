@@ -70,6 +70,9 @@ type FindEnvelope = {
 const cartTotal = "shop::src/cart.ts#Cart.total";
 const bagTotal = "shop::src/cart.ts#Bag.total";
 const cartClass = "shop::src/cart.ts#Cart";
+const authGuard = "shop::src/guards.ts#authGuard";
+const panelQuantity = "shop::src/panel.ts#Panel.quantity";
+const panelQuantityChange = "shop::src/panel.ts#Panel.quantityChange";
 
 /** Call sites of `Cart.total`. `Bag.total()` at bill.ts:5:44 is not one of them. */
 const cartTotalCalls: ReferenceHit[] = [
@@ -91,6 +94,18 @@ const shorthandTotals: ReferenceHit[] = [
 
 /** Every stored use of `Cart.total`, in path, line, column order. */
 const cartTotalUses: ReferenceHit[] = [...cartTotalCalls, ...shorthandTotals];
+
+/** `authGuard()` is an invocation. The value use is a reference. The declaration name is neither. */
+const authGuardUses: ReferenceHit[] = [
+  hit(authGuard, "invocation", "src/guards.ts", 4, 10),
+  hit(authGuard, "reference", "src/guards.ts", 8, 10),
+];
+
+/** Reads of `Panel.quantity`. The synthetic `quantityChange` output is not a target. */
+const panelQuantityUses: ReferenceHit[] = [
+  hit(panelQuantity, "reference", "src/panel.ts", 6, 16),
+  hit(panelQuantity, "reference", "src/panel.ts", 10, 9),
+];
 
 /** The only call of `Bag.total`. */
 const bagTotalCalls: ReferenceHit[] = [hit(bagTotal, "invocation", "src/bill.ts", 5, 44)];
@@ -254,6 +269,37 @@ function rewriteAsSchemaVersion2(workspacePath: string): void {
   }
   const bytes = readFileSync(databasePath);
   manifest.schemaVersion = 2;
+  manifest.artifacts["index.db"] = {
+    length: bytes.length,
+    sha256: createHash("sha256").update(bytes).digest("hex"),
+  };
+  writeFileSync(storage.currentJson, `${JSON.stringify(manifest, null, 2)}\n`);
+}
+
+/** Task 05's schema. This branch's references plus those kinds are schema 4. */
+function rewriteAsSchemaVersion3(workspacePath: string): void {
+  const storage = workspaceStorage(workspacePath);
+  const manifest = JSON.parse(readFileSync(storage.currentJson, "utf8")) as {
+    manifestVersion: number;
+    generationId: string;
+    schemaVersion: number;
+    workspace: string;
+    artifacts: { "index.db": { length: number; sha256: string } };
+  };
+  const databasePath = path.join(
+    storage.directory,
+    "generations",
+    manifest.generationId,
+    "index.db",
+  );
+  const database = new Database(databasePath);
+  try {
+    database.prepare("UPDATE metadata SET value = ? WHERE key = ?").run("3", "schemaVersion");
+  } finally {
+    database.close();
+  }
+  const bytes = readFileSync(databasePath);
+  manifest.schemaVersion = 3;
   manifest.artifacts["index.db"] = {
     length: bytes.length,
     sha256: createHash("sha256").update(bytes).digest("hex"),
@@ -561,10 +607,85 @@ describe("MCP find_references", () => {
     }
   });
 
+  it("returns an invocation and a reference for a const guard", async () => {
+    // Arrange
+    const workspace = await indexedReferencesWorkspace();
+    const connection = await connectInProcess();
+
+    try {
+      // Act
+      const result = await connection.client.callTool({
+        name: "find_references",
+        arguments: { workspace: workspace.path, id: authGuard },
+      });
+
+      // Assert
+      expect(result.isError).toBeFalsy();
+      expect(parseToolText(result).result?.references).toEqual(authGuardUses);
+    } finally {
+      await connection.close();
+      await workspace.remove();
+    }
+  });
+
+  it("returns uses of a model property and does not give them to the Change output", async () => {
+    // Arrange
+    const workspace = await indexedReferencesWorkspace();
+    const connection = await connectInProcess();
+
+    try {
+      // Act
+      const property = await connection.client.callTool({
+        name: "find_references",
+        arguments: { workspace: workspace.path, id: panelQuantity },
+      });
+      const output = await connection.client.callTool({
+        name: "find_references",
+        arguments: { workspace: workspace.path, id: panelQuantityChange },
+      });
+
+      // Assert
+      expect(property.isError).toBeFalsy();
+      expect(output.isError).toBeFalsy();
+      expect(parseToolText(property).result?.references).toEqual(panelQuantityUses);
+      expect(parseToolText(output).result?.references).toEqual([]);
+    } finally {
+      await connection.close();
+      await workspace.remove();
+    }
+  });
+
   it("refuses a schema version 2 index with unsupported_index and tells the user to re-index", async () => {
     // Arrange
     const workspace = await indexedReferencesWorkspace();
     rewriteAsSchemaVersion2(workspace.path);
+    const connection = await connectInProcess();
+
+    try {
+      // Act
+      const result = await connection.client.callTool({
+        name: "find_references",
+        arguments: { workspace: workspace.path, id: cartTotal },
+      });
+
+      // Assert
+      expect(result.isError).toBe(true);
+      expect(parseToolText(result)).toEqual(
+        errorEnvelope(
+          "unsupported_index",
+          `Unsupported index schema. Run codeatlas-ng index --workspace ${workspace.path} to rebuild it.`,
+        ),
+      );
+    } finally {
+      await connection.close();
+      await workspace.remove();
+    }
+  });
+
+  it("refuses a schema version 3 index with unsupported_index and tells the user to re-index", async () => {
+    // Arrange
+    const workspace = await indexedReferencesWorkspace();
+    rewriteAsSchemaVersion3(workspace.path);
     const connection = await connectInProcess();
 
     try {
