@@ -97,15 +97,13 @@ function signalForm(
 }
 
 function calleeName(expression: ts.Expression): string | undefined {
-  if (ts.isIdentifier(expression)) return expression.text;
-  if (
-    ts.isPropertyAccessExpression(expression) &&
-    ts.isIdentifier(expression.expression) &&
-    expression.name.text === "required"
-  ) {
-    return `${expression.expression.text}.required`;
-  }
-  return undefined;
+  const required =
+    ts.isPropertyAccessExpression(expression) && expression.name.text === "required"
+      ? expression.expression
+      : undefined;
+  const target = expressionName(required ?? expression);
+  if (target === undefined) return undefined;
+  return required === undefined ? target : `${target}.required`;
 }
 
 function decoratorNames(node: ts.Node): Set<string> {

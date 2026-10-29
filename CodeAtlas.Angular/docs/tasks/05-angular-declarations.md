@@ -12,7 +12,7 @@ User stories: 6, 47, 49. PRD: [Identity and schema](../prd/0001-initial.md#ident
 
 - [03 — find_symbol for plain TypeScript](03-find-symbol-typescript.md)
 
-Status: rejected
+Status: in-test
 
 ## Acceptance criteria
 
@@ -39,3 +39,8 @@ Status: rejected
   1. Recognize a signal initializer when the callee is qualified, using the last identifier, the same way `@ng.Component` is `component`. `core.input()`, `core.output()`, and `core.model()` match `input()`, `output()`, and `model()`. `core.input.required()` and `core.model.required()` match `input.required()` and `model.required()`, including a longer prefix such as `a.b.input.required()`. Qualified `model()` and `model.required()` still add an `output` named `<property>Change` at the property name's line and column. Do not start recognizing import aliases (`input as inFn`). The failing test above is the spec.
 
   **Non-blocking.** Passing tests added for the untested guard variants (`CanActivateChild`, `CanDeactivate`, `CanMatch`, `CanLoad`, and the `Fn` forms; `CanLoadFn` is not a guard), `@Input` / `@Output` string and `{ alias }` forms (the symbol name stays the property), a decorator winning over `model()` with no extra Change output, accessor `@Input` / `@Output`, an `@NgModule` class staying `class`, component beating `@Injectable` plus a guard interface, directive beating pipe, static `model()`, and a syntax error not failing `index`. A class written before `const =` in the same file is still indexed, and a component in another file is still returned. A get with `@Input` and a set with `@Output` merges to `input`, because `input` is the earlier kind. Developer tests assert public MCP and analyzer results with expected values taken from the contract and from source positions, not from the indexer. AC2's fixture comparison does cover `input.required()` and `model.required()` by member name. It does not check the Change output's line and column. AC3 does not name the other guard interfaces. AC4 checks the coverage list, which already existed. The schema 2 `find_symbol` test asserts the full error envelope, including `freshness: null`.
+- 2026-10-29 Developer, attempt 2: Qualified signal callees now use the same last-identifier resolution as qualified decorators and guards.
+  1. `calleeName` reuses `expressionName` instead of a second name walk. `core.input()`, `core.input.required()`, `core.output()`, `core.model()`, `core.model.required()`, and a longer prefix such as `a.b.input.required()` are stored as `input` or `output`, the same as the bare forms.
+  2. Qualified `model()` and `model.required()` set the existing `modelOutput` flag, so `<property>Change` is emitted at the property name's line and column, the same as bare `model()`.
+  3. An import alias such as `input as inFn` still has last identifier `inFn`, so `inFn()`, `outFn()`, and `modelFn()` stay unrecognized.
+  4. No Tester-added test was edited. `recognizes qualified signal calls by their last identifier, including model() Change outputs` in `tests/analyzer-angular-declaration-edges.test.ts` is unchanged and passes.
