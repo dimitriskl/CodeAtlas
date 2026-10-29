@@ -628,27 +628,42 @@ describe("MCP find_references", () => {
     }
   });
 
-  it("returns uses of a model property and does not give them to the Change output", async () => {
+  it("returns uses of a model property at the property name", async () => {
     // Arrange
     const workspace = await indexedReferencesWorkspace();
     const connection = await connectInProcess();
 
     try {
       // Act
-      const property = await connection.client.callTool({
+      const result = await connection.client.callTool({
         name: "find_references",
         arguments: { workspace: workspace.path, id: panelQuantity },
       });
-      const output = await connection.client.callTool({
+
+      // Assert
+      expect(result.isError).toBeFalsy();
+      expect(parseToolText(result).result?.references).toEqual(panelQuantityUses);
+    } finally {
+      await connection.close();
+      await workspace.remove();
+    }
+  });
+
+  it("does not give a model property's uses to the Change output", async () => {
+    // Arrange
+    const workspace = await indexedReferencesWorkspace();
+    const connection = await connectInProcess();
+
+    try {
+      // Act
+      const result = await connection.client.callTool({
         name: "find_references",
         arguments: { workspace: workspace.path, id: panelQuantityChange },
       });
 
       // Assert
-      expect(property.isError).toBeFalsy();
-      expect(output.isError).toBeFalsy();
-      expect(parseToolText(property).result?.references).toEqual(panelQuantityUses);
-      expect(parseToolText(output).result?.references).toEqual([]);
+      expect(result.isError).toBeFalsy();
+      expect(parseToolText(result).result?.references).toEqual([]);
     } finally {
       await connection.close();
       await workspace.remove();

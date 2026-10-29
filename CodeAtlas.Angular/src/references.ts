@@ -50,16 +50,15 @@ export function referencesInFile(
 }
 
 function resolveSymbol(checker: ts.TypeChecker, node: ts.Node): ts.Symbol | undefined {
-  const symbol = shorthandPropertySymbol(checker, node) ?? checker.getSymbolAtLocation(node);
+  const symbol = shorthandPropertySymbol(checker, node) ?? shorthandValueSymbol(checker, node);
   if (symbol === undefined) return undefined;
   if ((symbol.flags & ts.SymbolFlags.Alias) === 0) return symbol;
   return checker.getAliasedSymbol(symbol);
 }
 
 /**
- * A shorthand name is the property being read, not only the local it introduces.
- * Binding patterns (`const { total } = cart`, `function f({ total }: Cart)`) use the pattern's type.
- * A destructuring assignment (`({ total } = cart)`) uses the assignment's property symbol.
+ * A destructuring shorthand reads the property. An object-literal shorthand does not:
+ * `const made = { total }` reads the in-scope value, and a rest element is not a property.
  */
 function shorthandPropertySymbol(checker: ts.TypeChecker, node: ts.Node): ts.Symbol | undefined {
   if (!ts.isIdentifier(node)) return undefined;
@@ -68,14 +67,53 @@ function shorthandPropertySymbol(checker: ts.TypeChecker, node: ts.Node): ts.Sym
     ts.isBindingElement(parent) &&
     parent.name === node &&
     parent.propertyName === undefined &&
+    parent.dotDotDotToken === undefined &&
     ts.isObjectBindingPattern(parent.parent)
   ) {
     return checker.getTypeAtLocation(parent.parent).getProperty(node.text);
   }
-  if (ts.isShorthandPropertyAssignment(parent) && parent.name === node) {
+  if (
+    ts.isShorthandPropertyAssignment(parent) &&
+    parent.name === node &&
+    isDestructuringAssignmentTarget(parent.parent)
+  ) {
     return checker.getPropertySymbolOfDestructuringAssignment(node);
   }
   return undefined;
+}
+
+/** The in-scope value copied by `{ total }` in an object literal. */
+function shorthandValueSymbol(checker: ts.TypeChecker, node: ts.Node): ts.Symbol | undefined {
+  if (
+    ts.isIdentifier(node) &&
+    ts.isShorthandPropertyAssignment(node.parent) &&
+    node.parent.name === node
+  ) {
+    // The checker resolves the value from the shorthand assignment, not from its name.
+    return checker.getShorthandAssignmentValueSymbol(node.parent);
+  }
+  return checker.getSymbolAtLocation(node);
+}
+
+function isDestructuringAssignmentTarget(node: ts.Node): boolean {
+  const parent = node.parent;
+  if (parent === undefined) return false;
+  if (
+    ts.isBinaryExpression(parent) &&
+    parent.left === node &&
+    parent.operatorToken.kind === ts.SyntaxKind.EqualsToken
+  ) {
+    return true;
+  }
+  if (ts.isForOfStatement(parent) && parent.initializer === node) return true;
+  if (ts.isParenthesizedExpression(parent) && parent.expression === node) {
+    return isDestructuringAssignmentTarget(parent);
+  }
+  if (ts.isPropertyAssignment(parent) && parent.initializer === node) {
+    return isDestructuringAssignmentTarget(parent.parent);
+  }
+  if (ts.isArrayLiteralExpression(parent)) return isDestructuringAssignmentTarget(parent);
+  return false;
 }
 
 function isDeclarationName(node: ts.Node, symbol: ts.Symbol): boolean {
