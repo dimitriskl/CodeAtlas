@@ -11,7 +11,7 @@ Three numbers, kept separate so each can change on its own:
 | Number              | Constant          | Initial value | Meaning                                                                                                |
 | ------------------- | ----------------- | ------------- | ------------------------------------------------------------------------------------------------------ |
 | Contract version    | `contractVersion` | `1`           | Shape of this JSON envelope.                                                                           |
-| Schema version      | `schemaVersion`   | `1`           | Persisted index schema. `index` writes it into each generation.                                        |
+| Schema version      | `schemaVersion`   | `2`           | Persisted index schema. `index` writes it into each generation.                                        |
 | Application version | `appVersion`      | `0.00.01`     | This package. Format `x.xx.xx`. Printed by `codeatlas-ng --version` and sent as `responseToolVersion`. |
 
 `responseToolVersion` is the application version of the process that answered. It is not the contract version and not the schema version.
@@ -249,24 +249,24 @@ Paths stored in the generation are workspace-relative and use `/`. They do not s
 | --------------------------- | ------------------------------------------------ |
 | `manifestVersion`           | `1`                                              |
 | `generationId`              | The published generation.                        |
-| `schemaVersion`             | `1`                                              |
+| `schemaVersion`             | `2`                                              |
 | `workspace`                 | The workspace identity from the naming rules.    |
 | `artifacts.index.db.length` | Byte length of that generation's `index.db`.     |
 | `artifacts.index.db.sha256` | SHA-256 of those bytes, 64 lowercase hex digits. |
 
 Publication writes a new `generations/<generationId>/` directory and its `index.db`, then replaces `current.json` by renaming a temporary file in the same directory. The generation directory is not modified after the pointer names it. Indexing the same workspace again publishes a new generation id, leaves the previous `index.db` bytes unchanged, and keeps the same folder name.
 
-### Schema version 1
+### Schema version 2
 
 `index.db` is SQLite. This version stores:
 
-| Table               | Columns                                                                                                                                                                                                                                                                          |
-| ------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `metadata`          | `key` TEXT primary key, `value` TEXT. Keys: `generationId`, `schemaVersion`, `contractVersion`, `appVersion`, `templateCoverage`.                                                                                                                                                |
-| `projects`          | `name` TEXT primary key, `root` TEXT, `source_root` TEXT, `project_type` TEXT. Paths are workspace-relative.                                                                                                                                                                     |
-| `tracked_files`     | `path` TEXT primary key, `sha256` TEXT. `path` is workspace-relative. `sha256` is the lowercase hex SHA-256 of the file bytes.                                                                                                                                                   |
-| `symbols`           | `id` TEXT primary key, `project` TEXT, `path` TEXT, `qualified_name` TEXT, `kind` TEXT, `line` INTEGER, `column` INTEGER. `line` and `column` are 1-based and point at the symbol name. For an overload set, that is the first signature's name.                                 |
-| `symbol_signatures` | `symbol_id` TEXT, `ordinal` INTEGER, `signature` TEXT. Primary key (`symbol_id`, `ordinal`). `ordinal` starts at 0 and follows source order. `symbol_id` matches `symbols.id`. A generation written before this table existed has no table; readers treat that as no signatures. |
+| Table               | Columns                                                                                                                                                                                                                                          |
+| ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `metadata`          | `key` TEXT primary key, `value` TEXT. Keys: `generationId`, `schemaVersion`, `contractVersion`, `appVersion`, `templateCoverage`.                                                                                                                |
+| `projects`          | `name` TEXT primary key, `root` TEXT, `source_root` TEXT, `project_type` TEXT. Paths are workspace-relative.                                                                                                                                     |
+| `tracked_files`     | `path` TEXT primary key, `sha256` TEXT. `path` is workspace-relative. `sha256` is the lowercase hex SHA-256 of the file bytes.                                                                                                                   |
+| `symbols`           | `id` TEXT primary key, `project` TEXT, `path` TEXT, `qualified_name` TEXT, `kind` TEXT, `line` INTEGER, `column` INTEGER. `line` and `column` are 1-based and point at the symbol name. For an overload set, that is the first signature's name. |
+| `symbol_signatures` | `symbol_id` TEXT, `ordinal` INTEGER, `signature` TEXT. Primary key (`symbol_id`, `ordinal`). `ordinal` starts at 0 and follows source order. `symbol_id` matches `symbols.id`.                                                                   |
 
 Tracked paths are:
 
@@ -301,8 +301,8 @@ Other `index` failures:
 | `workspace_not_found` | 1    | The path does not exist, or it has no `angular.json` with a `projects` object. Message: `No Angular workspace configuration (angular.json) was found.` |
 | `index_busy`          | 1    | The writer lock is held, as above.                                                                                                                     |
 | `analysis_failed`     | 1    | The workspace could not be indexed, including a `tsConfig` that was named and is missing, or `angular.json` that is not JSON.                          |
-| `invalid_index`       | 1    | `current.json` or `index.db` is present but not a schema-1 generation.                                                                                 |
-| `unsupported_index`   | 1    | The generation's `schemaVersion` is not `1`.                                                                                                           |
+| `invalid_index`       | 1    | `current.json` or `index.db` is present but is not a valid generation of this schema. A missing `symbol_signatures` table is this error.               |
+| `unsupported_index`   | 1    | The generation's `schemaVersion` is not `2`. Message: `Unsupported index schema. Run codeatlas-ng index --workspace <path> to rebuild it.`             |
 
 `--workspace` defaults to the current directory. A relative path is resolved from there.
 
@@ -315,7 +315,7 @@ Other `index` failures:
 | Field             | Type   | Meaning                                                                  |
 | ----------------- | ------ | ------------------------------------------------------------------------ |
 | `generationId`    | string | The generation just published.                                           |
-| `schemaVersion`   | number | `1`, from the generation.                                                |
+| `schemaVersion`   | number | `2`, from the generation.                                                |
 | `contractVersion` | number | Contract version stored in the generation.                               |
 | `appVersion`      | string | Application version stored in the generation.                            |
 | `counts.projects` | number | Rows in `projects`.                                                      |

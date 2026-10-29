@@ -13,7 +13,7 @@ User stories: 5, 6, 7, 26, 27, 28, 29. PRD: [Identity and schema](../prd/0001-in
 
 - [02 — Index a minimal workspace and report index status](02-index-minimal-workspace-index-status.md)
 
-Status: rejected
+Status: in-test
 
 ## Acceptance criteria
 
@@ -51,3 +51,4 @@ Status: rejected
   - DRY: `toHit` in `find-symbol.ts` and `findSymbolEnvelope` in `envelope.ts` both copy every field of a hit. The `readTsConfigOption` error message still says "build options" for the `test` target.
   - `README.md` does not mention `find_symbol` yet.
   - Merge with PR #4 (task 04): `envelope.ts`, `generation-store.ts`, `workspace.ts`, `MCP-CONTRACT.md` and `BOARD.md` conflict (`git merge-tree` against `629dd17`); `mcp-server.ts` merges cleanly. After the merge, wire `find_symbol` into the stale gate (`stale_index` refusal) and the real `warningCount`, and make sure task 04's freshness inputs include the `architect.test.options.tsConfig` and the test-program files this branch now tracks. Neither is counted against task 03.
+- 2026-10-29 Developer: QA attempt 1. `schemaVersion` is now `2`. A schema-1 generation, the shape `angular/main` writes (`current.json` and metadata `schemaVersion` 1, and no `symbol_signatures` table), makes `find_symbol` fail with `unsupported_index` through the existing `CommandError` / `commandErrorEnvelope` path. The message is `Unsupported index schema. Run codeatlas-ng index --workspace <path> to rebuild it.` A schema-2 generation that is missing `symbol_signatures` is `invalid_index`. `MCP-CONTRACT.md` schema version rows, the schema heading, the `unsupported_index` row, and the index `schemaVersion` result row now say `2`, and the sentence that a missing table means no signatures is removed. New seam test in `tests/mcp-find-symbol.test.ts`: `refuses a schema version 1 index with unsupported_index and tells the user to re-index`. Existing schema assertions in `tests/cli-index.test.ts`, `tests/mcp-index-status.test.ts`, and `tests/versions.test.ts` now expect `2`.

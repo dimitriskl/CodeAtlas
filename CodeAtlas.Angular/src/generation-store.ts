@@ -161,7 +161,7 @@ export function readPublishedIndex(workspacePath: string): PublishedStatus | nul
   const opened = openGeneration(workspacePath);
   if (opened === null) return null;
   try {
-    return statusFrom(opened);
+    return statusFrom(opened, workspacePath);
   } finally {
     opened.database.close();
   }
@@ -175,7 +175,7 @@ export function readPublishedSymbols(workspacePath: string): {
   const opened = openGeneration(workspacePath);
   if (opened === null) return null;
   try {
-    return { status: statusFrom(opened), symbols: readSymbols(opened.database) };
+    return { status: statusFrom(opened, workspacePath), symbols: readSymbols(opened.database) };
   } finally {
     opened.database.close();
   }
@@ -190,7 +190,7 @@ function openGeneration(workspacePath: string): OpenedGeneration | null {
     throw error;
   }
   if (!existsSync(storage.currentJson)) return null;
-  const manifest = readManifest(storage);
+  const manifest = readManifest(storage, workspacePath);
   const databasePath = path.join(
     storage.directory,
     "generations",
@@ -213,10 +213,10 @@ function openGeneration(workspacePath: string): OpenedGeneration | null {
   };
 }
 
-function statusFrom(opened: OpenedGeneration): PublishedStatus {
+function statusFrom(opened: OpenedGeneration, workspacePath: string): PublishedStatus {
   const metadata = readMetadata(opened.database);
   if (metadata.get("schemaVersion") !== String(schemaVersion)) {
-    throw new CommandError("unsupported_index", "Unsupported index schema.");
+    throw unsupportedIndex(workspacePath);
   }
   if (metadata.get("generationId") !== opened.manifest.generationId) {
     throw new CommandError("invalid_index", "Snapshot and index identities disagree.");
@@ -284,8 +284,10 @@ function readSignatures(database: Database.Database): Map<string, string[]> {
       "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'symbol_signatures'",
     )
     .get();
+  if (table === undefined) {
+    throw new CommandError("invalid_index", "Snapshot is missing the symbol_signatures table.");
+  }
   const signatures = new Map<string, string[]>();
-  if (table === undefined) return signatures;
   const rows = database
     .prepare<[], { symbol_id: string; signature: string }>(
       "SELECT symbol_id, signature FROM symbol_signatures ORDER BY symbol_id, ordinal",
@@ -299,7 +301,14 @@ function readSignatures(database: Database.Database): Map<string, string[]> {
   return signatures;
 }
 
-function readManifest(storage: WorkspaceStorage): Manifest {
+function unsupportedIndex(workspacePath: string): CommandError {
+  return new CommandError(
+    "unsupported_index",
+    `Unsupported index schema. Run codeatlas-ng index --workspace ${workspacePath} to rebuild it.`,
+  );
+}
+
+function readManifest(storage: WorkspaceStorage, workspacePath: string): Manifest {
   let parsed: unknown;
   try {
     parsed = JSON.parse(readFileSync(storage.currentJson, "utf8")) as unknown;
@@ -324,9 +333,14 @@ function readManifest(storage: WorkspaceStorage): Manifest {
     typeof index.length !== "number" ||
     typeof index.sha256 !== "string" ||
     !/^[0-9a-f]{64}$/.test(index.sha256) ||
-    parsed.schemaVersion !== schemaVersion ||
     parsed.workspace !== storage.identity
   ) {
+    throw new CommandError("invalid_index", "Invalid snapshot manifest.");
+  }
+  if (parsed.schemaVersion !== schemaVersion) {
+    if (typeof parsed.schemaVersion === "number" && Number.isInteger(parsed.schemaVersion)) {
+      throw unsupportedIndex(workspacePath);
+    }
     throw new CommandError("invalid_index", "Invalid snapshot manifest.");
   }
   return {

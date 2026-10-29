@@ -1,4 +1,9 @@
+import { createHash } from "node:crypto";
+import { readFileSync, writeFileSync } from "node:fs";
+import path from "node:path";
+import Database from "better-sqlite3";
 import { describe, expect, it } from "vitest";
+import { workspaceStorage } from "../src/workspace-storage.js";
 import { copyMinimalWorkspace, copySymbolsWorkspace } from "./support/fixture.js";
 import { connectInProcess } from "./support/mcp-client.js";
 import { runCli } from "./support/run-cli.js";
@@ -188,6 +193,38 @@ async function indexedSymbolsWorkspace(): Promise<{
   const indexed = await runCli(["index", "--workspace", workspace.path]);
   if (indexed.exitCode !== 0) throw new Error(indexed.stderr);
   return workspace;
+}
+
+/** Rewrite a published generation into the schema version 1 shape angular/main writes. */
+function rewriteAsSchemaVersion1(workspacePath: string): void {
+  const storage = workspaceStorage(workspacePath);
+  const manifest = JSON.parse(readFileSync(storage.currentJson, "utf8")) as {
+    manifestVersion: number;
+    generationId: string;
+    schemaVersion: number;
+    workspace: string;
+    artifacts: { "index.db": { length: number; sha256: string } };
+  };
+  const databasePath = path.join(
+    storage.directory,
+    "generations",
+    manifest.generationId,
+    "index.db",
+  );
+  const database = new Database(databasePath);
+  try {
+    database.prepare("UPDATE metadata SET value = ? WHERE key = ?").run("1", "schemaVersion");
+    database.exec("DROP TABLE IF EXISTS symbol_signatures");
+  } finally {
+    database.close();
+  }
+  const bytes = readFileSync(databasePath);
+  manifest.schemaVersion = 1;
+  manifest.artifacts["index.db"] = {
+    length: bytes.length,
+    sha256: createHash("sha256").update(bytes).digest("hex"),
+  };
+  writeFileSync(storage.currentJson, `${JSON.stringify(manifest, null, 2)}\n`);
 }
 
 describe("MCP find_symbol", () => {
@@ -1483,6 +1520,29 @@ describe("MCP find_symbol", () => {
         },
         result: { symbols: [] },
       });
+    } finally {
+      await connection.close();
+      await workspace.remove();
+    }
+  });
+
+  it("refuses a schema version 1 index with unsupported_index and tells the user to re-index", async () => {
+    // Arrange
+    const workspace = await indexedSymbolsWorkspace();
+    rewriteAsSchemaVersion1(workspace.path);
+    const connection = await connectInProcess();
+    const message = `Unsupported index schema. Run codeatlas-ng index --workspace ${workspace.path} to rebuild it.`;
+
+    try {
+      // Act
+      const result = await connection.client.callTool({
+        name: "find_symbol",
+        arguments: { workspace: workspace.path, name: "parse" },
+      });
+
+      // Assert
+      expect(result.isError).toBe(true);
+      expect(parseToolText(result)).toEqual(errorEnvelope("unsupported_index", message));
     } finally {
       await connection.close();
       await workspace.remove();
