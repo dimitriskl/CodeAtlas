@@ -11,7 +11,7 @@ Three numbers, kept separate so each can change on its own:
 | Number              | Constant          | Initial value | Meaning                                                                                                |
 | ------------------- | ----------------- | ------------- | ------------------------------------------------------------------------------------------------------ |
 | Contract version    | `contractVersion` | `1`           | Shape of this JSON envelope.                                                                           |
-| Schema version      | `schemaVersion`   | `2`           | Persisted index schema. `index` writes it into each generation.                                        |
+| Schema version      | `schemaVersion`   | `3`           | Persisted index schema. `index` writes it into each generation.                                        |
 | Application version | `appVersion`      | `0.00.01`     | This package. Format `x.xx.xx`. Printed by `codeatlas-ng --version` and sent as `responseToolVersion`. |
 
 `responseToolVersion` is the application version of the process that answered. It is not the contract version and not the schema version.
@@ -77,7 +77,7 @@ Entries are literal paths, not globs. On an object entry, `input` is the tracked
 
 `changedFiles` is sorted in ascending code-unit order.
 
-`index` and `index_status` report this freshness and do not refuse a stale generation. Every other query refuses one. `coverage` and `find_symbol` are those queries in this edition. The refusal is:
+`index` and `index_status` report this freshness and do not refuse a stale generation. Every other query refuses one. `coverage`, `find_symbol`, and `find_references` are those queries in this edition. The refusal is:
 
 - `success` is false
 - `error.code` is `stale_index`
@@ -148,7 +148,7 @@ A query that refuses a stale generation uses code `stale_index` and message `The
 
 In MCP, a failed tool call is an MCP error result that carries this same envelope with `success: false`. CLI exit codes do not apply to MCP.
 
-The full error-code catalog is extended by later tasks. This section records `invalid_arguments` because the CLI produces it, and `stale_index` because a query refuses a stale generation. CLI exit code 3 for that refusal is deferred to task 18. `index` does not refuse a stale generation. `find_symbol` also returns `snapshot_mismatch` when `snapshotId` is not the published generation. The message is `The index was replaced. Start a new query at offset zero.` That error envelope has `freshness` and `coverage` null and no pagination. The `find_symbol` section has the other argument errors.
+The full error-code catalog is extended by later tasks. This section records `invalid_arguments` because the CLI produces it, and `stale_index` because a query refuses a stale generation. CLI exit code 3 for that refusal is deferred to task 18. `index` does not refuse a stale generation. `find_symbol` and `find_references` also return `snapshot_mismatch` when `snapshotId` is not the published generation. The message is `The index was replaced. Start a new query at offset zero.` That error envelope has `freshness` and `coverage` null and no pagination. `find_references` returns `symbol_not_found` when the symbol id is not in the published generation. The message is `Symbol id was not found.` That error envelope has `freshness` and `coverage` null and no pagination. The `find_symbol` and `find_references` sections have the other argument errors.
 
 ## Example: `coverage` with no index
 
@@ -287,24 +287,25 @@ Paths stored in the generation are workspace-relative and use `/`. They do not s
 | --------------------------- | ------------------------------------------------ |
 | `manifestVersion`           | `1`                                              |
 | `generationId`              | The published generation.                        |
-| `schemaVersion`             | `2`                                              |
+| `schemaVersion`             | `3`                                              |
 | `workspace`                 | The workspace identity from the naming rules.    |
 | `artifacts.index.db.length` | Byte length of that generation's `index.db`.     |
 | `artifacts.index.db.sha256` | SHA-256 of those bytes, 64 lowercase hex digits. |
 
 Publication writes a new `generations/<generationId>/` directory and its `index.db`, then replaces `current.json` by renaming a temporary file in the same directory. The generation directory is not modified after the pointer names it. Indexing the same workspace again publishes a new generation id, leaves the previous `index.db` bytes unchanged, and keeps the same folder name.
 
-### Schema version 2
+### Schema version 3
 
 `index.db` is SQLite. This version stores:
 
-| Table               | Columns                                                                                                                                                                                                                                          |
-| ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `metadata`          | `key` TEXT primary key, `value` TEXT. Keys: `generationId`, `schemaVersion`, `contractVersion`, `appVersion`, `templateCoverage`.                                                                                                                |
-| `projects`          | `name` TEXT primary key, `root` TEXT, `source_root` TEXT, `project_type` TEXT. Paths are workspace-relative.                                                                                                                                     |
-| `tracked_files`     | `path` TEXT primary key, `sha256` TEXT. `path` is workspace-relative. `sha256` is the lowercase hex SHA-256 of the file bytes.                                                                                                                   |
-| `symbols`           | `id` TEXT primary key, `project` TEXT, `path` TEXT, `qualified_name` TEXT, `kind` TEXT, `line` INTEGER, `column` INTEGER. `line` and `column` are 1-based and point at the symbol name. For an overload set, that is the first signature's name. |
-| `symbol_signatures` | `symbol_id` TEXT, `ordinal` INTEGER, `signature` TEXT. Primary key (`symbol_id`, `ordinal`). `ordinal` starts at 0 and follows source order. `symbol_id` matches `symbols.id`.                                                                   |
+| Table               | Columns                                                                                                                                                                                                                                                                                                                         |
+| ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `metadata`          | `key` TEXT primary key, `value` TEXT. Keys: `generationId`, `schemaVersion`, `contractVersion`, `appVersion`, `templateCoverage`.                                                                                                                                                                                               |
+| `projects`          | `name` TEXT primary key, `root` TEXT, `source_root` TEXT, `project_type` TEXT. Paths are workspace-relative.                                                                                                                                                                                                                    |
+| `tracked_files`     | `path` TEXT primary key, `sha256` TEXT. `path` is workspace-relative. `sha256` is the lowercase hex SHA-256 of the file bytes.                                                                                                                                                                                                  |
+| `symbols`           | `id` TEXT primary key, `project` TEXT, `path` TEXT, `qualified_name` TEXT, `kind` TEXT, `line` INTEGER, `column` INTEGER. `line` and `column` are 1-based and point at the symbol name. For an overload set, that is the first signature's name.                                                                                |
+| `symbol_signatures` | `symbol_id` TEXT, `ordinal` INTEGER, `signature` TEXT. Primary key (`symbol_id`, `ordinal`). `ordinal` starts at 0 and follows source order. `symbol_id` matches `symbols.id`.                                                                                                                                                  |
+| `references`        | `target_id` TEXT, `kind` TEXT, `project` TEXT, `path` TEXT, `line` INTEGER, `column` INTEGER. `target_id` matches `symbols.id`. `kind` is one reference kind. `project` is the angular.json project whose program contained the use. `path` is workspace-relative. `line` and `column` are 1-based and point at the use's name. |
 
 Tracked paths, and whether a change is stale-making or warning-only, are the Freshness scope list. In short:
 
@@ -338,14 +339,14 @@ Stdout is empty. Stderr is the error envelope (`command` is `index`, `freshness`
 
 Other `index` failures:
 
-| Code                  | Exit | When                                                                                                                                                   |
-| --------------------- | ---- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `invalid_arguments`   | 2    | The arguments are not `index` or `index --workspace <path>`. Message: `Index accepts only --workspace <path>.`                                         |
-| `workspace_not_found` | 1    | The path does not exist, or it has no `angular.json` with a `projects` object. Message: `No Angular workspace configuration (angular.json) was found.` |
-| `index_busy`          | 1    | The writer lock is held, as above.                                                                                                                     |
-| `analysis_failed`     | 1    | The workspace could not be indexed, including a `tsConfig` that was named and is missing, or `angular.json` that is not JSON.                          |
-| `invalid_index`       | 1    | `current.json` or `index.db` is present but is not a valid generation of this schema. A missing `symbol_signatures` table is this error.               |
-| `unsupported_index`   | 1    | The generation's `schemaVersion` is not `2`. Message: `Unsupported index schema. Run codeatlas-ng index --workspace <path> to rebuild it.`             |
+| Code                  | Exit | When                                                                                                                                                                     |
+| --------------------- | ---- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `invalid_arguments`   | 2    | The arguments are not `index` or `index --workspace <path>`. Message: `Index accepts only --workspace <path>.`                                                           |
+| `workspace_not_found` | 1    | The path does not exist, or it has no `angular.json` with a `projects` object. Message: `No Angular workspace configuration (angular.json) was found.`                   |
+| `index_busy`          | 1    | The writer lock is held, as above.                                                                                                                                       |
+| `analysis_failed`     | 1    | The workspace could not be indexed, including a `tsConfig` that was named and is missing, or `angular.json` that is not JSON.                                            |
+| `invalid_index`       | 1    | `current.json` or `index.db` is present but is not a valid generation of this schema. A missing `symbol_signatures` table or a missing `references` table is this error. |
+| `unsupported_index`   | 1    | The generation's `schemaVersion` is not `3`. Message: `Unsupported index schema. Run codeatlas-ng index --workspace <path> to rebuild it.`                               |
 
 `--workspace` defaults to the current directory. A relative path is resolved from there.
 
@@ -358,7 +359,7 @@ Other `index` failures:
 | Field             | Type   | Meaning                                                                  |
 | ----------------- | ------ | ------------------------------------------------------------------------ |
 | `generationId`    | string | The generation just published.                                           |
-| `schemaVersion`   | number | `2`, from the generation.                                                |
+| `schemaVersion`   | number | `3`, from the generation.                                                |
 | `contractVersion` | number | Contract version stored in the generation.                               |
 | `appVersion`      | string | Application version stored in the generation.                            |
 | `counts.projects` | number | Rows in `projects`.                                                      |
@@ -698,6 +699,172 @@ When the workspace has no published generation, and `snapshotId` was not supplie
     "code": "snapshot_mismatch",
     "message": "The index was replaced. Start a new query at offset zero.",
     "diagnostics": []
+  }
+}
+```
+
+## MCP tool `find_references`
+
+Read-only. It does not write the index and it does not call a provider.
+
+Input:
+
+| Field        | Type                   | Meaning                                                                                                        |
+| ------------ | ---------------------- | -------------------------------------------------------------------------------------------------------------- |
+| `workspace`  | string, required       | Path to the workspace directory. Relative paths resolve from the server's current directory.                   |
+| `id`         | string, required       | Symbol id. Not trimmed. Empty is `invalid_arguments`.                                                          |
+| `kinds`      | string array, optional | Reference kinds to keep. Omit to allow every kind. Each entry must be a coverage reference kind.               |
+| `project`    | string, optional       | Exact `angular.json` project of the use. An unknown project is an empty page. Empty is `invalid_arguments`.    |
+| `offset`     | integer, optional      | First matching row. Default `0`. A negative or non-integer value is `invalid_arguments`.                       |
+| `limit`      | integer, optional      | Page size. Default `100`. Must be from `1` through `1000`.                                                     |
+| `snapshotId` | string, optional       | Generation id from a previous page. Required when `offset` is greater than zero. Empty is `invalid_arguments`. |
+
+Indexing records a use from the TypeScript program of the project that contains the file. `find_references` reads those rows. It does not analyze source again.
+
+A use's name is an identifier or a private identifier. `path` is the workspace-relative file of that name. `line` and `column` are 1-based and point at that name, the same way a symbol's line and column point at its name. The name of the symbol's own declaration is not a use. Overloads and a get/set pair share one symbol id, so a use of any of them points at that id.
+
+- `invocation`: the name is the callee of a call, `new`, or tagged template. Parentheses, a non-null assertion (`!`), or an `as` assertion around the callee do not change that. `cart.total()` records `total`, not `cart`.
+- `reference`: every other use. An import specifier, a type annotation, and a value that is not called are this kind.
+
+An element access (`obj["method"]()` or `obj[name]()`) is not a recorded use. A call through a string built at runtime is the `string-based-dynamic-calls` exclusion.
+
+The target is an indexed symbol whose declaration name is one of the resolved symbol's declarations. An import alias resolves to the symbol it names. When those declarations belong to more than one indexed symbol, each of those symbols is a target. `project` on the row is the `angular.json` project whose program contained the use.
+
+`id` must name a symbol in the published generation. Any other id is `symbol_not_found` with message `Symbol id was not found.` That envelope has `freshness` and `coverage` null and no pagination. A known symbol with no recorded uses succeeds with an empty page. When the workspace has no published generation, and `snapshotId` was not supplied, the id is not found, so the result is `symbol_not_found`. Nothing is written.
+
+Omitted `kinds` or `project` does not filter. A `kinds` entry that is not a coverage reference kind, including an empty string, is `invalid_arguments`. This edition stores `invocation` and `reference`. The other coverage reference kinds are accepted by the filter and match no rows until a later task records them. Filters are applied before sorting. Rows are ordered by `path`, then `line`, then `column`, then `kind`. Strings use UTF-16 code unit order (the same order as `<` on strings). Numbers ascend. The page is that slice.
+
+Pagination matches `find_symbol`. `snapshotId` is the generation id. `continuationSupported` is true whenever a generation is loaded, including when `hasMore` is false. `nextOffset` is `offset + returned` when `hasMore` is true, and null otherwise. `offset` greater than zero without `snapshotId` is `invalid_arguments` with message `offset greater than zero requires snapshotId.` A supplied `snapshotId` must equal the published generation id, including when `offset` is zero. Any other id, and a `snapshotId` supplied when no generation is published, is `snapshot_mismatch` with message `The index was replaced. Start a new query at offset zero.` An offset past the last match succeeds with `returned` 0, the real `total`, `hasMore` false, and `nextOffset` null.
+
+Other `invalid_arguments` messages from this tool:
+
+| When                                             | Message                                         |
+| ------------------------------------------------ | ----------------------------------------------- |
+| `id` is empty                                    | `id must not be empty.`                         |
+| `kinds` is an empty array                        | `kinds must not be empty.`                      |
+| a `kinds` entry is not a coverage reference kind | `Unknown reference kind.`                       |
+| `project` is empty                               | `project must not be empty.`                    |
+| `snapshotId` is empty                            | `snapshotId must not be empty.`                 |
+| `offset` is not a nonnegative integer            | `offset must be a nonnegative integer.`         |
+| `limit` is outside 1 through 1000                | `limit must be an integer from 1 through 1000.` |
+
+On success, `command` is `find_references`. `result.references` is the page. Each reference has these fields, in this order:
+
+| Field      | Type   | Meaning                                                 |
+| ---------- | ------ | ------------------------------------------------------- |
+| `targetId` | string | Symbol id the use points at.                            |
+| `kind`     | string | Reference kind.                                         |
+| `project`  | string | `angular.json` project whose program contained the use. |
+| `path`     | string | Workspace-relative file, using `/`.                     |
+| `line`     | number | 1-based line of the use's name.                         |
+| `column`   | number | 1-based column of the use's name.                       |
+
+Freshness is the same check as `find_symbol`. A stale-making change returns the `stale_index` refusal from Freshness scope. `command` is `find_references`. The tool result is an MCP error. There is no `result` and no pagination. When the index is fresh, `warningCount` is the number of style and asset warnings, and `freshness.diagnostics` lists them. Coverage is the edition boundary for the loaded generation, with the generation's `templateCoverage` and no `no-index` limitation.
+
+## Example: `find_references`
+
+`checkedAtUtc` is the time of the check. `snapshotId` is the published generation id. This call is `id` `shop::src/cart.ts#Cart.total` against a fixture whose `Cart.total` is called at column 22 of line 4 in `src/bill.ts`, at columns 15 and 30 of line 5 in that file, and at column 17 of line 7 in `src/cart.ts` (`this.total()`). `Bag.total()` in the same expression is a different symbol and is not a row.
+
+```json
+{
+  "contractVersion": 1,
+  "command": "find_references",
+  "success": true,
+  "responseToolVersion": "0.00.01",
+  "warningCount": 0,
+  "freshness": {
+    "state": "fresh",
+    "checkedAtUtc": "2026-10-27T00:00:00.000Z",
+    "isStale": false,
+    "changedFiles": [],
+    "scope": "tracked-input-content-hashes",
+    "inputCoverage": {
+      "status": "complete",
+      "scope": "tracked-input-content-hashes",
+      "issueCount": 0,
+      "reasonCodes": []
+    },
+    "diagnostics": []
+  },
+  "coverage": {
+    "language": "TypeScript",
+    "symbols": [
+      "component",
+      "directive",
+      "pipe",
+      "service",
+      "guard",
+      "interceptor",
+      "route",
+      "class",
+      "interface",
+      "function",
+      "method",
+      "property",
+      "input",
+      "output",
+      "type-alias",
+      "enum"
+    ],
+    "references": "static-source-and-template-references",
+    "referenceSymbolKinds": [
+      "invocation",
+      "template-call",
+      "template-usage",
+      "injection",
+      "route",
+      "reference"
+    ],
+    "templateCoverage": "complete",
+    "runtimeCallGraph": false,
+    "exclusions": ["string-based-dynamic-calls", "runtime-factory-swapped-providers"],
+    "limitations": []
+  },
+  "pagination": {
+    "offset": 0,
+    "limit": 100,
+    "returned": 4,
+    "total": 4,
+    "hasMore": false,
+    "nextOffset": null,
+    "snapshotId": "<generation id>",
+    "continuationSupported": true
+  },
+  "result": {
+    "references": [
+      {
+        "targetId": "shop::src/cart.ts#Cart.total",
+        "kind": "invocation",
+        "project": "shop",
+        "path": "src/bill.ts",
+        "line": 4,
+        "column": 22
+      },
+      {
+        "targetId": "shop::src/cart.ts#Cart.total",
+        "kind": "invocation",
+        "project": "shop",
+        "path": "src/bill.ts",
+        "line": 5,
+        "column": 15
+      },
+      {
+        "targetId": "shop::src/cart.ts#Cart.total",
+        "kind": "invocation",
+        "project": "shop",
+        "path": "src/bill.ts",
+        "line": 5,
+        "column": 30
+      },
+      {
+        "targetId": "shop::src/cart.ts#Cart.total",
+        "kind": "invocation",
+        "project": "shop",
+        "path": "src/cart.ts",
+        "line": 7,
+        "column": 17
+      }
+    ]
   }
 }
 ```

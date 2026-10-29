@@ -183,6 +183,34 @@ export function readPublishedSymbols(workspacePath: string): {
   }
 }
 
+export type StoredReference = {
+  targetId: string;
+  kind: string;
+  project: string;
+  path: string;
+  line: number;
+  column: number;
+};
+
+/** The published generation, its symbols, and its references, or null when no current.json exists. */
+export function readPublishedReferences(workspacePath: string): {
+  status: PublishedStatus;
+  symbols: StoredSymbol[];
+  references: StoredReference[];
+} | null {
+  const opened = openGeneration(workspacePath);
+  if (opened === null) return null;
+  try {
+    return {
+      status: statusFrom(opened, workspacePath),
+      symbols: readSymbols(opened.database),
+      references: readReferences(opened.database),
+    };
+  } finally {
+    opened.database.close();
+  }
+}
+
 function openGeneration(workspacePath: string): OpenedGeneration | null {
   let storage: WorkspaceStorage;
   try {
@@ -280,6 +308,22 @@ function readSymbols(database: Database.Database): StoredSymbol[] {
     column: row.column,
     signatures: signatures.get(row.id) ?? [],
   }));
+}
+
+function readReferences(database: Database.Database): StoredReference[] {
+  const table = database
+    .prepare<[], { name: string }>(
+      "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'references'",
+    )
+    .get();
+  if (table === undefined) {
+    throw new CommandError("invalid_index", "Snapshot is missing the references table.");
+  }
+  return database
+    .prepare<[], StoredReference>(
+      'SELECT target_id AS targetId, kind, project, path, line, column FROM "references"',
+    )
+    .all();
 }
 
 function readSignatures(database: Database.Database): Map<string, string[]> {
@@ -391,6 +435,7 @@ function writeDatabase(
 ): void {
   for (const file of workspace.files) assertStoredFilePath(file.path);
   for (const symbol of workspace.symbols) assertStoredFilePath(symbol.path);
+  for (const reference of workspace.references) assertStoredFilePath(reference.path);
   const database = new Database(databasePath);
   try {
     database.pragma("journal_mode = DELETE");
@@ -423,6 +468,14 @@ function writeDatabase(
         ordinal INTEGER NOT NULL,
         signature TEXT NOT NULL,
         PRIMARY KEY (symbol_id, ordinal)
+      );
+      CREATE TABLE "references" (
+        target_id TEXT NOT NULL,
+        kind TEXT NOT NULL,
+        project TEXT NOT NULL,
+        path TEXT NOT NULL,
+        line INTEGER NOT NULL,
+        column INTEGER NOT NULL
       );
     `);
     const insert = database.transaction(() => {
@@ -459,6 +512,12 @@ function writeDatabase(
         item.signatures.forEach((text, ordinal) => {
           signature.run(item.id, ordinal, text);
         });
+      }
+      const reference = database.prepare(
+        'INSERT INTO "references" (target_id, kind, project, path, line, column) VALUES (?, ?, ?, ?, ?, ?)',
+      );
+      for (const item of workspace.references) {
+        reference.run(item.targetId, item.kind, item.project, item.path, item.line, item.column);
       }
     });
     insert();

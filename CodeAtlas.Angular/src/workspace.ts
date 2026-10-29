@@ -3,6 +3,7 @@ import { existsSync, readFileSync, readdirSync, realpathSync, statSync } from "n
 import path from "node:path";
 import ts from "typescript";
 import { CommandError, workspaceNotFoundMessage } from "./errors.js";
+import { referencesInFile, type IndexedReference } from "./references.js";
 import { indexSourceFile, type SourceSymbolKind } from "./symbols.js";
 import {
   compareCodeUnit,
@@ -44,6 +45,7 @@ export type LoadedWorkspace = WorkspaceStorage & {
   projects: ProjectRecord[];
   files: TrackedFile[];
   symbols: IndexedSymbol[];
+  references: IndexedReference[];
   /** Workspace-relative `templateUrl` targets, including ones that no longer exist. */
   templateFiles: readonly string[];
 };
@@ -75,6 +77,7 @@ export function loadWorkspace(workspacePath: string): LoadedWorkspace {
 
   const projects: ProjectRecord[] = [];
   const symbols: IndexedSymbol[] = [];
+  const references: IndexedReference[] = [];
   const templateFiles = new Set<string>();
   for (const [name, value] of Object.entries(angular.projects)) {
     if (!isRecord(value)) {
@@ -86,21 +89,23 @@ export function loadWorkspace(workspacePath: string): LoadedWorkspace {
     const project = readProject(name, value);
     projects.push(project);
     const indexedPaths = new Set<string>();
+    const idsByPosition = new Map<string, string>();
     for (const target of ["build", "test"] as const) {
       const tsconfig = resolveTsConfig(storage.canonical, value, target);
       if (tsconfig === undefined) continue;
       track(files, storage.canonical, tsconfig);
       trackExtendsChain(storage.canonical, tsconfig, files);
-      symbols.push(
-        ...symbolsInProject(
-          storage.canonical,
-          project.name,
-          tsconfig,
-          files,
-          indexedPaths,
-          templateFiles,
-        ),
+      const indexed = symbolsInProject(
+        storage.canonical,
+        project.name,
+        tsconfig,
+        files,
+        indexedPaths,
+        templateFiles,
+        idsByPosition,
       );
+      symbols.push(...indexed.symbols);
+      references.push(...indexed.references);
     }
     trackTemplates(storage.canonical, project, value, files);
     trackSourceRootStyles(storage.canonical, project, files);
@@ -115,6 +120,7 @@ export function loadWorkspace(workspacePath: string): LoadedWorkspace {
     projects,
     files: [...files.entries()].map(([filePath, sha256]) => ({ path: filePath, sha256 })),
     symbols,
+    references,
     templateFiles: [...templateFiles],
   };
 }
@@ -126,7 +132,8 @@ function symbolsInProject(
   files: Map<string, string>,
   indexedPaths: Set<string>,
   templateFiles: Set<string>,
-): IndexedSymbol[] {
+  idsByPosition: Map<string, string>,
+): { symbols: IndexedSymbol[]; references: IndexedReference[] } {
   const config = ts.readConfigFile(tsconfigPath, ts.sys.readFile);
   if (config.error !== undefined) {
     throw new CommandError(
@@ -136,7 +143,11 @@ function symbolsInProject(
   }
   const parsed = ts.parseJsonConfigFileContent(config.config, ts.sys, path.dirname(tsconfigPath));
   const program = ts.createProgram({ rootNames: parsed.fileNames, options: parsed.options });
+  const checker = program.getTypeChecker();
   const symbols: IndexedSymbol[] = [];
+  const references: IndexedReference[] = [];
+  const relativeOf = new Map<string, string>();
+  const pending: { sourceFile: ts.SourceFile; relative: string }[] = [];
   for (const sourceFile of program.getSourceFiles()) {
     if (sourceFile.isDeclarationFile) continue;
     let sourcePath: string;
@@ -148,20 +159,23 @@ function symbolsInProject(
     const relative = workspacePathOf(canonical, sourcePath);
     if (relative === null || relative.split("/").includes("node_modules")) continue;
     track(files, canonical, sourcePath);
-    const references = componentFileReferences(sourceFile);
-    for (const spec of references.styles) {
+    const componentRefs = componentFileReferences(sourceFile);
+    for (const spec of componentRefs.styles) {
       trackReferencedFile(files, canonical, sourcePath, spec, isStyleFile);
     }
-    for (const spec of references.templates) {
+    for (const spec of componentRefs.templates) {
       // Any file a templateUrl points to is tracked regardless of extension.
       const templatePath = trackReferencedFile(files, canonical, sourcePath, spec, () => true);
       if (templatePath !== null) templateFiles.add(templatePath);
     }
+    relativeOf.set(sourceFile.fileName, relative);
     if (indexedPaths.has(relative)) continue;
     indexedPaths.add(relative);
+    pending.push({ sourceFile, relative });
     for (const declaration of indexSourceFile(sourceFile)) {
+      const id = `${project}::${relative}#${declaration.qualifiedName}`;
       symbols.push({
-        id: `${project}::${relative}#${declaration.qualifiedName}`,
+        id,
         project,
         path: relative,
         qualifiedName: declaration.qualifiedName,
@@ -170,9 +184,24 @@ function symbolsInProject(
         column: declaration.column,
         signatures: declaration.signatures,
       });
+      for (const name of declaration.names) {
+        idsByPosition.set(`${relative}:${name.line}:${name.column}`, id);
+      }
     }
   }
-  return symbols;
+  for (const file of pending) {
+    references.push(
+      ...referencesInFile(
+        checker,
+        file.sourceFile,
+        file.relative,
+        project,
+        idsByPosition,
+        relativeOf,
+      ),
+    );
+  }
+  return { symbols, references };
 }
 
 /** Hash `extends` bases that stay inside the workspace. External bases are task 29. */

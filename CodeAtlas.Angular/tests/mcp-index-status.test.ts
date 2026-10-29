@@ -210,7 +210,7 @@ describe("MCP index_status", () => {
         },
         result: {
           generationId,
-          schemaVersion: 2,
+          schemaVersion: 3,
           contractVersion: 1,
           appVersion: "0.00.01",
           counts: { projects: 1, files: 4, symbols: 1 },

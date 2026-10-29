@@ -12,7 +12,7 @@ User stories: 8, 14, 26. PRD: [Identity and schema](../prd/0001-initial.md#ident
 
 - [03 — find_symbol for plain TypeScript](03-find-symbol-typescript.md)
 
-Status: ready
+Status: in-test
 
 ## Acceptance criteria
 
@@ -24,3 +24,5 @@ Status: ready
 - [ ] `MCP-CONTRACT.md` has the `find_references` section.
 
 ## Review log
+
+- 2026-10-29: MCP `find_references` reads uses stored at index time. A call, `new`, or tagged template is `invocation`. An import, a type annotation, and any other identifier use is `reference`. The tool takes a symbol id, optional `kinds` and `project` filters, and the same pagination as `find_symbol`. An unknown id returns `symbol_not_found` (`Symbol id was not found.`). `schemaVersion` is `3` because a generation now stores a `references` table. `angular/main` was schema `2`. Task 05 bumps that same number on its own unmerged branch, so this branch is not based on that change. A generation stamped schema `2` makes `find_references` return `unsupported_index` with the re-index message. Tests are in `tests/mcp-find-references.test.ts` using `tests/fixtures/references-workspace`. Run `cd CodeAtlas.Angular && npm ci && npm test`.

@@ -12,6 +12,7 @@ import {
   type SuccessEnvelope,
 } from "./envelope.js";
 import { asCommandError } from "./errors.js";
+import { executeFindReferences } from "./find-references.js";
 import { executeFindSymbol } from "./find-symbol.js";
 import { readPublishedIndex } from "./generation-store.js";
 import { appVersion } from "./version.js";
@@ -156,6 +157,45 @@ export function createMcpServer(): McpServer {
     },
     async (args) => {
       const envelope = executeFindSymbol(args);
+      if (!envelope.success) {
+        return {
+          isError: true,
+          content: [{ type: "text", text: formatEnvelope(envelope) }],
+        };
+      }
+      return {
+        content: [{ type: "text", text: formatEnvelope(envelope) }],
+      };
+    },
+  );
+  server.registerTool(
+    "find_references",
+    {
+      description:
+        "Find indexed references to a symbol id. Optional reference-kind and project filters are exact. Pagination continues with snapshotId.",
+      inputSchema: {
+        workspace: z.string().describe("Path to the Angular workspace directory."),
+        id: z.string().describe("Symbol id returned by find_symbol."),
+        kinds: z
+          .array(z.string())
+          .optional()
+          .describe("Reference kinds to keep. Omit to allow every kind."),
+        project: z
+          .string()
+          .optional()
+          .describe("Exact angular.json project name of the referencing file."),
+        offset: z.number().optional().describe("First matching row. Defaults to 0."),
+        limit: z.number().optional().describe("Page size. Defaults to 100. Maximum 1000."),
+        snapshotId: z
+          .string()
+          .optional()
+          .describe(
+            "Generation id from a previous page. Required when offset is greater than zero.",
+          ),
+      },
+    },
+    async (args) => {
+      const envelope = executeFindReferences(args);
       if (!envelope.success) {
         return {
           isError: true,
