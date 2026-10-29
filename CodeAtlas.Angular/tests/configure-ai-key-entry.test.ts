@@ -238,6 +238,41 @@ describe("configure-ai key entry", () => {
     });
   });
 
+  it.skipIf(process.platform === "darwin")(
+    "saves settings when no keychain and the stdin pipe stays open",
+    async () => {
+      // Arrange
+      const root = mkdtempSync(path.join(tmpdir(), "codeatlas-key-entry-"));
+      const env = isolatedEnv(root);
+      withoutKeychain(env, root);
+      mkdirSync(env.XDG_CONFIG_HOME ?? root, { recursive: true });
+
+      // Act
+      const result = await runCli(["configure-ai", ...configureArgs], {
+        cwd: root,
+        env,
+        holdStdin: true,
+        timeoutMs: 3_000,
+      });
+
+      // Assert
+      expect(result.exitCode).toBe(1);
+      expect(result.stdout).toBe("");
+      expect(result.stderr).toContain(
+        "No OS keychain is available, so the API key was not saved. Set CODEATLAS_AI_OPENAI_KEY.",
+      );
+      const error = JSON.parse(result.stderr) as { error: { code: string; message: string } };
+      expect(error.error.code).toBe("ai_configuration_invalid");
+      expect(error.error.message).not.toContain("interactive terminal");
+      expect(result.stderr).not.toContain("Enter the API key");
+      expect(
+        JSON.parse(readFileSync(path.join(root, ".codeatlas", "appsettings.json"), "utf8")),
+      ).toMatchObject({
+        ai: { provider: "openai", model: "gpt-x", endpoint },
+      });
+    },
+  );
+
   it("saves settings and does not prompt when no keychain and stdin is a TTY", async () => {
     // Arrange
     const root = mkdtempSync(path.join(tmpdir(), "codeatlas-key-entry-"));
@@ -397,6 +432,76 @@ describe("configure-ai key entry", () => {
       expect(result.stdout).not.toContain(secret);
       expect(readFileSync(path.join(state, "stdin"), "utf8")).toBe(secret);
       expect(readFileSync(path.join(state, "args"), "utf8")).not.toContain(secret);
+    },
+  );
+
+  it.skipIf(process.platform === "darwin")(
+    "reads part1part2 when the pipe pauses a second between writes",
+    async () => {
+      // Arrange
+      const root = mkdtempSync(path.join(tmpdir(), "codeatlas-key-entry-"));
+      const env = isolatedEnv(root);
+      const state = installFakeKeychain(root, env);
+      const provider = await startOkProvider();
+      const slowEndpoint = `http://127.0.0.1:${provider.port}/v1/chat/completions`;
+      let result: Awaited<ReturnType<typeof runCli>>;
+      try {
+        // Act
+        result = await runCli(
+          ["configure-ai", "--provider", "openai", "--model", "gpt-x", "--endpoint", slowEndpoint],
+          {
+            cwd: root,
+            env,
+            stdinWrites: [
+              { delayMs: 1_000, text: "part1" },
+              { delayMs: 2_000, text: "part2", end: true },
+            ],
+            timeoutMs: 8_000,
+          },
+        );
+      } finally {
+        await provider.close();
+      }
+
+      // Assert
+      expect(result.exitCode).toBe(0);
+      expect(result.stdout).not.toContain("part1part2");
+      expect(provider.authorizations).toEqual(["Bearer part1part2"]);
+      expect(readFileSync(path.join(state, "stdin"), "utf8")).toBe("part1part2");
+      expect(readFileSync(path.join(state, "args"), "utf8")).not.toContain("part1part2");
+    },
+  );
+
+  it.skipIf(process.platform === "darwin")(
+    "fails without waiting when a keychain exists and the stdin pipe stays open",
+    async () => {
+      // Arrange
+      const root = mkdtempSync(path.join(tmpdir(), "codeatlas-key-entry-"));
+      const env = isolatedEnv(root);
+      installFakeKeychain(root, env);
+
+      // Act
+      const result = await runCli(["configure-ai", ...configureArgs], {
+        cwd: root,
+        env,
+        holdStdin: true,
+        timeoutMs: 3_000,
+      });
+
+      // Assert
+      expect(result.exitCode).toBe(1);
+      expect(result.stdout).toBe("");
+      expect(result.stderr).toContain(
+        "An API key is required. Run configure-ai in an interactive terminal or set CODEATLAS_AI_OPENAI_KEY.",
+      );
+      expect(JSON.parse(result.stderr)).toMatchObject({
+        error: {
+          message:
+            "An API key is required. Run configure-ai in an interactive terminal or set CODEATLAS_AI_OPENAI_KEY.",
+        },
+      });
+      expect(result.stderr).not.toContain("Enter the API key");
+      expect(existsSync(path.join(root, ".codeatlas", "appsettings.json"))).toBe(false);
     },
   );
 

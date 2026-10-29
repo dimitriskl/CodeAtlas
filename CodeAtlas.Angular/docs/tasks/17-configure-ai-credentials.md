@@ -17,7 +17,7 @@ User stories: 36, 37, 38, 60. PRD: [Modules](../prd/0001-initial.md#modules) (pr
 
 - [01 — Scaffold package, CI and MCP server skeleton](01-scaffold-package-ci-mcp-skeleton.md)
 
-Status: in-test
+Status: rejected
 
 ## Acceptance criteria
 
@@ -84,3 +84,25 @@ Status: in-test
   4. Windows Credential Manager runs `%SystemRoot%\System32\WindowsPowerShell\v1.0\powershell.exe`, not `powershell` from PATH. A decoy on PATH is not executed.
   5. A piped or file key is read until EOF, so a slow pipe is not cut off after 50 ms. An open terminal, or a closed stdin with no key, still fails immediately and does not wait.
   6. `CredentialStoreError` is removed. Keychain failures use the shared `CommandError`.
+- 2026-10-29 Tester REJECT, attempt 2. HEAD tested `07edea8`. Node 24.22.1. `npm ci`, lint, and typecheck passed. Suite before the new CLI seam tests: 102/102. After them: 103 passed, 2 failed (105). `npm pack --dry-run`: 39 files, package 24.2 kB, unpacked 93.4 kB, shasum `330f5e596d52a8ca56d60a6e31bf146473bb6a3f`. `rg CredentialStoreError src` is empty.
+
+  Built CLI (`node dist/cli.js`) against a live GNOME Keyring (`dbus-launch`, `gnome-keyring-daemon --unlock`, `secret-tool` store and lookup).
+
+  QA 1 holds. Python `pty.fork()`: prompt `Enter the API key, or set CODEATLAS_AI_OPENAI_KEY (hidden; Esc cancels): `, process still alive (not exit 13), typed key not echoed, exit 0 in 723 ms, `secret-tool lookup` returned the typed key. Settings and the connection-test body had no key and no project source. Success envelope `contractVersion` 1.
+
+  QA 2 fails for an open pipe. `</dev/null` with a keychain exits 1 in 246 ms with `An API key is required. Run configure-ai in an interactive terminal or set CODEATLAS_AI_OPENAI_KEY.` and writes no settings. An inherited pipe that never writes was still blocked at 5.0 s (empty stdout and stderr, SIGKILL). `sleep 30 | node dist/cli.js configure-ai ...` was still blocked at 6.0 s. `readPipedKey` waits for EOF. Ctrl+C (`\x03`) in the PTY cancels with exit 1, `An API key is required. Set CODEATLAS_AI_OPENAI_KEY.`, and nothing saved. Closing a non-controlling pty stdin cancels with that same envelope and exit 1. `(sleep 1; printf part1; sleep 1; printf part2)` exits 0 in 2062 ms and the keychain value is `part1part2`. `printf` and a file redirect also store the full key.
+
+  QA 3 holds for a TTY and for `</dev/null`, and fails for an open pipe. With `DBUS_SESSION_BUS_ADDRESS` unset, `XDG_CONFIG_HOME` empty, and no `CODEATLAS_AI_*_KEY`, the QA command does not prompt. `</dev/null` in a temp workspace: exit 1 in 259 ms, stderr message `No OS keychain is available, so the API key was not saved. Set CODEATLAS_AI_OPENAI_KEY.`, and `.codeatlas/appsettings.json` is `{provider: openai, model: gpt-x, endpoint: http://127.0.0.1:9/v1/chat/completions}`. The real PTY does the same in 212 ms. The same command with the stdin pipe left open produces no output and no settings file at 5.0 s. A piped key and no keychain still exits 1 naming that variable, writes settings, and does not write the keychain (286 ms). An environment key and a working endpoint exits 0 with `credentialStore` `environment variable CODEATLAS_AI_OPENAI_KEY`.
+
+  QA 4 holds. `reg.exe` and `powershell.exe` are absolute `%SystemRoot%\System32` paths, spawned with `shell: false`. Helper args start `-NoProfile -NonInteractive -ExecutionPolicy Bypass -File`, and the secret is stdin. Passed: `configure-ai-key-entry.test.ts` powershell decoy and reg decoy, `credentials.test.ts` store (line 301) and read (line 329).
+
+  QA 5 holds. Success is `configureAiSuccessEnvelope` and errors are `commandErrorEnvelope`. Live envelopes use `contractVersion` 1. The only `CommandError` is `src/errors.ts`.
+
+  `win-system-root.cjs` is referenced only from `tests/support/run-cli.ts`. Nothing in `src/` imports it. The tarball is LICENSE, README, package.json, and dist. The eslint change only adds globals for `scripts/**/*.mjs` and `tests/support/**/*.cjs`.
+
+  Lookup order on the real keychain: env `sk-env-key-aaa`, then keychain `sk-keychain-key-bbb`, then `credentials.json` `sk-file-key-ccc`. File sha256 and mtime unchanged. Secrets were absent from appsettings and from stdout and stderr.
+
+  **Required changes**
+
+  1. An inherited open pipe that never writes a key must fail on its own, without waiting for the writer to close. With a keychain, exit 1 with `An API key is required. Run configure-ai in an interactive terminal or set CODEATLAS_AI_<PROVIDER>_KEY.` and do not write settings. With no keychain, do not prompt, exit 1 with `No OS keychain is available, so the API key was not saved. Set CODEATLAS_AI_<PROVIDER>_KEY.`, and still write provider, model, and endpoint. Reproduced on `node dist/cli.js`: both cases were still running with empty output at 5 s, and `sleep 30 | node dist/cli.js configure-ai --provider openai --model gpt-x --endpoint http://127.0.0.1:9/v1/chat/completions` was still running at 6 s. New tests `saves settings when no keychain and the stdin pipe stays open` and `fails without waiting when a keychain exists and the stdin pipe stays open` fail because stderr is empty (`expected '' to contain ...`).
+  2. Do not truncate a pipe that does deliver a key. `(sleep 1; printf part1; sleep 1; printf part2)` must yield `part1part2` (this already does: exit 0 in 2062 ms, keychain value `part1part2`). The new test `reads part1part2 when the pipe pauses a second between writes` passes. A bounded wait for the first byte, long enough for that 1 s pause, then read-through-EOF, satisfies both this and change 1. A short idle cutoff does not.
