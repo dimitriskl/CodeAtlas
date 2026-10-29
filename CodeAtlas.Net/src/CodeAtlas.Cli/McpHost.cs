@@ -73,7 +73,7 @@ internal sealed class McpHost
         method switch
         {
             "initialize" => Result(id, Initialize(parameters)),
-            "tools/list" => Result(id, new JsonObject { ["tools"] = new JsonArray(ToolSchema()) }),
+            "tools/list" => Result(id, new JsonObject { ["tools"] = Tools() }),
             "tools/call" => await CallAsync(id, parameters, cancellationToken),
             "ping" => Result(id, new JsonObject()),
             _ => RpcError(id, -32601, "Method not found")
@@ -94,20 +94,29 @@ internal sealed class McpHost
     {
         try
         {
-            if (parameters?["name"] is not JsonValue name || !name.TryGetValue<string>(out var tool) || tool != "find_symbol")
-                return ToolResult(id, Failure("invalid_arguments", "Unknown tool.", []), true);
-            var envelope = await FindSymbolAsync(parameters?["arguments"] as JsonObject ?? new JsonObject(), cancellationToken);
+            var tool = parameters?["name"] is JsonValue name && name.TryGetValue<string>(out var called) ? called : "";
+            var arguments = parameters?["arguments"] as JsonObject ?? new JsonObject();
+            var envelope = tool switch
+            {
+                "find_symbol" => await FindSymbolAsync(arguments, cancellationToken),
+                "index_status" => await IndexStatusAsync(arguments, cancellationToken),
+                "coverage" => await CoverageAsync(arguments, cancellationToken),
+                _ => Failure(tool.Length == 0 ? null : tool, "invalid_arguments", "Unknown tool.", [])
+            };
             return ToolResult(id, envelope, envelope["success"]!.GetValue<bool>() == false);
         }
         catch (QueryException exception)
         {
-            return ToolResult(id, Failure(exception.Code, exception.Message, exception.Diagnostics), true);
+            return ToolResult(id, Failure(ToolName(parameters), exception.Code, exception.Message, exception.Diagnostics), true);
         }
         catch (IndexFormatException exception)
         {
-            return ToolResult(id, Failure(exception.Code, exception.Message, exception.Diagnostics), true);
+            return ToolResult(id, Failure(ToolName(parameters), exception.Code, exception.Message, exception.Diagnostics), true);
         }
     }
+
+    private static string? ToolName(JsonObject? parameters) =>
+        parameters?["name"] is JsonValue name && name.TryGetValue<string>(out var tool) && tool.Length > 0 ? tool : null;
 
     private async Task<JsonObject> FindSymbolAsync(JsonObject arguments, CancellationToken cancellationToken)
     {
@@ -116,26 +125,57 @@ internal sealed class McpHost
         var manifest = IndexStore.DefaultPath(solutionFile);
         if (!File.Exists(manifest))
             return query.SnapshotId is null
-                ? Success(NoIndexFreshness(), Coverage(catalog: true, noIndex: true), Page(0, query.Offset, query.Limit, 0, null, false), [], 0)
-                : Mismatch();
+                ? SymbolSuccess(NoIndexFreshness(), Coverage(catalog: true, noIndex: true), Page(0, query.Offset, query.Limit, 0, null, false), [], 0)
+                : Mismatch("find_symbol");
         var snapshot = await IndexStore.OpenSnapshotAsync(manifest, cancellationToken: cancellationToken);
         if (query.SnapshotId is not null && !string.Equals(query.SnapshotId, snapshot.Index.IndexId, StringComparison.Ordinal))
-            return Mismatch();
+            return Mismatch("find_symbol");
         var freshness = await IndexStore.CheckFreshnessAsync(snapshot.Index, cancellationToken);
         var coverage = Coverage(snapshot.Index.SchemaVersion >= 2, noIndex: false);
         if (freshness.IsStale)
-            return Failure("stale_index", "The saved index is stale.", [], Freshness(freshness), coverage, snapshot.Index.Warnings.Length);
+            return Stale("find_symbol", snapshot, freshness, coverage);
         if (freshness.Diagnostics.Length != 0)
-            return Failure("snapshot_io_failed", IoFailure, freshness.Diagnostics, Freshness(freshness), coverage, snapshot.Index.Warnings.Length);
+            return Io("find_symbol", snapshot, freshness, coverage);
         var rows = (query.Kind ?? "all") == "method"
             ? Methods(snapshot, query)
             : Symbols(snapshot, query);
         var matches = rows.Where(row => row.Name == query.Name || row.QualifiedName == query.Name)
             .OrderBy(row => row.Id, StringComparer.Ordinal).ToArray();
         var page = matches.Skip(query.Offset).Take(query.Limit).ToArray();
-        return Success(Freshness(freshness), coverage,
+        return SymbolSuccess(Freshness(freshness), coverage,
             Page(matches.Length, query.Offset, query.Limit, page.Length, snapshot.Index.IndexId, true), page, snapshot.Index.Warnings.Length);
     }
+
+    private async Task<JsonObject> IndexStatusAsync(JsonObject arguments, CancellationToken cancellationToken)
+    {
+        var workspace = Text(arguments, "workspace", "workspace is required.", "workspace must not be empty.");
+        if (!IsBound(workspace) || !File.Exists(Manifest))
+            return GenerationEnvelope(NoIndexFreshness(), Coverage(catalog: true, noIndex: true), snapshot: null, 0);
+        var snapshot = await OpenAsync(cancellationToken);
+        var freshness = await IndexStore.CheckFreshnessAsync(snapshot.Index, cancellationToken);
+        return GenerationEnvelope(Freshness(freshness), LoadedCoverage(snapshot, emptyLimitations: true), snapshot, snapshot.Index.Warnings.Length);
+    }
+
+    private async Task<JsonObject> CoverageAsync(JsonObject arguments, CancellationToken cancellationToken)
+    {
+        var workspace = OptionalText(arguments, "workspace", "workspace must not be empty.");
+        if (workspace is null || !IsBound(workspace) || !File.Exists(Manifest))
+            return Zero("coverage", NoIndexFreshness(), Coverage(catalog: true, noIndex: true), snapshotId: null, 0);
+        var snapshot = await OpenAsync(cancellationToken);
+        var freshness = await IndexStore.CheckFreshnessAsync(snapshot.Index, cancellationToken);
+        var coverage = LoadedCoverage(snapshot, emptyLimitations: true);
+        if (freshness.IsStale) return Stale("coverage", snapshot, freshness, coverage);
+        if (freshness.Diagnostics.Length != 0) return Io("coverage", snapshot, freshness, coverage);
+        return Zero("coverage", Freshness(freshness), coverage, snapshot.Index.IndexId, snapshot.Index.Warnings.Length);
+    }
+
+    private string Manifest => IndexStore.DefaultPath(solutionFile);
+
+    private Task<LoadedSnapshot> OpenAsync(CancellationToken cancellationToken) =>
+        IndexStore.OpenSnapshotAsync(Manifest, cancellationToken: cancellationToken);
+
+    private bool IsBound(string workspace) =>
+        TryReal(workspace, out var real) && (Paths.Equals(real, solutionDirectory) || Paths.Equals(real, solutionFile));
 
     private static SymbolQuery ReadQuery(JsonObject arguments)
     {
@@ -189,25 +229,38 @@ internal sealed class McpHost
         }
     }
 
-    private static JsonObject Success(JsonObject freshness, JsonObject coverage, JsonObject pagination,
+    private static JsonObject SymbolSuccess(JsonObject freshness, JsonObject coverage, JsonObject pagination,
         IReadOnlyList<SymbolRow> symbols, int warningCount) =>
-        Envelope(true, warningCount, freshness, coverage, pagination, Symbols(symbols), error: null);
+        Envelope("find_symbol", true, warningCount, freshness, coverage, pagination, new JsonObject { ["symbols"] = Symbols(symbols) }, error: null);
 
-    private static JsonObject Mismatch() =>
-        Failure("snapshot_mismatch", "The index was replaced. Start a new query at offset zero.", []);
+    private static JsonObject GenerationEnvelope(JsonObject freshness, JsonObject coverage, LoadedSnapshot? snapshot, int warningCount) =>
+        Envelope("index_status", true, warningCount, freshness, coverage, Page(0, 0, 0, 0, snapshot?.Index.IndexId, false),
+            snapshot is null ? NoIndexResult() : GenerationResult(snapshot), error: null);
 
-    private static JsonObject Failure(string code, string message, IReadOnlyList<string> diagnostics, JsonObject? freshness = null,
+    private static JsonObject Zero(string command, JsonObject freshness, JsonObject coverage, string? snapshotId, int warningCount) =>
+        Envelope(command, true, warningCount, freshness, coverage, Page(0, 0, 0, 0, snapshotId, false), result: null, error: null);
+
+    private static JsonObject Mismatch(string command) =>
+        Failure(command, "snapshot_mismatch", "The index was replaced. Start a new query at offset zero.", []);
+
+    private static JsonObject Stale(string command, LoadedSnapshot snapshot, IndexFreshness freshness, JsonObject coverage) =>
+        Failure(command, "stale_index", "The saved index is stale.", [], Freshness(freshness), coverage, snapshot.Index.Warnings.Length);
+
+    private static JsonObject Io(string command, LoadedSnapshot snapshot, IndexFreshness freshness, JsonObject coverage) =>
+        Failure(command, "snapshot_io_failed", IoFailure, freshness.Diagnostics, Freshness(freshness), coverage, snapshot.Index.Warnings.Length);
+
+    private static JsonObject Failure(string? command, string code, string message, IReadOnlyList<string> diagnostics, JsonObject? freshness = null,
         JsonObject? coverage = null, int warningCount = 0) =>
-        Envelope(false, warningCount, freshness, coverage, pagination: null, symbols: null,
+        Envelope(command, false, warningCount, freshness, coverage, pagination: null, result: null,
             new JsonObject { ["code"] = code, ["message"] = message, ["diagnostics"] = Strings(diagnostics) });
 
-    private static JsonObject Envelope(bool success, int warningCount, JsonObject? freshness, JsonObject? coverage,
-        JsonObject? pagination, JsonArray? symbols, JsonObject? error)
+    private static JsonObject Envelope(string? command, bool success, int warningCount, JsonObject? freshness, JsonObject? coverage,
+        JsonObject? pagination, JsonNode? result, JsonObject? error)
     {
         var output = new JsonObject
         {
             ["contractVersion"] = ResponseContract.Version,
-            ["command"] = "find_symbol",
+            ["command"] = command,
             ["success"] = success,
             ["responseToolVersion"] = CodeAtlasVersion.Current,
             ["warningCount"] = warningCount,
@@ -215,10 +268,53 @@ internal sealed class McpHost
             ["coverage"] = coverage
         };
         if (pagination is not null) output["pagination"] = pagination;
-        if (symbols is not null) output["result"] = new JsonObject { ["symbols"] = symbols };
+        if (result is not null) output["result"] = result;
         if (error is not null) output["error"] = error;
         return output;
     }
+
+    private static JsonObject GenerationResult(LoadedSnapshot snapshot)
+    {
+        var (projects, files, symbols) = Counts(snapshot);
+        return new JsonObject
+        {
+            ["generationId"] = snapshot.Index.IndexId,
+            ["schemaVersion"] = snapshot.Index.SchemaVersion,
+            ["contractVersion"] = ResponseContract.Version,
+            ["appVersion"] = snapshot.Index.ToolVersion,
+            ["counts"] = new JsonObject { ["projects"] = projects, ["files"] = files, ["symbols"] = symbols },
+            ["index"] = Path.GetFullPath(snapshot.Path)
+        };
+    }
+
+    private static JsonObject NoIndexResult() => new()
+    {
+        ["generationId"] = null,
+        ["schemaVersion"] = null,
+        ["contractVersion"] = ResponseContract.Version,
+        ["appVersion"] = null,
+        ["counts"] = new JsonObject { ["projects"] = 0, ["files"] = 0, ["symbols"] = 0 },
+        ["index"] = null
+    };
+
+    private static (int Projects, int Files, int Symbols) Counts(LoadedSnapshot snapshot)
+    {
+        if (snapshot.Store is { } store) return store.Use(Count);
+        var projects = snapshot.Index.Projects;
+        return (projects.Length, SourceFiles(projects), snapshot.Index.Symbols?.Length ?? 0);
+    }
+
+    private static (int Projects, int Files, int Symbols) Count(CodeAtlas.Storage.SqliteIndexReader.Session session)
+    {
+        var projects = session.Projects();
+        return (projects.Length, SourceFiles(projects), checked((int)session.SymbolCount("all")));
+    }
+
+    private static int SourceFiles(IEnumerable<IndexedProject> projects) =>
+        projects.SelectMany(project => project.Files).Distinct(StringComparer.Ordinal).Count();
+
+    private static JsonObject LoadedCoverage(LoadedSnapshot snapshot, bool emptyLimitations) =>
+        Coverage(snapshot.Index.SchemaVersion >= 2, noIndex: false, emptyLimitations);
 
     private static JsonObject Page(int total, int offset, int limit, int returned, string? snapshotId, bool continuation)
     {
@@ -296,9 +392,11 @@ internal sealed class McpHost
         ["diagnostics"] = new JsonArray()
     };
 
-    private static JsonObject Coverage(bool catalog, bool noIndex)
+    private static JsonObject Coverage(bool catalog, bool noIndex, bool emptyLimitations = false)
     {
         var source = JsonSerializer.SerializeToNode(ResponseContract.Coverage(catalog), Json)!.AsObject();
+        JsonNode limitations = noIndex ? new JsonArray("no-index")
+            : emptyLimitations ? new JsonArray() : source["limitations"]!.DeepClone();
         return new JsonObject
         {
             ["language"] = source["language"]!.DeepClone(),
@@ -308,35 +406,35 @@ internal sealed class McpHost
             ["templateCoverage"] = "unknown",
             ["runtimeCallGraph"] = source["runtimeCallGraph"]!.DeepClone(),
             ["exclusions"] = source["exclusions"]!.DeepClone(),
-            ["limitations"] = noIndex ? new JsonArray("no-index") : source["limitations"]!.DeepClone()
+            ["limitations"] = limitations
         };
     }
 
-    private static JsonObject ToolSchema()
+    private static JsonArray Tools()
     {
-        var required = new JsonArray();
-        required.Add("workspace");
-        required.Add("name");
-        return new JsonObject
+        var tools = new JsonArray
         {
-            ["name"] = "find_symbol",
-            ["description"] = "Find source symbols by exact name or qualified name in the published index.",
-            ["inputSchema"] = new JsonObject
-            {
-                ["type"] = "object",
-                ["properties"] = new JsonObject
-                {
-                    ["workspace"] = new JsonObject { ["type"] = "string" },
-                    ["name"] = new JsonObject { ["type"] = "string" },
-                    ["kind"] = new JsonObject { ["type"] = "string" },
-                    ["project"] = new JsonObject { ["type"] = "string" },
-                    ["offset"] = new JsonObject { ["type"] = "integer" },
-                    ["limit"] = new JsonObject { ["type"] = "integer" },
-                    ["snapshotId"] = new JsonObject { ["type"] = "string" }
-                },
-                ["required"] = required
-            }
+            Schema("find_symbol", "Find source symbols by exact name or qualified name in the published index.",
+                ["workspace", "name", "kind", "project", "offset", "limit", "snapshotId"], ["workspace", "name"],
+                ["string", "string", "string", "string", "integer", "integer", "string"]),
+            Schema("index_status", "Read the published generation and whether its tracked inputs still match.",
+                ["workspace"], ["workspace"], ["string"]),
+            Schema("coverage", "Read the analysis boundary. Omit workspace when no index should be read.",
+                ["workspace"], [], ["string"])
         };
+        return tools;
+    }
+
+    private static JsonObject Schema(string name, string description, string[] properties, string[] required, string[] types)
+    {
+        var fields = new JsonObject();
+        for (var i = 0; i < properties.Length; i++)
+            fields[properties[i]] = new JsonObject { ["type"] = types[i] };
+        var requiredNames = new JsonArray();
+        foreach (var item in required) requiredNames.Add(item);
+        var schema = new JsonObject { ["type"] = "object", ["properties"] = fields };
+        if (required.Length > 0) schema["required"] = requiredNames;
+        return new JsonObject { ["name"] = name, ["description"] = description, ["inputSchema"] = schema };
     }
 
     private static string Text(JsonObject arguments, string name, string missing, string empty)

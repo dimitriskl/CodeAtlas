@@ -95,7 +95,7 @@ The original live queries remain available: replace `--index <index.json>` with 
 
 `live --solution <path.sln>` keeps that solution loaded and reads one JSON object from each stdin line. It writes one JSON object per line to stdout, using the same response envelope as the other commands. A malformed line or an unknown path is an error object (`success: false`) and the process keeps reading. No file watcher is started.
 
-`mcp --solution <path.sln>` reads MCP JSON-RPC messages, one JSON object per stdin line, and writes one JSON object per line. It exposes `find_symbol` against the published index of that solution. A failed tool call returns `isError: true` with the query envelope in the text content, and the process keeps reading.
+`mcp --solution <path.sln>` reads MCP JSON-RPC messages, one JSON object per stdin line, and writes one JSON object per line. It exposes `find_symbol`, `index_status`, and `coverage` for that solution's published index. `index_status` reports a stale generation. `coverage` refuses one. Omitting `workspace` from `coverage` reads no index. A failed tool call returns `isError: true` with the query envelope in the text content, and the process keeps reading.
 
 ```json
 {"command":"edit","path":"Library/Calculator.cs","text":"full file text"}

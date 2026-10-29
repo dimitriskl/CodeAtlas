@@ -140,6 +140,105 @@ public sealed class McpServerTests(IndexedSolution fixture) : IClassFixture<Inde
             Assert.Equal(new[] { cli["signature"]!.GetValue<string>() }, symbol["signatures"]!.AsArray().Select(item => item!.GetValue<string>()));
         }
     }
+
+    [Fact]
+    public async Task IndexStatusReportsAStaleGenerationAndCoverageRefusesIt()
+    {
+        // Arrange
+        var warned = SnapshotTestIdentity.NewGeneration(fixture.Index) with { Warnings = [.. fixture.Index.Warnings, "Recorded index warning"] };
+        await IndexStore.SaveAsync(warned);
+        var solution = Path.Combine(fixture.Root, "Sample.slnx");
+        var calculator = Path.Combine(fixture.Root, "Library", "Calculator.cs");
+        var original = await File.ReadAllTextAsync(calculator);
+        var files = warned.Projects.SelectMany(project => project.Files).Distinct(StringComparer.Ordinal).Count();
+        var lines = new[]
+        {
+            Tool(1, "index_status", new JsonObject { ["workspace"] = fixture.Root }),
+            Tool(2, "coverage", new JsonObject { ["workspace"] = fixture.Root }),
+            Tool(3, "coverage"),
+            Tool(4, "index_status", new JsonObject { ["workspace"] = fixture.Root }),
+            Tool(5, "coverage", new JsonObject { ["workspace"] = fixture.Root }),
+            Request(6, "tools/list")
+        };
+        try
+        {
+            // Act
+            var responses = await Talk(solution, lines, beforeLine: index =>
+            {
+                if (index == 3) File.AppendAllText(calculator, Environment.NewLine + "// changed");
+            });
+
+            // Assert
+            var status = Envelope(responses[0], false);
+            Assert.Equal("index_status", status["command"]!.GetValue<string>());
+            Assert.Equal(warned.Warnings.Length, status["warningCount"]!.GetValue<int>());
+            Assert.True(status["warningCount"]!.GetValue<int>() >= 1);
+            Assert.False(status["freshness"]!["isStale"]!.GetValue<bool>());
+            Assert.Equal(warned.IndexId, status["result"]!["generationId"]!.GetValue<string>());
+            Assert.Equal(warned.SchemaVersion, status["result"]!["schemaVersion"]!.GetValue<int>());
+            Assert.Equal(1, status["result"]!["contractVersion"]!.GetValue<int>());
+            Assert.Equal(warned.ToolVersion, status["result"]!["appVersion"]!.GetValue<string>());
+            Assert.Equal(warned.Projects.Length, status["result"]!["counts"]!["projects"]!.GetValue<int>());
+            Assert.Equal(files, status["result"]!["counts"]!["files"]!.GetValue<int>());
+            Assert.Equal(warned.Symbols!.Length, status["result"]!["counts"]!["symbols"]!.GetValue<int>());
+            Assert.Equal(Path.GetFullPath(fixture.IndexPath), status["result"]!["index"]!.GetValue<string>());
+            AssertZeroPage(status, warned.IndexId);
+            Assert.Empty(status["coverage"]!["limitations"]!.AsArray());
+
+            var coverage = Envelope(responses[1], false);
+            Assert.Equal("coverage", coverage["command"]!.GetValue<string>());
+            Assert.False(coverage.ContainsKey("result"));
+            Assert.Equal(warned.IndexId, coverage["pagination"]!["snapshotId"]!.GetValue<string>());
+            Assert.Equal(0, coverage["pagination"]!["limit"]!.GetValue<int>());
+            Assert.False(coverage["pagination"]!["continuationSupported"]!.GetValue<bool>());
+            Assert.Empty(coverage["coverage"]!["limitations"]!.AsArray());
+            Assert.Equal("unknown", coverage["coverage"]!["templateCoverage"]!.GetValue<string>());
+            Assert.Equal("C#", coverage["coverage"]!["language"]!.GetValue<string>());
+            Assert.Equal(warned.Warnings.Length, coverage["warningCount"]!.GetValue<int>());
+
+            var omitted = Envelope(responses[2], false);
+            Assert.Equal("coverage", omitted["command"]!.GetValue<string>());
+            Assert.Equal("no-index", omitted["freshness"]!["inputCoverage"]!["scope"]!.GetValue<string>());
+            Assert.Null(omitted["pagination"]!["snapshotId"]);
+            Assert.False(omitted.ContainsKey("result"));
+
+            var staleStatus = Envelope(responses[3], false);
+            Assert.True(staleStatus["freshness"]!["isStale"]!.GetValue<bool>());
+            Assert.Contains("Library/Calculator.cs", staleStatus["freshness"]!["changedFiles"]!.AsArray().Select(file => file!.GetValue<string>()));
+            Assert.Equal(warned.IndexId, staleStatus["result"]!["generationId"]!.GetValue<string>());
+            Assert.Equal(warned.Warnings.Length, staleStatus["warningCount"]!.GetValue<int>());
+
+            var staleCoverage = Envelope(responses[4], true);
+            Assert.Equal("coverage", staleCoverage["command"]!.GetValue<string>());
+            Assert.Equal("stale_index", staleCoverage["error"]!["code"]!.GetValue<string>());
+            Assert.Equal("The saved index is stale.", staleCoverage["error"]!["message"]!.GetValue<string>());
+            Assert.Empty(staleCoverage["error"]!["diagnostics"]!.AsArray());
+            Assert.True(staleCoverage["freshness"]!["isStale"]!.GetValue<bool>());
+            Assert.NotNull(staleCoverage["coverage"]);
+            Assert.False(staleCoverage.ContainsKey("pagination"));
+            Assert.False(staleCoverage.ContainsKey("result"));
+            Assert.Equal(new[] { "find_symbol", "index_status", "coverage" },
+                responses[5]["result"]!["tools"]!.AsArray().Select(tool => tool!["name"]!.GetValue<string>()));
+        }
+        finally
+        {
+            await File.WriteAllTextAsync(calculator, original);
+            await fixture.RestorePublicationAsync();
+        }
+    }
+
+    private static void AssertZeroPage(JsonObject envelope, string snapshotId)
+    {
+        var page = envelope["pagination"]!;
+        Assert.Equal(0, page["offset"]!.GetValue<int>());
+        Assert.Equal(0, page["limit"]!.GetValue<int>());
+        Assert.Equal(0, page["returned"]!.GetValue<int>());
+        Assert.Equal(0, page["total"]!.GetValue<int>());
+        Assert.False(page["hasMore"]!.GetValue<bool>());
+        Assert.Null(page["nextOffset"]);
+        Assert.Equal(snapshotId, page["snapshotId"]!.GetValue<string>());
+        Assert.False(page["continuationSupported"]!.GetValue<bool>());
+    }
 }
 
 public sealed class McpIndexFailureTests
@@ -234,6 +333,73 @@ public sealed class McpIndexFailureTests
     }
 
     [Fact]
+    public async Task IndexStatusAndCoverageUseTheNoIndexAndInvalidEnvelopes()
+    {
+        // Arrange
+        var root = Directory.CreateTempSubdirectory("codeatlas-mcp-status-").FullName;
+        var solution = Path.Combine(root, "Sample.slnx");
+        File.Copy(Path.Combine(Repository(), "tests", "Fixtures", "Sample.slnx"), solution);
+        var manifest = IndexStore.DefaultPath(solution);
+        var previous = Directory.GetCurrentDirectory();
+        var lines = new[]
+        {
+            Tool(1, "index_status", new JsonObject { ["workspace"] = "." }),
+            Tool(2, "coverage", new JsonObject { ["workspace"] = "missing-workspace" }),
+            Tool(3, "index_status"),
+            Tool(4, "index_status", new JsonObject { ["workspace"] = "." }),
+            Request(5, "tools/list"),
+            Tool(6, "coverage", new JsonObject { ["workspace"] = "." }),
+            Tool(7, "index_status", new JsonObject { ["workspace"] = "." })
+        };
+        try
+        {
+            Directory.SetCurrentDirectory(root);
+            // Act
+            var responses = await Talk(solution, lines, beforeLine: index =>
+            {
+                if (index == 3)
+                {
+                    Directory.CreateDirectory(Path.GetDirectoryName(manifest)!);
+                    File.WriteAllText(manifest, "{");
+                }
+                if (index == 5) File.WriteAllText(manifest, """{"manifestVersion":99}""");
+            });
+
+            // Assert
+            var missing = Envelope(responses[0], false);
+            Assert.Equal("index_status", missing["command"]!.GetValue<string>());
+            Assert.Null(missing["result"]!["generationId"]);
+            Assert.Null(missing["result"]!["schemaVersion"]);
+            Assert.Equal(1, missing["result"]!["contractVersion"]!.GetValue<int>());
+            Assert.Null(missing["result"]!["appVersion"]);
+            Assert.Null(missing["result"]!["index"]);
+            Assert.Equal(0, missing["result"]!["counts"]!["projects"]!.GetValue<int>());
+            Assert.Equal(0, missing["result"]!["counts"]!["files"]!.GetValue<int>());
+            Assert.Equal(0, missing["result"]!["counts"]!["symbols"]!.GetValue<int>());
+            Assert.Equal("no-index", missing["coverage"]!["limitations"]!.AsArray()[0]!.GetValue<string>());
+            Assert.Null(missing["pagination"]!["snapshotId"]);
+            Assert.Equal(0, missing["pagination"]!["limit"]!.GetValue<int>());
+            Assert.Equal(0, missing["warningCount"]!.GetValue<int>());
+
+            var absent = Envelope(responses[1], false);
+            Assert.Equal("coverage", absent["command"]!.GetValue<string>());
+            Assert.Equal("no-index", absent["freshness"]!["inputCoverage"]!["scope"]!.GetValue<string>());
+            Assert.False(absent.ContainsKey("result"));
+            Assert.Equal("workspace is required.", Envelope(responses[2], true)["error"]!["message"]!.GetValue<string>());
+            Assert.Equal("invalid_index", Envelope(responses[3], true)["error"]!["code"]!.GetValue<string>());
+            Assert.Equal("index_status", responses[4]["result"]!["tools"]!.AsArray().Single(tool => tool!["name"]!.GetValue<string>() == "index_status")!["name"]!.GetValue<string>());
+            Assert.Equal("unsupported_index", Envelope(responses[5], true)["error"]!["code"]!.GetValue<string>());
+            Assert.Equal("Unsupported manifest version. Rebuild the index.", Envelope(responses[6], true)["error"]!["message"]!.GetValue<string>());
+        }
+        finally
+        {
+            Directory.SetCurrentDirectory(previous);
+            try { Directory.Delete(root, recursive: true); }
+            catch (IOException) { }
+        }
+    }
+
+    [Fact]
     public async Task McpCommandReadsAJsonRpcLine()
     {
         // Arrange
@@ -294,6 +460,13 @@ static class McpLines
         var request = new JsonObject { ["jsonrpc"] = "2.0", ["id"] = id, ["method"] = method };
         if (parameters is not null) request["params"] = parameters;
         return request.ToJsonString();
+    }
+
+    internal static string Tool(int id, string name, JsonObject? arguments = null)
+    {
+        var parameters = new JsonObject { ["name"] = name };
+        if (arguments is not null) parameters["arguments"] = arguments;
+        return Request(id, "tools/call", parameters);
     }
 
     internal static string Call(int id, string workspace, string name, string? kind = null, string? project = null,
