@@ -1,4 +1,4 @@
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
 import { copyMinimalWorkspace } from "./support/fixture.js";
@@ -100,6 +100,24 @@ async function indexWorkspace(workspacePath: string): Promise<string> {
   if (indexed.exitCode !== 0) throw new Error(indexed.stderr);
   const envelope = JSON.parse(indexed.stdout) as { result: { generationId: string } };
   return envelope.result.generationId;
+}
+
+function installLeftpad(workspacePath: string): { jsFile: string; tsFile: string } {
+  const directory = path.join(workspacePath, "node_modules", "leftpad");
+  mkdirSync(directory, { recursive: true });
+  const jsFile = path.join(directory, "index.js");
+  const tsFile = path.join(directory, "index.ts");
+  writeFileSync(jsFile, "module.exports = 1;\n");
+  writeFileSync(tsFile, "export const pad = 1;\n");
+  writeFileSync(
+    path.join(directory, "package.json"),
+    '{"name":"leftpad","main":"index.ts","types":"index.ts"}\n',
+  );
+  writeFileSync(
+    path.join(workspacePath, "src", "cart.ts"),
+    'import { pad } from "leftpad";\nexport class Cart { total = pad; }\n',
+  );
+  return { jsFile, tsFile };
 }
 
 function setBuildOptions(workspacePath: string, options: Record<string, unknown>): void {
@@ -403,6 +421,398 @@ describe("MCP freshness and stale refusal", () => {
           continuationSupported: false,
         },
       });
+    } finally {
+      await connection.close();
+      await workspace.remove();
+    }
+  });
+
+  it("stays fresh after an existing node_modules file is modified", async () => {
+    // Arrange
+    const workspace = await copyMinimalWorkspace();
+    const installed = installLeftpad(workspace.path);
+    const generationId = await indexWorkspace(workspace.path);
+    writeFileSync(installed.jsFile, "module.exports = 2;\n");
+    writeFileSync(installed.tsFile, "export const pad = 2;\n");
+    const connection = await connectInProcess();
+
+    try {
+      // Act
+      const result = await connection.client.callTool({
+        name: "coverage",
+        arguments: { workspace: workspace.path },
+      });
+
+      // Assert
+      expect(result.isError).toBeFalsy();
+      const envelope = toolEnvelope(result);
+      const body = envelope.freshness as { checkedAtUtc: string };
+      expect(body.checkedAtUtc).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/);
+      expect({
+        ...envelope,
+        freshness: { ...body, checkedAtUtc: "TIMESTAMP" },
+      }).toEqual({
+        contractVersion: 1,
+        command: "coverage",
+        success: true,
+        responseToolVersion: "0.00.01",
+        warningCount: 0,
+        freshness: freshness({ state: "fresh", changedFiles: [], diagnostics: [] }),
+        coverage: generationCoverage("complete"),
+        pagination: {
+          offset: 0,
+          limit: 0,
+          returned: 0,
+          total: 0,
+          hasMore: false,
+          nextOffset: null,
+          snapshotId: generationId,
+          continuationSupported: false,
+        },
+      });
+    } finally {
+      await connection.close();
+      await workspace.remove();
+    }
+  });
+
+  it("stays fresh after an existing node_modules file is deleted", async () => {
+    // Arrange
+    const workspace = await copyMinimalWorkspace();
+    const installed = installLeftpad(workspace.path);
+    const generationId = await indexWorkspace(workspace.path);
+    rmSync(installed.jsFile);
+    rmSync(installed.tsFile);
+    const connection = await connectInProcess();
+
+    try {
+      // Act
+      const result = await connection.client.callTool({
+        name: "coverage",
+        arguments: { workspace: workspace.path },
+      });
+
+      // Assert
+      expect(result.isError).toBeFalsy();
+      const envelope = toolEnvelope(result);
+      const body = envelope.freshness as { checkedAtUtc: string };
+      expect(body.checkedAtUtc).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/);
+      expect({
+        ...envelope,
+        freshness: { ...body, checkedAtUtc: "TIMESTAMP" },
+      }).toEqual({
+        contractVersion: 1,
+        command: "coverage",
+        success: true,
+        responseToolVersion: "0.00.01",
+        warningCount: 0,
+        freshness: freshness({ state: "fresh", changedFiles: [], diagnostics: [] }),
+        coverage: generationCoverage("complete"),
+        pagination: {
+          offset: 0,
+          limit: 0,
+          returned: 0,
+          total: 0,
+          hasMore: false,
+          nextOffset: null,
+          snapshotId: generationId,
+          continuationSupported: false,
+        },
+      });
+    } finally {
+      await connection.close();
+      await workspace.remove();
+    }
+  });
+
+  it("refuses coverage after tsconfig.app.json changes", async () => {
+    // Arrange
+    const workspace = await copyMinimalWorkspace();
+    await indexWorkspace(workspace.path);
+    const tsconfigPath = path.join(workspace.path, "tsconfig.app.json");
+    const tsconfig = JSON.parse(readFileSync(tsconfigPath, "utf8")) as {
+      compilerOptions: { target: string };
+    };
+    tsconfig.compilerOptions.target = "ES2023";
+    writeFileSync(tsconfigPath, `${JSON.stringify(tsconfig, null, 2)}\n`);
+    const connection = await connectInProcess();
+
+    try {
+      // Act
+      const result = await connection.client.callTool({
+        name: "coverage",
+        arguments: { workspace: workspace.path },
+      });
+
+      // Assert
+      expect(result.isError).toBe(true);
+      const envelope = toolEnvelope(result) as {
+        success: boolean;
+        error: { code: string; message: string };
+        freshness: { state: string; isStale: boolean; changedFiles: string[] };
+      };
+      expect(envelope.success).toBe(false);
+      expect(envelope.error.code).toBe("stale_index");
+      expect(envelope.error.message).toBe(staleMessage);
+      expect(envelope.freshness.state).toBe("stale");
+      expect(envelope.freshness.isStale).toBe(true);
+      expect(envelope.freshness.changedFiles).toEqual(["tsconfig.app.json"]);
+    } finally {
+      await connection.close();
+      await workspace.remove();
+    }
+  });
+
+  it("refuses coverage after package.json changes", async () => {
+    // Arrange
+    const workspace = await copyMinimalWorkspace();
+    await indexWorkspace(workspace.path);
+    const packagePath = path.join(workspace.path, "package.json");
+    const manifest = JSON.parse(readFileSync(packagePath, "utf8")) as { changed?: boolean };
+    manifest.changed = true;
+    writeFileSync(packagePath, `${JSON.stringify(manifest, null, 2)}\n`);
+    const connection = await connectInProcess();
+
+    try {
+      // Act
+      const result = await connection.client.callTool({
+        name: "coverage",
+        arguments: { workspace: workspace.path },
+      });
+
+      // Assert
+      expect(result.isError).toBe(true);
+      const envelope = toolEnvelope(result) as {
+        success: boolean;
+        error: { code: string; message: string };
+        freshness: { state: string; isStale: boolean; changedFiles: string[] };
+      };
+      expect(envelope.success).toBe(false);
+      expect(envelope.error.code).toBe("stale_index");
+      expect(envelope.error.message).toBe(staleMessage);
+      expect(envelope.freshness.state).toBe("stale");
+      expect(envelope.freshness.isStale).toBe(true);
+      expect(envelope.freshness.changedFiles).toEqual(["package.json"]);
+    } finally {
+      await connection.close();
+      await workspace.remove();
+    }
+  });
+
+  it("refuses coverage after a tracked TypeScript file is deleted", async () => {
+    // Arrange
+    const workspace = await copyMinimalWorkspace();
+    await indexWorkspace(workspace.path);
+    rmSync(path.join(workspace.path, "src", "cart.ts"));
+    const connection = await connectInProcess();
+
+    try {
+      // Act
+      const result = await connection.client.callTool({
+        name: "coverage",
+        arguments: { workspace: workspace.path },
+      });
+
+      // Assert
+      expect(result.isError).toBe(true);
+      const envelope = toolEnvelope(result) as {
+        success: boolean;
+        error: { code: string; message: string };
+        freshness: { state: string; isStale: boolean; changedFiles: string[] };
+      };
+      expect(envelope.success).toBe(false);
+      expect(envelope.error.code).toBe("stale_index");
+      expect(envelope.error.message).toBe(staleMessage);
+      expect(envelope.freshness.state).toBe("stale");
+      expect(envelope.freshness.isStale).toBe(true);
+      expect(envelope.freshness.changedFiles).toEqual(["src/cart.ts"]);
+    } finally {
+      await connection.close();
+      await workspace.remove();
+    }
+  });
+
+  it("stays fresh when a TypeScript file is added after indexing", async () => {
+    // Arrange
+    const workspace = await copyMinimalWorkspace();
+    const generationId = await indexWorkspace(workspace.path);
+    writeFileSync(path.join(workspace.path, "src", "extra.ts"), "export class Extra {}\n");
+    const connection = await connectInProcess();
+
+    try {
+      // Act
+      const result = await connection.client.callTool({
+        name: "coverage",
+        arguments: { workspace: workspace.path },
+      });
+
+      // Assert
+      expect(result.isError).toBeFalsy();
+      const envelope = toolEnvelope(result);
+      const body = envelope.freshness as { checkedAtUtc: string };
+      expect(body.checkedAtUtc).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/);
+      expect({
+        ...envelope,
+        freshness: { ...body, checkedAtUtc: "TIMESTAMP" },
+      }).toEqual({
+        contractVersion: 1,
+        command: "coverage",
+        success: true,
+        responseToolVersion: "0.00.01",
+        warningCount: 0,
+        freshness: freshness({ state: "fresh", changedFiles: [], diagnostics: [] }),
+        coverage: generationCoverage("complete"),
+        pagination: {
+          offset: 0,
+          limit: 0,
+          returned: 0,
+          total: 0,
+          hasMore: false,
+          nextOffset: null,
+          snapshotId: generationId,
+          continuationSupported: false,
+        },
+      });
+    } finally {
+      await connection.close();
+      await workspace.remove();
+    }
+  });
+
+  it("answers coverage as fresh after the changed workspace is indexed again", async () => {
+    // Arrange
+    const workspace = await copyMinimalWorkspace();
+    await indexWorkspace(workspace.path);
+    writeFileSync(
+      path.join(workspace.path, "src", "cart.ts"),
+      "export class Cart { total = 1; }\n",
+    );
+    const generationId = await indexWorkspace(workspace.path);
+    const connection = await connectInProcess();
+
+    try {
+      // Act
+      const result = await connection.client.callTool({
+        name: "coverage",
+        arguments: { workspace: workspace.path },
+      });
+
+      // Assert
+      expect(result.isError).toBeFalsy();
+      const envelope = toolEnvelope(result);
+      const body = envelope.freshness as { checkedAtUtc: string };
+      expect(body.checkedAtUtc).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/);
+      expect({
+        ...envelope,
+        freshness: { ...body, checkedAtUtc: "TIMESTAMP" },
+      }).toEqual({
+        contractVersion: 1,
+        command: "coverage",
+        success: true,
+        responseToolVersion: "0.00.01",
+        warningCount: 0,
+        freshness: freshness({ state: "fresh", changedFiles: [], diagnostics: [] }),
+        coverage: generationCoverage("complete"),
+        pagination: {
+          offset: 0,
+          limit: 0,
+          returned: 0,
+          total: 0,
+          hasMore: false,
+          nextOffset: null,
+          snapshotId: generationId,
+          continuationSupported: false,
+        },
+      });
+    } finally {
+      await connection.close();
+      await workspace.remove();
+    }
+  });
+
+  it("keeps the style warning when a stale-making file also changes", async () => {
+    // Arrange
+    const workspace = await copyMinimalWorkspace();
+    const stylesheet = path.join(workspace.path, "src", "styles.css");
+    writeFileSync(stylesheet, "body { color: black; }\n");
+    setBuildOptions(workspace.path, { styles: [{ input: "src/styles.css" }] });
+    await indexWorkspace(workspace.path);
+    writeFileSync(stylesheet, "body { color: navy; }\n");
+    writeFileSync(
+      path.join(workspace.path, "src", "cart.ts"),
+      "export class Cart { total = 4; }\n",
+    );
+    const connection = await connectInProcess();
+
+    try {
+      // Act
+      const result = await connection.client.callTool({
+        name: "coverage",
+        arguments: { workspace: workspace.path },
+      });
+
+      // Assert
+      expect(result.isError).toBe(true);
+      const envelope = toolEnvelope(result) as {
+        contractVersion: number;
+        command: string;
+        success: boolean;
+        warningCount: number;
+        error: { code: string; message: string; diagnostics: string[] };
+        freshness: {
+          state: string;
+          isStale: boolean;
+          changedFiles: string[];
+          diagnostics: string[];
+        };
+      };
+      expect(envelope.contractVersion).toBe(1);
+      expect(envelope.command).toBe("coverage");
+      expect(envelope.success).toBe(false);
+      expect(envelope.error.code).toBe("stale_index");
+      expect(envelope.error.message).toBe(staleMessage);
+      expect(envelope.error.diagnostics).toEqual([]);
+      expect(envelope.freshness.state).toBe("stale");
+      expect(envelope.freshness.isStale).toBe(true);
+      expect(envelope.freshness.changedFiles).toEqual(["src/cart.ts"]);
+      expect(envelope.warningCount).toBe(1);
+      expect(envelope.freshness.diagnostics).toEqual([styleOrAssetWarning("src/styles.css")]);
+    } finally {
+      await connection.close();
+      await workspace.remove();
+    }
+  });
+
+  it("refuses coverage after options.index html outside sourceRoot changes", async () => {
+    // Arrange
+    const workspace = await copyMinimalWorkspace();
+    const indexHtml = path.join(workspace.path, "index.html");
+    writeFileSync(indexHtml, "<!doctype html><html></html>\n");
+    setBuildOptions(workspace.path, { index: "index.html" });
+    await indexWorkspace(workspace.path);
+    writeFileSync(indexHtml, "<!doctype html><html><body></body></html>\n");
+    const connection = await connectInProcess();
+
+    try {
+      // Act
+      const result = await connection.client.callTool({
+        name: "coverage",
+        arguments: { workspace: workspace.path },
+      });
+
+      // Assert
+      expect(result.isError).toBe(true);
+      const envelope = toolEnvelope(result) as {
+        success: boolean;
+        error: { code: string; message: string };
+        freshness: { state: string; isStale: boolean; changedFiles: string[] };
+      };
+      expect(envelope.success).toBe(false);
+      expect(envelope.error.code).toBe("stale_index");
+      expect(envelope.error.message).toBe(staleMessage);
+      expect(envelope.freshness.state).toBe("stale");
+      expect(envelope.freshness.isStale).toBe(true);
+      expect(envelope.freshness.changedFiles).toEqual(["index.html"]);
     } finally {
       await connection.close();
       await workspace.remove();
