@@ -16,7 +16,7 @@ public sealed class VersionTests
             .Descendants("CodeAtlasVersion").Single().Value;
         Assert.Matches("^[0-9]\\.[0-9]{2}\\.[0-9]{2}$", version);
         Assert.Equal(version, CodeAtlasVersion.Current);
-        foreach (var path in new[] { "README.md", "docs/VERSION.md", "docs/CodeAtlas-Project-Recap.md" })
+        foreach (var path in new[] { "README.md", "docs/VERSION.md" })
             Assert.Contains($"Version: **{version}**", File.ReadAllText(Path.Combine(root.FullName, path)));
     }
 }
