@@ -160,13 +160,7 @@ function isProcessAlive(pid: number): boolean {
 
 /** The published generation, or null when this workspace has no current.json. */
 export function readPublishedIndex(workspacePath: string): PublishedStatus | null {
-  const opened = openGeneration(workspacePath);
-  if (opened === null) return null;
-  try {
-    return statusFrom(opened, workspacePath);
-  } finally {
-    opened.database.close();
-  }
+  return withPublishedGeneration(workspacePath, (opened) => statusFrom(opened, workspacePath));
 }
 
 /** The published generation and its symbols, or null when no current.json exists. */
@@ -174,13 +168,10 @@ export function readPublishedSymbols(workspacePath: string): {
   status: PublishedStatus;
   symbols: StoredSymbol[];
 } | null {
-  const opened = openGeneration(workspacePath);
-  if (opened === null) return null;
-  try {
-    return { status: statusFrom(opened, workspacePath), symbols: readSymbols(opened.database) };
-  } finally {
-    opened.database.close();
-  }
+  return withPublishedGeneration(workspacePath, (opened) => ({
+    status: statusFrom(opened, workspacePath),
+    symbols: readSymbols(opened.database),
+  }));
 }
 
 export type StoredReference = {
@@ -198,14 +189,21 @@ export function readPublishedReferences(workspacePath: string): {
   symbols: StoredSymbol[];
   references: StoredReference[];
 } | null {
+  return withPublishedGeneration(workspacePath, (opened) => ({
+    status: statusFrom(opened, workspacePath),
+    symbols: readSymbols(opened.database),
+    references: readReferences(opened.database),
+  }));
+}
+
+function withPublishedGeneration<T>(
+  workspacePath: string,
+  read: (opened: OpenedGeneration) => T,
+): T | null {
   const opened = openGeneration(workspacePath);
   if (opened === null) return null;
   try {
-    return {
-      status: statusFrom(opened, workspacePath),
-      symbols: readSymbols(opened.database),
-      references: readReferences(opened.database),
-    };
+    return read(opened);
   } finally {
     opened.database.close();
   }

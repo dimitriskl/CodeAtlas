@@ -2,19 +2,15 @@ import { coverageForGeneration, staticCoverage } from "./coverage.js";
 import {
   findSymbolEnvelope,
   commandErrorEnvelope,
-  staleIndexError,
   trackedFreshness,
   unknownFreshness,
   type ErrorEnvelope,
   type FindSymbolEnvelope,
   type FindSymbolHit,
-  type Pagination,
 } from "./envelope.js";
 import { asCommandError, CommandError } from "./errors.js";
 import { readPublishedSymbols, type StoredSymbol } from "./generation-store.js";
-
-const maximumLimit = 1000;
-const defaultLimit = 100;
+import { page, refuseStaleIndex, requireCurrentSnapshot, requireQueryPage } from "./query-page.js";
 
 export type FindSymbolArguments = {
   workspace: string;
@@ -49,25 +45,10 @@ function queryFindSymbol(args: FindSymbolArguments): FindSymbolEnvelope {
   if (args.project !== undefined && args.project.length === 0) {
     throw new CommandError("invalid_arguments", "project must not be empty.", 2);
   }
-  if (args.snapshotId !== undefined && args.snapshotId.length === 0) {
-    throw new CommandError("invalid_arguments", "snapshotId must not be empty.", 2);
-  }
-  const offset = requireOffset(args.offset);
-  const limit = requireLimit(args.limit);
-  if (offset > 0 && args.snapshotId === undefined) {
-    throw new CommandError("invalid_arguments", "offset greater than zero requires snapshotId.", 2);
-  }
+  const { offset, limit } = requireQueryPage(args);
 
   const published = readPublishedSymbols(args.workspace);
-  if (
-    args.snapshotId !== undefined &&
-    (published === null || published.status.generationId !== args.snapshotId)
-  ) {
-    throw new CommandError(
-      "snapshot_mismatch",
-      "The index was replaced. Start a new query at offset zero.",
-    );
-  }
+  requireCurrentSnapshot(args.snapshotId, published?.status.generationId ?? null);
   if (published === null) {
     return findSymbolEnvelope({
       symbols: [],
@@ -76,13 +57,7 @@ function queryFindSymbol(args: FindSymbolArguments): FindSymbolEnvelope {
       coverage: staticCoverage(),
     });
   }
-  if (published.status.changedFiles.length > 0) {
-    throw staleIndexError({
-      changedFiles: published.status.changedFiles,
-      warnings: published.status.warnings,
-      templateCoverage: published.status.templateCoverage,
-    });
-  }
+  refuseStaleIndex(published.status);
 
   const matches = published.symbols
     .filter((symbol) => nameMatches(symbol, args.name))
@@ -100,22 +75,6 @@ function queryFindSymbol(args: FindSymbolArguments): FindSymbolEnvelope {
     ),
     coverage: coverageForGeneration(published.status.templateCoverage),
   });
-}
-
-function requireOffset(value: number | undefined): number {
-  const offset = value ?? 0;
-  if (!Number.isInteger(offset) || offset < 0) {
-    throw new CommandError("invalid_arguments", "offset must be a nonnegative integer.", 2);
-  }
-  return offset;
-}
-
-function requireLimit(value: number | undefined): number {
-  const limit = value ?? defaultLimit;
-  if (!Number.isInteger(limit) || limit < 1 || limit > maximumLimit) {
-    throw new CommandError("invalid_arguments", "limit must be an integer from 1 through 1000.", 2);
-  }
-  return limit;
 }
 
 function nameMatches(symbol: StoredSymbol, name: string): boolean {
@@ -141,25 +100,5 @@ function toHit(symbol: StoredSymbol): FindSymbolHit {
     line: symbol.line,
     column: symbol.column,
     signatures: [...symbol.signatures],
-  };
-}
-
-function page(
-  offset: number,
-  limit: number,
-  returned: number,
-  total: number,
-  snapshotId: string | null,
-): Pagination {
-  const hasMore = offset + returned < total;
-  return {
-    offset,
-    limit,
-    returned,
-    total,
-    hasMore,
-    nextOffset: hasMore ? offset + returned : null,
-    snapshotId,
-    continuationSupported: snapshotId !== null,
   };
 }

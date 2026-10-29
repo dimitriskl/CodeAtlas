@@ -68,6 +68,7 @@ type FindEnvelope = {
 };
 
 const cartTotal = "shop::src/cart.ts#Cart.total";
+const bagTotal = "shop::src/cart.ts#Bag.total";
 const cartClass = "shop::src/cart.ts#Cart";
 
 /** Call sites of `Cart.total`. `Bag.total()` at bill.ts:5:44 is not one of them. */
@@ -77,6 +78,9 @@ const cartTotalCalls: ReferenceHit[] = [
   hit(cartTotal, "invocation", "src/bill.ts", 5, 30),
   hit(cartTotal, "invocation", "src/cart.ts", 7, 17),
 ];
+
+/** The only call of `Bag.total`. */
+const bagTotalCalls: ReferenceHit[] = [hit(bagTotal, "invocation", "src/bill.ts", 5, 44)];
 
 /** Imports and type annotations of `Cart`, plus `new Cart()` as an invocation. */
 const cartUses: ReferenceHit[] = [
@@ -346,14 +350,81 @@ describe("MCP find_references", () => {
 
     try {
       // Act
-      const result = await connection.client.callTool({
+      const cart = await connection.client.callTool({
         name: "find_references",
         arguments: { workspace: workspace.path, id: cartTotal },
       });
+      const bag = await connection.client.callTool({
+        name: "find_references",
+        arguments: { workspace: workspace.path, id: bagTotal },
+      });
 
       // Assert
-      expect(result.isError).toBeFalsy();
-      expect(parseToolText(result).result?.references).toEqual(cartTotalCalls);
+      expect(cart.isError).toBeFalsy();
+      expect(bag.isError).toBeFalsy();
+      expect(parseToolText(cart).result?.references).toEqual(cartTotalCalls);
+      expect(parseToolText(bag).result?.references).toEqual(bagTotalCalls);
+    } finally {
+      await connection.close();
+      await workspace.remove();
+    }
+  });
+
+  it("returns the next page from the same snapshot and snapshot_mismatch after a re-index", async () => {
+    // Arrange
+    const workspace = await indexedReferencesWorkspace();
+    const connection = await connectInProcess();
+    const first = cartTotalCalls[0];
+    const second = cartTotalCalls[1];
+    if (first === undefined || second === undefined) throw new Error("missing call sites");
+
+    try {
+      // Act
+      const page1Result = await connection.client.callTool({
+        name: "find_references",
+        arguments: { workspace: workspace.path, id: cartTotal, offset: 0, limit: 1 },
+      });
+      expect(page1Result.isError).toBeFalsy();
+      const page1 = parseToolText(page1Result);
+      const snapshotId = page1.pagination?.snapshotId;
+      expect(snapshotId).toMatch(/^[0-9a-f]{32}$/);
+      expect(stable(page1)).toEqual(
+        successEnvelope([first], {
+          offset: 0,
+          limit: 1,
+          returned: 1,
+          total: cartTotalCalls.length,
+          hasMore: true,
+          nextOffset: 1,
+        }),
+      );
+
+      const page2Result = await connection.client.callTool({
+        name: "find_references",
+        arguments: { workspace: workspace.path, id: cartTotal, offset: 1, limit: 1, snapshotId },
+      });
+      expect(page2Result.isError).toBeFalsy();
+      const page2 = parseToolText(page2Result);
+      expect(page2.pagination?.snapshotId).toBe(snapshotId);
+      expect(page2.pagination?.offset).toBe(1);
+      expect(page2.pagination?.hasMore).toBe(true);
+      expect(page2.result?.references).toEqual([second]);
+
+      const reindexed = await runCli(["index", "--workspace", workspace.path]);
+      if (reindexed.exitCode !== 0) throw new Error(reindexed.stderr);
+      const mismatch = await connection.client.callTool({
+        name: "find_references",
+        arguments: { workspace: workspace.path, id: cartTotal, offset: 1, limit: 1, snapshotId },
+      });
+
+      // Assert
+      expect(mismatch.isError).toBe(true);
+      expect(parseToolText(mismatch)).toEqual(
+        errorEnvelope(
+          "snapshot_mismatch",
+          "The index was replaced. Start a new query at offset zero.",
+        ),
+      );
     } finally {
       await connection.close();
       await workspace.remove();

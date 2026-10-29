@@ -40,6 +40,8 @@ const publishedPaths = [
   "dist/mcp.js",
   "dist/process-runner.d.ts",
   "dist/process-runner.js",
+  "dist/query-page.d.ts",
+  "dist/query-page.js",
   "dist/references.d.ts",
   "dist/references.js",
   "dist/symbols.d.ts",
