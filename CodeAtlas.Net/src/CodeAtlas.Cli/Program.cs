@@ -30,6 +30,7 @@ Usage: codeatlas                (no arguments, interactive terminal: numbered st
        codeatlas coverage --index <path-to-index.json>
        codeatlas export-json --index <path-to-index.json> --output <new-directory>
        codeatlas live --solution <path.sln|path.slnx>
+       codeatlas mcp --solution <path.sln|path.slnx>
 
 Query options: --project <relative-project-path> --limit <1-1000> --offset <nonnegative> --snapshot <indexId> --profile
 Default limit is 100. Indexed continuations require --snapshot; live queries support only the first page.
@@ -54,6 +55,7 @@ Without a configured selection or legacy credentials AI stays disabled. Effort s
 explain-request exports selected source evidence locally; optional --local, --context, --reference-limit and byte limits bound that context.
 explain-import requires registered request identity, evidence citations, provenance and unchanged observed inputs. No provider is called.
 live reads one JSON object per stdin line and writes one JSON object per line. Request commands are edit, find-symbol, search and find-references.
+mcp reads one JSON-RPC message per stdin line and writes one JSON-RPC message per line. Its tool is find_symbol.
 """;
 if (StartMenu.ShouldOpen(args, Console.IsInputRedirected, Console.IsOutputRedirected))
     return await StartMenu.RunInConsoleAsync();
@@ -74,6 +76,8 @@ using var indexingProgress = args.Length > 0 && (args[0] is "index" or "refresh"
 var command = args.FirstOrDefault();
 if (command == "live")
     return await LiveHost.RunAsync(args, Console.In, Console.Out, Console.Error, cancellation.Token);
+if (command == "mcp")
+    return await McpHost.RunAsync(args, Console.In, Console.Out, Console.Error, cancellation.Token);
 CodebaseIndex? loadedIndex = null;
 LoadedSnapshot? loadedSnapshot = null;
 TimingSnapshot? committedTimings = null;
