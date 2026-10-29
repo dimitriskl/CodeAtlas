@@ -1,15 +1,24 @@
 using System.Collections;
+using System.Collections.Concurrent;
 
 namespace CodeAtlas;
 
 /// <summary>Disk-only freshness checks; no workspace or MSBuild registration is performed.</summary>
 public static class SnapshotInputs
 {
+    private static readonly ConcurrentDictionary<string, int> fullFreshnessChecks = new(SnapshotInputModel.PathComparer);
     public static CoverageSummary LegacyCoverage { get; } = new("partial", "legacy-input-model",
         [new("legacy_input_model", "Rebuild to capture supported build inputs and explicit analysis coverage.")]);
 
+    internal static int FullFreshnessChecks(string solution) =>
+        fullFreshnessChecks.TryGetValue(Path.GetFullPath(solution), out var count) ? count : 0;
+
+    internal static void ResetFullFreshnessChecks(string solution) =>
+        fullFreshnessChecks[Path.GetFullPath(solution)] = 0;
+
     public static async Task<IndexFreshness> CheckFreshnessAsync(CodebaseIndex index, CancellationToken cancellationToken = default)
     {
+        fullFreshnessChecks.AddOrUpdate(Path.GetFullPath(index.Solution), 1, static (_, count) => count + 1);
         if (index.InputManifest is null)
         {
             // Legacy fingerprints can prove staleness but cannot establish full input coverage.

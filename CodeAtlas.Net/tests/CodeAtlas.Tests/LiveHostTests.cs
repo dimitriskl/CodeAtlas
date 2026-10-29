@@ -1,12 +1,73 @@
+using System.Diagnostics;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using CodeAtlas.Cli;
 using Xunit;
+using Xunit.Abstractions;
 
 namespace CodeAtlas.Tests;
 
 public sealed partial class SqliteFileUpdateTests
 {
+    private readonly ITestOutputHelper output;
+
+    public SqliteFileUpdateTests(ITestOutputHelper output) => this.output = output;
+
+    [Fact]
+    public async Task SessionQueryAfterItsOwnEditSkipsTheFullFreshnessHash()
+    {
+        // Arrange
+        using var fixture = await SampleCopy.CreateAsync();
+        await IndexStore.PublishAsync(await SolutionAnalysis.CreateIndexAsync(fixture.Solution));
+        var once = EditedCalculator(await File.ReadAllTextAsync(fixture.Calculator));
+        using var host = await LiveHost.StartAsync(fixture.Solution);
+        await host.HandleAsync(Request("edit", ("path", fixture.Calculator), ("text", once)));
+        await host.HandleAsync(Request("find-symbol", ("name", "Extra")));
+        SnapshotInputs.ResetFullFreshnessChecks(fixture.Solution);
+
+        // Act
+        var symbolWatch = Stopwatch.StartNew();
+        var symbols = await host.HandleAsync(Request("find-symbol", ("name", "Extra")));
+        symbolWatch.Stop();
+        var searchWatch = Stopwatch.StartNew();
+        var search = await host.HandleAsync(Request("search", ("query", "Extra")));
+        searchWatch.Stop();
+        var referenceWatch = Stopwatch.StartNew();
+        var references = await host.HandleAsync(Request("find-references", ("symbol", Calculate)));
+        referenceWatch.Stop();
+        var checks = SnapshotInputs.FullFreshnessChecks(fixture.Solution);
+        output.WriteLine(
+            $"warm 1 find-symbol {symbolWatch.Elapsed.TotalMilliseconds:0.0} ms; search {searchWatch.Elapsed.TotalMilliseconds:0.0} ms; find-references {referenceWatch.Elapsed.TotalMilliseconds:0.0} ms");
+        for (var round = 2; round <= 3; round++)
+        {
+            var again = Stopwatch.StartNew();
+            await host.HandleAsync(Request("find-symbol", ("name", "Extra")));
+            var symbolMs = again.Elapsed.TotalMilliseconds;
+            again.Restart();
+            await host.HandleAsync(Request("search", ("query", "Extra")));
+            var searchMs = again.Elapsed.TotalMilliseconds;
+            again.Restart();
+            await host.HandleAsync(Request("find-references", ("symbol", Calculate)));
+            output.WriteLine($"warm {round} find-symbol {symbolMs:0.0} ms; search {searchMs:0.0} ms; find-references {again.Elapsed.TotalMilliseconds:0.0} ms");
+        }
+
+        // Assert
+        Assert.Equal(0, checks);
+        AssertSucceeded(symbols);
+        AssertSucceeded(search);
+        AssertSucceeded(references);
+        var expected = await RebuildAsync(once, "Extra");
+        Assert.Equal(expected.Symbols, Items(symbols, "symbols"));
+        Assert.Equal(expected.Search, Items(search, "symbols"));
+        Assert.Equal(expected.References, Items(references, "references"));
+
+        await File.AppendAllTextAsync(fixture.Calculator, "\n// changed outside the session\n");
+        var stale = await host.HandleAsync(Request("find-symbol", ("name", "Extra")));
+        Assert.False(stale["success"]!.GetValue<bool>());
+        Assert.Equal("stale_index", stale["error"]!["code"]!.GetValue<string>());
+        Assert.Equal(0, SnapshotInputs.FullFreshnessChecks(fixture.Solution));
+    }
+
     [Fact]
     public async Task HostAnswersEditsAndQueriesFromOneLoadedSolution()
     {

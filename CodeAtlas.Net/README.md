@@ -102,7 +102,7 @@ The original live queries remain available: replace `--index <index.json>` with 
 {"command":"find-references","symbol":"Library/Library.csproj::M:Sample.Calculator.Calculate(System.Int32)"}
 ```
 
-`edit` takes `path` and `text` and publishes a new generation. `find-symbol` takes `name` and optional `kind` (`method` by default). `search` takes `query` and optional `mode` and `kind` (defaults `assisted` and `method`, the same as `search-symbols`). `find-references` takes `symbol`. Each answer is read from the current generation.
+`edit` takes `path` and `text` and publishes a new generation. `find-symbol` takes `name` and optional `kind` (`method` by default). `search` takes `query` and optional `mode` and `kind` (defaults `assisted` and `method`, the same as `search-symbols`). `find-references` takes `symbol`. Each answer is read from the current generation. After `edit`, a later query compares each tracked file's length and last-write time with the stamp taken at publication and hashes only files whose stamp changed. A content change outside the process is `stale_index`. Publishing the generation still hashes every input.
 
 ## Freshness and agent workflow
 

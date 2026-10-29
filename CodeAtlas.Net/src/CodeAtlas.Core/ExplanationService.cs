@@ -192,9 +192,10 @@ public sealed class ExplanationService
     /// <summary>Read only current, checked accepted descriptions. Missing or damaged derived
     /// entries are omitted; this operation never generates explanations or invokes a provider.</summary>
     public async Task<IReadOnlyDictionary<string, AcceptedExplanation>> GetSearchableAsync(
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default, bool verifyFreshness = true)
     {
-        await IndexStore.RequireFreshAsync(snapshot.Index, cancellationToken);
+        if (verifyFreshness)
+            await IndexStore.RequireFreshAsync(snapshot.Index, cancellationToken);
         var result = new Dictionary<string, AcceptedExplanation>(StringComparer.Ordinal);
         var verifiedFiles = new Dictionary<string, (int Length, string Hash)>(
             OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal);
@@ -227,10 +228,11 @@ public sealed class ExplanationService
             catch (Exception exception) when (CacheFailure(exception))
             {
                 // Stale, missing, or corrupt explanations are never search evidence.
-                // A changed semantic input is still rejected by the final full freshness check.
+                // A changed semantic input is rejected by the freshness check when one is requested.
             }
         }
-        await IndexStore.RequireFreshAsync(snapshot.Index, cancellationToken);
+        if (verifyFreshness)
+            await IndexStore.RequireFreshAsync(snapshot.Index, cancellationToken);
         return result;
     }
 
