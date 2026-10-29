@@ -1,4 +1,5 @@
 import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
 import { copyMinimalWorkspace } from "./support/fixture.js";
@@ -1906,6 +1907,233 @@ describe("MCP freshness and stale refusal", () => {
     writeFileSync(readme, "<p>Notes</p>\n");
     await indexWorkspace(workspace.path);
     writeFileSync(readme, "<p>Notes changed</p>\n");
+    const connection = await connectInProcess();
+
+    try {
+      // Act
+      const result = await connection.client.callTool({
+        name: "coverage",
+        arguments: { workspace: workspace.path },
+      });
+
+      // Assert
+      expect(result.isError).toBeFalsy();
+      const envelope = toolEnvelope(result) as {
+        success: boolean;
+        warningCount: number;
+        freshness: { state: string; isStale: boolean; changedFiles: string[] };
+      };
+      expect(envelope.success).toBe(true);
+      expect(envelope.freshness.state).toBe("fresh");
+      expect(envelope.freshness.isStale).toBe(false);
+      expect(envelope.freshness.changedFiles).toEqual([]);
+      expect(envelope.warningCount).toBe(0);
+    } finally {
+      await connection.close();
+      await workspace.remove();
+    }
+  });
+
+  it("refuses coverage after a templateUrl file outside sourceRoot is deleted", async () => {
+    // Arrange
+    const workspace = await copyMinimalWorkspace();
+    const template = useExternalTemplate(workspace.path);
+    await indexWorkspace(workspace.path);
+    rmSync(template);
+    const connection = await connectInProcess();
+
+    try {
+      // Act
+      const result = await connection.client.callTool({
+        name: "coverage",
+        arguments: { workspace: workspace.path },
+      });
+
+      // Assert
+      expect(result.isError).toBe(true);
+      const envelope = toolEnvelope(result) as {
+        success: boolean;
+        error: { code: string; message: string; diagnostics: string[] };
+        freshness: { state: string; isStale: boolean; changedFiles: string[] };
+      };
+      expect(envelope.success).toBe(false);
+      expect(envelope.error.code).toBe("stale_index");
+      expect(envelope.error.message).toBe(staleMessage);
+      expect(envelope.error.diagnostics).toEqual([]);
+      expect(envelope.freshness.state).toBe("stale");
+      expect(envelope.freshness.isStale).toBe(true);
+      expect(envelope.freshness.changedFiles).toEqual(["tmpl/cart.html"]);
+    } finally {
+      await connection.close();
+      await workspace.remove();
+    }
+  });
+
+  it("reports a deleted templateUrl file outside sourceRoot from index_status", async () => {
+    // Arrange
+    const workspace = await copyMinimalWorkspace();
+    const template = useExternalTemplate(workspace.path);
+    await indexWorkspace(workspace.path);
+    rmSync(template);
+    const connection = await connectInProcess();
+
+    try {
+      // Act
+      const result = await connection.client.callTool({
+        name: "index_status",
+        arguments: { workspace: workspace.path },
+      });
+
+      // Assert
+      expect(result.isError).toBeFalsy();
+      const envelope = toolEnvelope(result) as {
+        success: boolean;
+        error?: { code: string };
+        freshness: { state: string; isStale: boolean; changedFiles: string[] };
+      };
+      expect(envelope.success).toBe(true);
+      expect(envelope.error).toBeUndefined();
+      expect(envelope.freshness.state).toBe("stale");
+      expect(envelope.freshness.isStale).toBe(true);
+      expect(envelope.freshness.changedFiles).toEqual(["tmpl/cart.html"]);
+    } finally {
+      await connection.close();
+      await workspace.remove();
+    }
+  });
+
+  it("refuses coverage when a templateUrl file appears only after publish", async () => {
+    // Arrange
+    const workspace = await copyMinimalWorkspace();
+    const template = useExternalTemplate(workspace.path);
+    rmSync(template);
+    await indexWorkspace(workspace.path);
+    writeFileSync(template, "<p>Cart</p>\n");
+    const connection = await connectInProcess();
+
+    try {
+      // Act
+      const result = await connection.client.callTool({
+        name: "coverage",
+        arguments: { workspace: workspace.path },
+      });
+
+      // Assert
+      expect(result.isError).toBe(true);
+      const envelope = toolEnvelope(result) as {
+        success: boolean;
+        error: { code: string; message: string; diagnostics: string[] };
+        freshness: { state: string; isStale: boolean; changedFiles: string[] };
+      };
+      expect(envelope.success).toBe(false);
+      expect(envelope.error.code).toBe("stale_index");
+      expect(envelope.error.message).toBe(staleMessage);
+      expect(envelope.error.diagnostics).toEqual([]);
+      expect(envelope.freshness.state).toBe("stale");
+      expect(envelope.freshness.isStale).toBe(true);
+      expect(envelope.freshness.changedFiles).toEqual(["tmpl/cart.html"]);
+    } finally {
+      await connection.close();
+      await workspace.remove();
+    }
+  });
+
+  it("reports a templateUrl file that appears only after publish from index_status", async () => {
+    // Arrange
+    const workspace = await copyMinimalWorkspace();
+    const template = useExternalTemplate(workspace.path);
+    rmSync(template);
+    await indexWorkspace(workspace.path);
+    writeFileSync(template, "<p>Cart</p>\n");
+    const connection = await connectInProcess();
+
+    try {
+      // Act
+      const result = await connection.client.callTool({
+        name: "index_status",
+        arguments: { workspace: workspace.path },
+      });
+
+      // Assert
+      expect(result.isError).toBeFalsy();
+      const envelope = toolEnvelope(result) as {
+        success: boolean;
+        error?: { code: string };
+        freshness: { state: string; isStale: boolean; changedFiles: string[] };
+      };
+      expect(envelope.success).toBe(true);
+      expect(envelope.error).toBeUndefined();
+      expect(envelope.freshness.state).toBe("stale");
+      expect(envelope.freshness.isStale).toBe(true);
+      expect(envelope.freshness.changedFiles).toEqual(["tmpl/cart.html"]);
+    } finally {
+      await connection.close();
+      await workspace.remove();
+    }
+  });
+
+  it("stays fresh when a templateUrl target outside the workspace changes", async () => {
+    // Arrange
+    const workspace = await copyMinimalWorkspace();
+    const outside = path.join(tmpdir(), `codeatlas-outside-${process.pid}-${Date.now()}.html`);
+    writeFileSync(outside, "<p>Out</p>\n");
+    writeFileSync(
+      path.join(workspace.path, "src", "cart.ts"),
+      [
+        'import { Component } from "@angular/core";',
+        `@Component({ selector: "app-cart", templateUrl: ${JSON.stringify(outside)} })`,
+        "export class Cart {}",
+        "",
+      ].join("\n"),
+    );
+    await indexWorkspace(workspace.path);
+    writeFileSync(outside, "<p>Out changed</p>\n");
+    const connection = await connectInProcess();
+
+    try {
+      // Act
+      const result = await connection.client.callTool({
+        name: "coverage",
+        arguments: { workspace: workspace.path },
+      });
+
+      // Assert
+      expect(result.isError).toBeFalsy();
+      const envelope = toolEnvelope(result) as {
+        success: boolean;
+        warningCount: number;
+        freshness: { state: string; isStale: boolean; changedFiles: string[] };
+      };
+      expect(envelope.success).toBe(true);
+      expect(envelope.freshness.state).toBe("fresh");
+      expect(envelope.freshness.isStale).toBe(false);
+      expect(envelope.freshness.changedFiles).toEqual([]);
+      expect(envelope.warningCount).toBe(0);
+    } finally {
+      await connection.close();
+      await workspace.remove();
+      rmSync(outside, { force: true });
+    }
+  });
+
+  it("stays fresh when a templateUrl target under node_modules changes", async () => {
+    // Arrange
+    const workspace = await copyMinimalWorkspace();
+    const templateDirectory = path.join(workspace.path, "node_modules", "leftpad");
+    mkdirSync(templateDirectory, { recursive: true });
+    const template = path.join(templateDirectory, "cart.html");
+    writeFileSync(template, "<p>Cart</p>\n");
+    writeFileSync(
+      path.join(workspace.path, "src", "cart.ts"),
+      [
+        'import { Component } from "@angular/core";',
+        '@Component({ selector: "app-cart", templateUrl: "../node_modules/leftpad/cart.html" })',
+        "export class Cart {}",
+        "",
+      ].join("\n"),
+    );
+    await indexWorkspace(workspace.path);
+    writeFileSync(template, "<p>Cart changed</p>\n");
     const connection = await connectInProcess();
 
     try {

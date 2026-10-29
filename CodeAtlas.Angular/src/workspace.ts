@@ -153,6 +153,7 @@ function symbolsInProject(
       trackReferencedFile(files, canonical, sourcePath, spec, isStyleFile);
     }
     for (const spec of references.templates) {
+      // Any file a templateUrl points to is tracked regardless of extension.
       const templatePath = trackReferencedFile(files, canonical, sourcePath, spec, () => true);
       if (templatePath !== null) templateFiles.add(templatePath);
     }
