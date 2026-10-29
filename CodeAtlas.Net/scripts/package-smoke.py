@@ -83,7 +83,7 @@ def main():
     ET.ElementTree(config).write(config_path, encoding="utf-8", xml_declaration=True)
     results = []
 
-    def run(label, command, expected=0, parse=False):
+    def run(label, command, expected=0, parse=False, stdin=None):
         command = [str(x) for x in command]
         step = {"step": label, "command": command, "state": "running"}
         results.append(step)
@@ -92,7 +92,7 @@ def main():
         stdout_path, stderr_path = (scratch / (label + suffix) for suffix in (".stdout.txt", ".stderr.txt"))
         with stdout_path.open("wb") as stdout, stderr_path.open("wb") as stderr:
             try:
-                process = subprocess.run(command, cwd=target, env=env,
+                process = subprocess.run(command, cwd=target, env=env, input=stdin,
                                          stdout=stdout, stderr=stderr, timeout=300)
             except Exception as error:
                 step.update(state="failed", error=type(error).__name__)
@@ -142,6 +142,33 @@ def main():
     assert len(refs) == 3
     assert sorted(r["kind"] for r in refs) == ["invocation", "invocation", "reference"]
     assert {r["definitionId"] for r in refs} == {int_id}
+    # A single stemmed token on this six-method corpus is below the evidence gate.
+    # The same abstention happens from a checkout build, so it is not an install defect.
+    calculate = run("search-calculate", [executable, "search-symbols", "--index", index_path,
+                                        "--query", "Calculate", "--mode", "names"], parse=True)
+    assert calculate["success"] is True and calculate["mode"] == "names"
+    assert calculate["decision"] == "abstained-insufficient-evidence"
+    assert calculate["symbols"] == [] and calculate["withheldWeakMatches"] == 2
+    search = run("search", [executable, "search-symbols", "--index", index_path,
+                            "--query", "LocalCaller", "--mode", "names"], parse=True)
+    assert search["success"] is True and search["decision"] == "lexical-candidates"
+    assert [item["symbol"]["id"] for item in search["symbols"]] == [
+        "Library/Library.csproj::M:Sample.Calculator.LocalCaller"]
+    mcp_input = "\n".join([
+        json.dumps({"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {
+            "protocolVersion": "2025-06-18", "capabilities": {},
+            "clientInfo": {"name": "package-smoke", "version": "0"}}}),
+        json.dumps({"jsonrpc": "2.0", "method": "notifications/initialized"}),
+        json.dumps({"jsonrpc": "2.0", "id": 2, "method": "tools/list"}),
+    ]) + "\n"
+    mcp = run("mcp", [executable, "mcp", "--solution", "Sample.slnx"], stdin=mcp_input.encode())
+    messages = [json.loads(line) for line in mcp.stdout.splitlines() if line.strip()]
+    assert len(messages) == 2
+    assert messages[0]["result"]["protocolVersion"] == "2025-06-18"
+    assert messages[0]["result"]["capabilities"]["tools"]["listChanged"] is False
+    assert messages[0]["result"]["serverInfo"] == {"name": "codeatlas", "version": args.version}
+    assert [tool["name"] for tool in messages[1]["result"]["tools"]] == [
+        "find_symbol", "index_status", "coverage", "index"]
     empty = run("empty", [executable, "find-symbol", "--index", index_path,
                           "--name", "DoesNotExist"], parse=True)
     assert empty["symbols"] == []
