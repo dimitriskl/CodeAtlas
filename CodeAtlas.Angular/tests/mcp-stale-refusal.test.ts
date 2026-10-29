@@ -824,6 +824,216 @@ describe("MCP freshness and stale refusal", () => {
     }
   });
 
+  it("refuses coverage when a TypeScript file under an asset input changes", async () => {
+    // Arrange
+    const workspace = await copyMinimalWorkspace();
+    setBuildOptions(workspace.path, { assets: [{ glob: "**/*.svg", input: "src" }] });
+    await indexWorkspace(workspace.path);
+    writeFileSync(
+      path.join(workspace.path, "src", "cart.ts"),
+      "export class Cart { total = 2; }\n",
+    );
+    const connection = await connectInProcess();
+
+    try {
+      // Act
+      const result = await connection.client.callTool({
+        name: "coverage",
+        arguments: { workspace: workspace.path },
+      });
+
+      // Assert
+      expect(result.isError).toBe(true);
+      const envelope = toolEnvelope(result) as {
+        success: boolean;
+        error: { code: string };
+        freshness: { state: string; changedFiles: string[] };
+      };
+      expect(envelope.success).toBe(false);
+      expect(envelope.error.code).toBe("stale_index");
+      expect(envelope.freshness.state).toBe("stale");
+      expect(envelope.freshness.changedFiles).toEqual(["src/cart.ts"]);
+    } finally {
+      await connection.close();
+      await workspace.remove();
+    }
+  });
+
+  it("refuses coverage when a TypeScript file is added under an asset input", async () => {
+    // Arrange
+    const workspace = await copyMinimalWorkspace();
+    setBuildOptions(workspace.path, { assets: [{ glob: "**/*.svg", input: "src" }] });
+    await indexWorkspace(workspace.path);
+    writeFileSync(path.join(workspace.path, "src", "extra.ts"), "export class Extra {}\n");
+    const connection = await connectInProcess();
+
+    try {
+      // Act
+      const result = await connection.client.callTool({
+        name: "coverage",
+        arguments: { workspace: workspace.path },
+      });
+
+      // Assert
+      expect(result.isError).toBe(true);
+      const envelope = toolEnvelope(result) as {
+        success: boolean;
+        error: { code: string };
+        freshness: { state: string; changedFiles: string[] };
+      };
+      expect(envelope.success).toBe(false);
+      expect(envelope.error.code).toBe("stale_index");
+      expect(envelope.freshness.state).toBe("stale");
+      expect(envelope.freshness.changedFiles).toEqual(["src/extra.ts"]);
+    } finally {
+      await connection.close();
+      await workspace.remove();
+    }
+  });
+
+  it("stays fresh when an extends base in node_modules changes", async () => {
+    // Arrange
+    const workspace = await copyMinimalWorkspace();
+    const packageDir = path.join(workspace.path, "node_modules", "leftpad");
+    mkdirSync(packageDir, { recursive: true });
+    const base = path.join(packageDir, "tsconfig.json");
+    writeFileSync(base, `${JSON.stringify({ compilerOptions: { strict: true } })}\n`);
+    writeFileSync(
+      path.join(workspace.path, "tsconfig.app.json"),
+      `${JSON.stringify(
+        {
+          extends: "leftpad/tsconfig.json",
+          compilerOptions: {
+            strict: true,
+            target: "ES2022",
+            module: "ES2022",
+            moduleResolution: "bundler",
+            skipLibCheck: true,
+          },
+          include: ["src/**/*.ts"],
+        },
+        null,
+        2,
+      )}\n`,
+    );
+    const generationId = await indexWorkspace(workspace.path);
+    writeFileSync(base, `${JSON.stringify({ compilerOptions: { strict: false } })}\n`);
+    const connection = await connectInProcess();
+
+    try {
+      // Act
+      const result = await connection.client.callTool({
+        name: "coverage",
+        arguments: { workspace: workspace.path },
+      });
+
+      // Assert
+      expect(result.isError).toBeFalsy();
+      const envelope = toolEnvelope(result);
+      const body = envelope.freshness as { checkedAtUtc: string };
+      expect(body.checkedAtUtc).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/);
+      expect({
+        ...envelope,
+        freshness: { ...body, checkedAtUtc: "TIMESTAMP" },
+      }).toEqual({
+        contractVersion: 1,
+        command: "coverage",
+        success: true,
+        responseToolVersion: "0.00.01",
+        warningCount: 0,
+        freshness: freshness({ state: "fresh", changedFiles: [], diagnostics: [] }),
+        coverage: generationCoverage("complete"),
+        pagination: {
+          offset: 0,
+          limit: 0,
+          returned: 0,
+          total: 0,
+          hasMore: false,
+          nextOffset: null,
+          snapshotId: generationId,
+          continuationSupported: false,
+        },
+      });
+    } finally {
+      await connection.close();
+      await workspace.remove();
+    }
+  });
+
+  it("stays fresh when an extends base outside the workspace changes", async () => {
+    // Arrange
+    const workspace = await copyMinimalWorkspace();
+    const outsideDir = path.join(
+      path.dirname(workspace.path),
+      `outside-${path.basename(workspace.path)}`,
+    );
+    mkdirSync(outsideDir);
+    const base = path.join(outsideDir, "tsconfig.base.json");
+    writeFileSync(base, `${JSON.stringify({ compilerOptions: { strict: true } })}\n`);
+    const extendsPath = path.relative(workspace.path, base).replaceAll("\\", "/");
+    writeFileSync(
+      path.join(workspace.path, "tsconfig.app.json"),
+      `${JSON.stringify(
+        {
+          extends: extendsPath,
+          compilerOptions: {
+            strict: true,
+            target: "ES2022",
+            module: "ES2022",
+            moduleResolution: "bundler",
+            skipLibCheck: true,
+          },
+          include: ["src/**/*.ts"],
+        },
+        null,
+        2,
+      )}\n`,
+    );
+    const generationId = await indexWorkspace(workspace.path);
+    writeFileSync(base, `${JSON.stringify({ compilerOptions: { strict: false } })}\n`);
+    const connection = await connectInProcess();
+
+    try {
+      // Act
+      const result = await connection.client.callTool({
+        name: "coverage",
+        arguments: { workspace: workspace.path },
+      });
+
+      // Assert
+      expect(result.isError).toBeFalsy();
+      const envelope = toolEnvelope(result);
+      const body = envelope.freshness as { checkedAtUtc: string };
+      expect(body.checkedAtUtc).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/);
+      expect({
+        ...envelope,
+        freshness: { ...body, checkedAtUtc: "TIMESTAMP" },
+      }).toEqual({
+        contractVersion: 1,
+        command: "coverage",
+        success: true,
+        responseToolVersion: "0.00.01",
+        warningCount: 0,
+        freshness: freshness({ state: "fresh", changedFiles: [], diagnostics: [] }),
+        coverage: generationCoverage("complete"),
+        pagination: {
+          offset: 0,
+          limit: 0,
+          returned: 0,
+          total: 0,
+          hasMore: false,
+          nextOffset: null,
+          snapshotId: generationId,
+          continuationSupported: false,
+        },
+      });
+    } finally {
+      await connection.close();
+      await workspace.remove();
+      rmSync(outsideDir, { recursive: true, force: true });
+    }
+  });
+
   it("stays fresh and warns after a component stylesheet changes", async () => {
     // Arrange
     const workspace = await copyMinimalWorkspace();

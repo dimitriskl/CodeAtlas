@@ -26,7 +26,7 @@ Status: in-test
 - [x] MCP seam test: after editing `package-lock.json` or `angular.json`, the index is stale.
 - [x] MCP seam test: after editing a stylesheet, the index stays `fresh` and `warningCount` goes up, with a warning naming the file.
 - [x] MCP seam test: adding a file under `node_modules` does not change freshness.
-- [ ] CLI seam test: a stale condition on a CLI query path exits 3.
+- [ ] CLI seam test: a stale condition on a CLI query path exits 3. (moved to task 18)
 - [x] Freshness scope and tracked-input rules are documented in `MCP-CONTRACT.md`.
 
 ## Review log
@@ -66,3 +66,4 @@ Status: in-test
 - 2026-10-29: A new TypeScript program file, `.html` under `sourceRoot`, or workspace `tsconfig*.json` makes `coverage` refuse `stale_index` with that path in `changedFiles`. Added styles and assets only warn, and `node_modules` stays excluded. Replaced "stays fresh when a TypeScript file is added after indexing". The Freshness scope sentence in `MCP-CONTRACT.md` matches.
 - 2026-10-29: Each project's in-workspace `tsconfig` `extends` chain is stale-making. Editing that base makes `coverage` refuse as stale. Bases outside the workspace are left to task 29.
 - 2026-10-29: Component stylesheets (`.css`, `.scss`, `.sass`, `.less` under `sourceRoot`, and `styleUrl` / `styleUrls` targets) are warning-only. Editing one stays `fresh` with a warning that names the file. `MCP-CONTRACT.md` records that.
+- 2026-10-29: Developer self-review. Stale-making inputs are classified before asset and style warning roots, so an `options.assets` input of `src` does not hide a `.ts` edit or an added `.ts`. An `extends` base in `node_modules` or outside the workspace stays untracked. CLI exit 3 is marked deferred to task 18 in `MCP-CONTRACT.md`, and the unticked criterion says moved to task 18.

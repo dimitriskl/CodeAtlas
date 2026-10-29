@@ -63,17 +63,17 @@ A tracked input is stale-making or warning-only.
 Stale-making. A byte change, a file that can no longer be read, or a stale-making path that was not stored at publish adds the workspace-relative path to `changedFiles`. `state` becomes `stale` and `isStale` becomes true:
 
 - TypeScript sources, including specs: each non-declaration file in a project's program that sits inside the workspace and is not under `node_modules`. An inline template is part of that file's bytes.
-- Templates: every `.html` file under a project's non-empty `sourceRoot`, and each architect target's `options.index` when that value is a path (or an object with `input`) to a file inside the workspace. Paths under `node_modules` are skipped. An `.html` file that is also a style or asset is warning-only instead.
+- Templates: every `.html` file under a project's non-empty `sourceRoot`, and each architect target's `options.index` when that value is a path (or an object with `input`) to a file inside the workspace. Paths under `node_modules` are skipped. A template stays stale-making when it also sits inside an `options.assets` or `options.styles` input.
 - `angular.json`.
 - `package.json` and `package-lock.json`, when they exist.
 - Every workspace-root file whose name matches `tsconfig*.json`, each project's `architect.build.options.tsConfig`, and each `extends` base of that config when the base resolves to a file inside the workspace. A base outside the workspace, including a package name, is not a tracked input.
 
 Warning-only. A byte change, a file that can no longer be read, or a warning-only path that was not stored at publish does not make the index stale. `state` stays `fresh`, `isStale` stays false, and the path is not added to `changedFiles`. Each such path adds one diagnostic, `Style or asset changed: <path>.`, sorted by the path in ascending code-unit order. `warningCount` is the number of those diagnostics. `freshness.diagnostics` lists them.
 
-- Styles. Any architect target's `options.styles` entry (a string path or an object with `input`; a directory entry hashes every file under it); every `.css`, `.scss`, `.sass`, and `.less` file under a project's non-empty `sourceRoot`; and each `styleUrl` or `styleUrls` target in a tracked TypeScript source when that target is one of those style files inside the workspace. Files with those extensions are warning-only even when the style list cannot be read.
-- Assets named by `options.assets`, in the same entry shapes. A directory entry hashes every file under it. A changed file is warning-only when its path equals one of those entries or sits inside a directory entry.
+- Styles. Any architect target's `options.styles` entry (a string path or an object with `input`; a directory entry hashes every file under it); every `.css`, `.scss`, `.sass`, and `.less` file under a project's non-empty `sourceRoot`; and each `styleUrl` or `styleUrls` target in a tracked TypeScript source when that target is one of those style files inside the workspace. Files with those extensions are warning-only even when the style list cannot be read. A style input does not make a stale-making file warning-only.
+- Assets named by `options.assets`, in the same entry shapes. A directory entry hashes every file under it. A changed file is warning-only when it is not a stale-making input and its path equals one of those entries or sits inside a directory entry. An `input` of `src` with a `glob` still names the directory `src`; the `glob` is not applied. TypeScript sources, templates, `tsconfig*.json` (including in-workspace `extends` bases), `angular.json`, and package files inside that directory stay stale-making.
 
-Entries are literal paths, not globs. A path that does not exist at publish is not tracked. `options` on every architect target is read. Paths that contain `node_modules` or `..` are ignored. Directory walks also skip `.codeatlas` and `.git`.
+Entries are literal paths, not globs. On an object entry, `input` is the tracked path and `glob` is ignored. A path that does not exist at publish is not tracked. `options` on every architect target is read. Paths that contain `node_modules` or `..` are ignored. Directory walks also skip `.codeatlas` and `.git`. Stale-making inputs are classified before these warning roots.
 
 `changedFiles` is sorted in ascending code-unit order.
 
@@ -88,7 +88,7 @@ Entries are literal paths, not globs. A path that does not exist at publish is n
 - pagination is omitted
 - `warningCount` still counts style and asset warnings
 - in MCP, the tool result is an error
-- on the CLI, the process exits 3, stdout is empty, and stderr is this envelope
+- CLI exit code 3 for this refusal is deferred to task 18. This edition has no CLI query command. `index` does not refuse a stale generation.
 
 ### Coverage
 
@@ -144,11 +144,11 @@ Present only when `success` is `false`.
 
 An unknown CLI command uses code `invalid_arguments`, message `Unknown command.`, and exit code `2`. The JSON is written to stderr and stdout is empty. This matches the .NET edition: error JSON is not written to stdout, and invalid arguments exit 2.
 
-A query that refuses a stale generation uses code `stale_index`, message `The saved index is stale.`, and exit code `3`. Freshness and coverage are present, as specified under Freshness scope. Stdout is empty and stderr is the envelope.
+A query that refuses a stale generation uses code `stale_index` and message `The saved index is stale.`. Freshness and coverage are present, as specified under Freshness scope. In MCP the tool result is an error. CLI exit code 3, with empty stdout and the envelope on stderr, is deferred to task 18.
 
 In MCP, a failed tool call is an MCP error result that carries this same envelope with `success: false`. CLI exit codes do not apply to MCP.
 
-The full error-code catalog is extended by later tasks. This section records `invalid_arguments` because the CLI produces it, and `stale_index` because a query refuses a stale generation. A CLI query uses exit code 3 for that refusal. `index` does not refuse a stale generation.
+The full error-code catalog is extended by later tasks. This section records `invalid_arguments` because the CLI produces it, and `stale_index` because a query refuses a stale generation. CLI exit code 3 for that refusal is deferred to task 18. `index` does not refuse a stale generation.
 
 ## Example: `coverage` with no index
 
@@ -311,11 +311,11 @@ Tracked paths, and whether a change is stale-making or warning-only, are the Fre
 - `package.json` and `package-lock.json`, when they exist (stale)
 - every workspace-root file whose name matches `tsconfig*.json` (stale)
 - each project's `architect.build.options.tsConfig`, when that file is not already included (stale)
-- each in-workspace `extends` base of that config (stale). A base outside the workspace is not tracked
+- each in-workspace `extends` base of that config (stale). A base in `node_modules` or otherwise outside the workspace is not tracked
 - each non-declaration TypeScript file in that project's program that sits inside the workspace and is not under `node_modules` (stale)
-- `.html` templates under a non-empty `sourceRoot`, and `options.index` HTML (stale, unless the file is a style or asset)
+- `.html` templates under a non-empty `sourceRoot`, and `options.index` HTML (stale, including when the path is also inside an asset or style input)
 - `options.styles`, `.css` / `.scss` / `.sass` / `.less` files under `sourceRoot`, and `styleUrl` / `styleUrls` targets (warning-only)
-- `options.assets` (warning-only)
+- `options.assets` (warning-only for files that are not stale-making; `glob` is ignored and `input` is the path)
 
 `node_modules` is not a tracked path.
 

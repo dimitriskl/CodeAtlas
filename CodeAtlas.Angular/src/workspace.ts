@@ -286,7 +286,7 @@ export function assessTrackedFreshness(
   canonical: string,
   files: readonly TrackedFile[],
 ): { changedFiles: string[]; warnings: string[] } {
-  const roots = warningInputRoots(canonical);
+  const kinds = inputKinds(canonical);
   const stored = new Map(files.map((file) => [file.path, file.sha256]));
   const paths = new Set(stored.keys());
   for (const filePath of discoverTrackedPaths(canonical)) paths.add(filePath);
@@ -297,7 +297,9 @@ export function assessTrackedFreshness(
     if (storedHash !== undefined && trackedContentHash(canonical, filePath) === storedHash) {
       continue;
     }
-    if (isWarningInput(filePath, roots)) warningPaths.push(filePath);
+    // Stale-making inputs win over an asset or style directory that contains them.
+    if (isStaleMakingInput(filePath, kinds)) changedFiles.push(filePath);
+    else if (isWarningInput(filePath, kinds.warningRoots)) warningPaths.push(filePath);
     else changedFiles.push(filePath);
   }
   changedFiles.sort(compareCodeUnit);
@@ -317,28 +319,73 @@ function discoverTrackedPaths(canonical: string): Iterable<string> {
   }
 }
 
+type InputKinds = {
+  warningRoots: string[];
+  templateRoots: string[];
+  indexHtml: string[];
+};
+
 function isWarningInput(filePath: string, roots: readonly string[]): boolean {
   if (isStyleFile(filePath)) return true;
   return roots.some((root) => filePath === root || filePath.startsWith(`${root}/`));
 }
 
-function warningInputRoots(canonical: string): string[] {
+/** TypeScript, templates, tsconfig, angular.json, and package files. Warning roots do not apply. */
+function isStaleMakingInput(filePath: string, kinds: InputKinds): boolean {
+  if (
+    filePath === "angular.json" ||
+    filePath === "package.json" ||
+    filePath === "package-lock.json"
+  ) {
+    return true;
+  }
+  if (/^tsconfig.*\.json$/.test(path.posix.basename(filePath))) return true;
+  if (isTypeScriptProgramFile(filePath)) return true;
+  return isTemplateHtml(filePath, kinds);
+}
+
+function isTypeScriptProgramFile(filePath: string): boolean {
+  const normalized = filePath.replaceAll("\\", "/");
+  const base = path.posix.basename(normalized);
+  if (base.endsWith(".d.ts") || base.endsWith(".d.mts") || base.endsWith(".d.cts")) return false;
+  const extension = path.posix.extname(normalized).toLowerCase();
+  return (
+    extension === ".ts" || extension === ".tsx" || extension === ".mts" || extension === ".cts"
+  );
+}
+
+function isTemplateHtml(filePath: string, kinds: InputKinds): boolean {
+  if (path.posix.extname(filePath.replaceAll("\\", "/")).toLowerCase() !== ".html") return false;
+  if (kinds.indexHtml.includes(filePath)) return true;
+  return kinds.templateRoots.some((root) => filePath === root || filePath.startsWith(`${root}/`));
+}
+
+function inputKinds(canonical: string): InputKinds {
+  const empty: InputKinds = { warningRoots: [], templateRoots: [], indexHtml: [] };
   try {
     const angular = JSON.parse(
       readFileSync(path.join(canonical, "angular.json"), "utf8"),
     ) as unknown;
-    if (!isRecord(angular) || !isRecord(angular.projects)) return [];
-    const roots: string[] = [];
+    if (!isRecord(angular) || !isRecord(angular.projects)) return empty;
+    const kinds: InputKinds = { warningRoots: [], templateRoots: [], indexHtml: [] };
     for (const project of Object.values(angular.projects)) {
       if (!isRecord(project)) continue;
+      if (typeof project.sourceRoot === "string") {
+        const sourceRoot = normalizeRelative(project.sourceRoot);
+        if (isSafeRelative(sourceRoot)) kinds.templateRoots.push(sourceRoot);
+      }
       for (const entry of styleAndAssetEntries(project)) {
         const relative = normalizeRelative(entry);
-        if (isSafeRelative(relative)) roots.push(relative);
+        if (isSafeRelative(relative)) kinds.warningRoots.push(relative);
+      }
+      for (const indexPath of indexHtmlEntries(project)) {
+        const relative = normalizeRelative(indexPath);
+        if (isSafeRelative(relative)) kinds.indexHtml.push(relative);
       }
     }
-    return roots;
+    return kinds;
   } catch {
-    return [];
+    return empty;
   }
 }
 
