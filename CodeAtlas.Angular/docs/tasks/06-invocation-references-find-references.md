@@ -12,7 +12,7 @@ User stories: 8, 14, 26. PRD: [Identity and schema](../prd/0001-initial.md#ident
 
 - [03 — find_symbol for plain TypeScript](03-find-symbol-typescript.md)
 
-Status: in-qa
+Status: done-awaiting-merge
 
 ## Acceptance criteria
 
@@ -142,3 +142,18 @@ Status: in-qa
   Const guards and interceptors: `returns an invocation and a reference for a const guard`; `returns a const guard's uses in an import and a route canActivate array`; `returns an interceptor's uses in an import and provideHttpClient(withInterceptors)`. `model()` is two tests in `tests/mcp-find-references.test.ts` and the same two names in the attempt 3 file: `returns uses of a model property at the property name` and `does not give a model property's uses to the Change output`. The property rows and the Change output are distinct; the Change output has none.
 
   AC1–AC6 hold in `tests/mcp-find-references.test.ts`: `returns every call site of a method as kind invocation at the call's name`; `returns type annotations and imports as kind reference`; `returns only the requested reference kinds`; `does not return a look-alike method from another class`; `returns symbol_not_found for an unknown symbol id`; `documents find_references in MCP-CONTRACT.md`. `tests/mcp-find-references-shorthand-edges.test.ts` is byte-identical to `633f5c7`. Edits since `1d44436` add the parenthesized fixture and split the model check into the two tests above; they do not drop expected rows. Fixture paths do not differ only by case. New tests index through `runCli`.
+- 2026-10-29 QA APPROVE, attempt 2. HEAD reviewed `0df6c52` (`0df6c52567b1e8d5b023530429a4e61dff4bc943`, PR #8) against `angular/main` `697bc7a`. CI run [40907120020](https://github.com/dimitriskl/CodeAtlas/actions/runs/40907120020) (CodeAtlas Angular) succeeded on this SHA. Local Node 24.22.1 with `npm ci --ignore-scripts` plus the prebuilt Node 24 `better-sqlite3` binary: lint, typecheck, build, test (350/350) and `npm pack --dry-run` (51 files, shasum 522de59) pass.
+  **Spec**
+  - Attempt 1 required change is met. Reproduced with the built CLI and through `find_references` over MCP stdio (12 rows for `Cart.total` in the repro files): `const { total } = cart`, renamed (`{ total: t }`), defaulted (`{ total = () => 0 }`, `{ total: t = 0 }`), alongside `...rest`, nested (`{ inner: { total } }`), parameter and array-parameter patterns, `({ total } = cart)`, `[{ double }] = carts`, `for ({ total } of carts)` and nested destructuring assignment each yield a `reference` row on `Cart.total`/`Cart.double`. A rest element yields no row; a union `Cart | Bag` yields a row on both members; `any` yields none.
+  - Object-literal shorthand `{ total }` resolves to the in-scope local (a function local yields a row on that function), never to `Cart.total`, matching "`reference`: every other use ... a value that is not called".
+  - The `697bc7a` merge is resolved correctly: task 05's tests are unchanged apart from schema numbers, `src/angular-kinds.ts` matches `angular/main`, and `test/support/fixture.ts` keeps both helpers.
+  - Schema 4 is consistent across `src/version.ts`, `MCP-CONTRACT.md` (including the `unsupported_index` row) and the tests; a schema-3 index is refused with `unsupported_index`.
+  - Const guard/interceptor references and the `model()` Change fix fall under the existing target rule and are covered by tests.
+  - The diff against `angular/main` touches 36 files, all under `CodeAtlas.Angular/`; the pack adds only the `find-references`, `query-page` and `references` dist files.
+  **Standards**
+  - Every new test file has one Arrange/Act/Assert per test with a single Act at the CLI or MCP seam. No blocking smells.
+  **Optional suggestions (non-blocking)**
+  - Document shorthand (property side vs value side) and the `model()` Change position rule in the `find_references` section of `MCP-CONTRACT.md`; the "each of those symbols is a target" sentence currently reads as if both would be targets.
+  - Make the `model()` rule explicit (skip synthetic Change positions when building `idsByPosition`) instead of relying on first-insertion-wins order in `src/workspace.ts`.
+  - Still open from attempt 1: contract wording for `satisfies`/angle-bracket callee unwrapping, query latency, the export-alias double row, DRY of `queryCoverage`, callback and result types and envelope field copying, and per-tool references-table check wording.
+  - Tests: `model()` cases are duplicated across two files; `parseToolText`, `indexWorkspace` and `errorEnvelope` helpers are copied across files (move to `test/support`); the schema-3 refusal for `find_references` is tested twice; rename `mcp-find-references-attempt3-edges.test.ts` after its behaviour; consider splitting the 1714-line edges file.
