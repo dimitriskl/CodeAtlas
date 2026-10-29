@@ -26,3 +26,5 @@ Status: in-test
 - [x] `MCP-CONTRACT.md` has the `find_symbol` section and the qualified-name rules for nested members.
 
 ## Review log
+
+- 2026-10-29 Developer: MCP `find_symbol` looks up plain TypeScript symbols (classes, interfaces, functions, methods, properties, enums, and type aliases) with exact kind and project filters and snapshot pagination (`snapshotId`, including `snapshot_mismatch` after a re-index). Tests are in `tests/mcp-find-symbol.test.ts` with the `tests/fixtures/symbols-workspace` fixtures. Run them with `cd CodeAtlas.Angular && npm ci && npm test`. `findSymbolEnvelope` uses `warningCount: 0` until task 04's freshness and stale refusal merge.
