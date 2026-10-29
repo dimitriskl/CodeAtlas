@@ -12,7 +12,7 @@ User stories: 8, 14, 26. PRD: [Identity and schema](../prd/0001-initial.md#ident
 
 - [03 — find_symbol for plain TypeScript](03-find-symbol-typescript.md)
 
-Status: in-test
+Status: rejected
 
 ## Acceptance criteria
 
@@ -51,3 +51,80 @@ Status: in-test
   - `tests/mcp-find-references-edges.test.ts` is 1714 lines. Split it by theme (call shapes, filters and pagination, index validity).
 - 2026-10-29: Developer note. Shorthand destructuring of an indexed property is a `reference` at the name. `src/references.ts` resolves both binding patterns (`const { total } = cart` and `function read({ total }: Cart)`) with `getTypeAtLocation(pattern).getProperty(name)`, and a destructuring assignment (`({ total } = cart)`) with `getPropertySymbolOfDestructuringAssignment` (`getShorthandAssignmentValueSymbol` is the local variable, not the property). The local variable is not a second reference. Seam tests in `tests/mcp-find-references.test.ts`: `records a shorthand variable declaration as a reference to the property`, `records a shorthand parameter pattern as a reference to the property`, and `records a shorthand destructuring assignment as a reference to the property`. The three uses are in `tests/fixtures/references-workspace/src/shorthand.ts`.
 - 2026-10-29: Developer note. Merged `angular/main` `697bc7a` (task 05) with a merge commit. Conflicts: `tests/support/fixture.ts` keeps `copyReferencesWorkspace` and `copyDeclarationsWorkspace`; `BOARD.md` keeps task 05 at `done-awaiting-merge` and task 06 at `in-test`; `MCP-CONTRACT.md` keeps a missing `references` table as `invalid_index`. `symbols.ts` merged cleanly. `schemaVersion` is `4` because the index stores task 06 references and task 05 kinds. Seam test: `refuses a schema version 3 index with unsupported_index and tells the user to re-index`. `declarationName` handles `VariableDeclaration`, so a const guard's call is `invocation` and a value use is `reference` (`returns an invocation and a reference for a const guard`, `src/guards.ts`). `idsByPosition` keeps the first symbol at a shared position, so a `model()` property keeps its uses and the synthetic `<prop>Change` output does not take them (`returns uses of a model property and does not give them to the Change output`, `src/panel.ts`).
+- 2026-10-29: Tester REJECT, attempt 2 (tested 357ba81, tests pushed in 633f5c7).
+
+  **What failed**
+
+  Two defects. Failing tests in `tests/mcp-find-references-shorthand-edges.test.ts`:
+
+  - Defect 1, object-literal shorthand: `does not record an object-literal shorthand as a destructuring read of the copied property` and `records an object-literal shorthand of an indexed function as a value read`.
+  - Defect 2, rest element whose name matches a real member: `does not record a rest element as a reference to the member that shares its name`.
+
+  The 3 failing tests in `tests/mcp-find-references-shorthand-edges.test.ts` fail on purpose until the fix lands.
+
+  **Why**
+
+  Defect 1. `const made = { total }` and `return { total }` make `codeatlas-ng index` exit 1. Exact index error JSON:
+
+  ```json
+  {
+    "contractVersion": 1,
+    "command": "index",
+    "success": false,
+    "responseToolVersion": "0.00.01",
+    "warningCount": 0,
+    "freshness": null,
+    "coverage": null,
+    "error": {
+      "code": "analysis_failed",
+      "message": "Debug Failure. Invalid cast. The supplied value [object Object] did not pass the test 'isArrayLiteralExpression'.",
+      "diagnostics": []
+    }
+  }
+  ```
+
+  Stack:
+
+  ```text
+  Error: Debug Failure. Invalid cast. The supplied value [object Object] did not pass the test 'isArrayLiteralExpression'.
+      at cast (node_modules/typescript/lib/typescript.js:3350:16)
+      at getTypeOfAssignmentPattern (node_modules/typescript/lib/typescript.js:92125:18)
+      at getPropertySymbolOfDestructuringAssignment (node_modules/typescript/lib/typescript.js:92131:33)
+      at Object.getPropertySymbolOfDestructuringAssignment (node_modules/typescript/lib/typescript.js:51199:25)
+      at shorthandPropertySymbol (dist/references.js:59:24)
+      at resolveSymbol (dist/references.js:36:20)
+      at recordUse (dist/references.js:19:24)
+      at visit (dist/references.js:12:13)
+      at visitNode2 (node_modules/typescript/lib/typescript.js:32449:18)
+      at forEachChildInShorthandPropertyAssignment (node_modules/typescript/lib/typescript.js:32493:59)
+  ```
+
+  `shorthandPropertySymbol` in `src/references.ts` sends every `ShorthandPropertyAssignment` through `getPropertySymbolOfDestructuringAssignment`. Destructuring assignment `({ total } = cart)` indexes. An object-literal shorthand throws.
+
+  Defect 2. `Cart` declares `price`. `const { total, ...price } = cart` stores an extra `find_references` row for `shop::src/cart.ts#Cart.price` at `src/edges.ts` 42:21, the `price` in `...price`:
+
+  ```json
+  {
+    "targetId": "shop::src/cart.ts#Cart.price",
+    "kind": "reference",
+    "project": "shop",
+    "path": "src/edges.ts",
+    "line": 42,
+    "column": 21
+  }
+  ```
+
+  The renamed use `const { total, price: renamed } = cart` at `src/edges.ts` 19:18 is a real reference and stays. `{ total, ...rest }` when `Cart` has no member `rest` does not invent one.
+
+  **Reproduction**
+
+  1. From `CodeAtlas.Angular`, run `npx vitest run tests/mcp-find-references-shorthand-edges.test.ts`.
+  2. Defect 1: the two object-literal tests build a workspace that contains `const made = { total }` and `return { total }`, then run `codeatlas-ng index`. Index exits 1 with the JSON above, and both tests fail in `indexWorkspace` before the reference assertions.
+  3. Defect 2: the rest test indexes `Cart` with a `price` property, `const { total, price: renamed } = cart`, and `const { total, ...price } = cart`. `find_references` for `shop::src/cart.ts#Cart.price` returns the renamed use plus the extra row at `src/edges.ts` 42:21.
+
+  **Required changes**
+
+  1. Index a file that contains an object-literal shorthand `{ total }`. Record it as a value read of the in-scope symbol: `reference` at that identifier when the symbol is indexed (the imported function, plus the import specifier). Leave the function declaration unrecorded. For `const total = cart.total; const made = { total }`, record `Cart.total` only at `cart.total`.
+  2. For `{ total, ...price }`, record `Cart.total` at `total` and omit any reference to `Cart.price` at the rest identifier. Keep the current result for `{ total, ...rest }` when no member is named `rest`.
+
+  The schema 4 merge (`965308e`) was not verified in this round. The next retest will cover schema-3 refusal, const guard and interceptor references, and `model()` Change positions.
