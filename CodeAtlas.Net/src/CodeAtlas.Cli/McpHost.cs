@@ -5,8 +5,8 @@ using System.Text.Json.Nodes;
 namespace CodeAtlas.Cli;
 
 /// <summary>
-/// Stdio MCP server for one solution. Queries read the published generation; the process does not
-/// load a workspace.
+/// Stdio MCP server for one solution. Queries read the published generation. index builds and
+/// publishes a generation for that solution.
 /// </summary>
 internal sealed class McpHost
 {
@@ -101,19 +101,26 @@ internal sealed class McpHost
                 "find_symbol" => await FindSymbolAsync(arguments, cancellationToken),
                 "index_status" => await IndexStatusAsync(arguments, cancellationToken),
                 "coverage" => await CoverageAsync(arguments, cancellationToken),
+                "index" => await IndexAsync(arguments, cancellationToken),
                 _ => Failure(tool.Length == 0 ? null : tool, "invalid_arguments", "Unknown tool.", [])
             };
             return ToolResult(id, envelope, envelope["success"]!.GetValue<bool>() == false);
         }
-        catch (QueryException exception)
+        catch (Exception exception) when (KnownFailure(ToolName(parameters), exception) is { } failure)
         {
-            return ToolResult(id, Failure(ToolName(parameters), exception.Code, exception.Message, exception.Diagnostics), true);
-        }
-        catch (IndexFormatException exception)
-        {
-            return ToolResult(id, Failure(ToolName(parameters), exception.Code, exception.Message, exception.Diagnostics), true);
+            return ToolResult(id, failure, true);
         }
     }
+
+    private static JsonObject? KnownFailure(string? command, Exception exception) => exception switch
+    {
+        QueryException query => Failure(command, query.Code, query.Message, query.Diagnostics),
+        IndexFormatException format => Failure(command, format.Code, format.Message, format.Diagnostics),
+        StaleIndexException stale => Failure(command, "stale_index", stale.Message, stale.Diagnostics),
+        SqliteUnavailableException sqlite => Failure(command, sqlite.Code, sqlite.Message, sqlite.Diagnostics),
+        AnalysisException analysis => Failure(command, "analysis_failed", analysis.Message, analysis.Diagnostics),
+        _ => null
+    };
 
     private static string? ToolName(JsonObject? parameters) =>
         parameters?["name"] is JsonValue name && name.TryGetValue<string>(out var tool) && tool.Length > 0 ? tool : null;
@@ -150,10 +157,10 @@ internal sealed class McpHost
     {
         var workspace = Text(arguments, "workspace", "workspace is required.", "workspace must not be empty.");
         if (!IsBound(workspace) || !File.Exists(Manifest))
-            return GenerationEnvelope(NoIndexFreshness(), Coverage(catalog: true, noIndex: true), snapshot: null, 0);
+            return GenerationEnvelope("index_status", NoIndexFreshness(), Coverage(catalog: true, noIndex: true), snapshot: null, 0);
         var snapshot = await OpenAsync(cancellationToken);
         var freshness = await IndexStore.CheckFreshnessAsync(snapshot.Index, cancellationToken);
-        return GenerationEnvelope(Freshness(freshness), LoadedCoverage(snapshot, emptyLimitations: true), snapshot, snapshot.Index.Warnings.Length);
+        return GenerationEnvelope("index_status", Freshness(freshness), LoadedCoverage(snapshot, emptyLimitations: true), snapshot, snapshot.Index.Warnings.Length);
     }
 
     private async Task<JsonObject> CoverageAsync(JsonObject arguments, CancellationToken cancellationToken)
@@ -167,6 +174,18 @@ internal sealed class McpHost
         if (freshness.IsStale) return Stale("coverage", snapshot, freshness, coverage);
         if (freshness.Diagnostics.Length != 0) return Io("coverage", snapshot, freshness, coverage);
         return Zero("coverage", Freshness(freshness), coverage, snapshot.Index.IndexId, snapshot.Index.Warnings.Length);
+    }
+
+    private async Task<JsonObject> IndexAsync(JsonObject arguments, CancellationToken cancellationToken)
+    {
+        var workspace = OptionalText(arguments, "workspace", "workspace must not be empty.");
+        if (workspace is null ? !IsBound(Environment.CurrentDirectory) : !IsBound(workspace))
+            throw new QueryException("invalid_arguments", "workspace must be the solution directory.");
+        SqliteAvailability.Require();
+        var index = await SolutionAnalysis.CreateIndexAsync(solutionFile, cancellationToken);
+        var freshness = await IndexStore.CheckFreshnessAsync(index, cancellationToken);
+        var snapshot = await IndexStore.PublishAsync(index, cancellationToken: cancellationToken);
+        return GenerationEnvelope("index", Freshness(freshness), LoadedCoverage(snapshot, emptyLimitations: true), snapshot, index.Warnings.Length);
     }
 
     private string Manifest => IndexStore.DefaultPath(solutionFile);
@@ -233,8 +252,8 @@ internal sealed class McpHost
         IReadOnlyList<SymbolRow> symbols, int warningCount) =>
         Envelope("find_symbol", true, warningCount, freshness, coverage, pagination, new JsonObject { ["symbols"] = Symbols(symbols) }, error: null);
 
-    private static JsonObject GenerationEnvelope(JsonObject freshness, JsonObject coverage, LoadedSnapshot? snapshot, int warningCount) =>
-        Envelope("index_status", true, warningCount, freshness, coverage, Page(0, 0, 0, 0, snapshot?.Index.IndexId, false),
+    private static JsonObject GenerationEnvelope(string command, JsonObject freshness, JsonObject coverage, LoadedSnapshot? snapshot, int warningCount) =>
+        Envelope(command, true, warningCount, freshness, coverage, Page(0, 0, 0, 0, snapshot?.Index.IndexId, false),
             snapshot is null ? NoIndexResult() : GenerationResult(snapshot), error: null);
 
     private static JsonObject Zero(string command, JsonObject freshness, JsonObject coverage, string? snapshotId, int warningCount) =>
@@ -420,6 +439,8 @@ internal sealed class McpHost
             Schema("index_status", "Read the published generation and whether its tracked inputs still match.",
                 ["workspace"], ["workspace"], ["string"]),
             Schema("coverage", "Read the analysis boundary. Omit workspace when no index should be read.",
+                ["workspace"], [], ["string"]),
+            Schema("index", "Build and publish a generation for this session's solution.",
                 ["workspace"], [], ["string"])
         };
         return tools;

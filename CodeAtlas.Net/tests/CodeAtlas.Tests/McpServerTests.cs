@@ -217,7 +217,7 @@ public sealed class McpServerTests(IndexedSolution fixture) : IClassFixture<Inde
             Assert.NotNull(staleCoverage["coverage"]);
             Assert.False(staleCoverage.ContainsKey("pagination"));
             Assert.False(staleCoverage.ContainsKey("result"));
-            Assert.Equal(new[] { "find_symbol", "index_status", "coverage" },
+            Assert.Equal(new[] { "find_symbol", "index_status", "coverage", "index" },
                 responses[5]["result"]!["tools"]!.AsArray().Select(tool => tool!["name"]!.GetValue<string>()));
         }
         finally
@@ -417,6 +417,171 @@ public sealed class McpIndexFailureTests
         Assert.Equal(0, code);
         Assert.Empty(stderr.ToString());
         Assert.Equal("2025-06-18", JsonNode.Parse(stdout.ToString())!["result"]!["protocolVersion"]!.GetValue<string>());
+    }
+}
+
+public sealed class McpIndexCommandTests
+{
+    [Fact]
+    public async Task IndexPublishesAGenerationTheSameSessionCanRead()
+    {
+        // Arrange
+        var root = await FreshSampleAsync();
+        var solution = Path.Combine(root, "Sample.slnx");
+        var manifest = IndexStore.DefaultPath(solution);
+        var previous = Directory.GetCurrentDirectory();
+        FileStream? held = null;
+        var lines = new[]
+        {
+            Tool(1, "index"),
+            Tool(2, "index_status", new JsonObject { ["workspace"] = root }),
+            Tool(3, "find_symbol", new JsonObject { ["workspace"] = root, ["name"] = "Calculate" }),
+            Tool(4, "index"),
+            Tool(5, "index_status", new JsonObject { ["workspace"] = root }),
+            Request(6, "tools/list")
+        };
+        try
+        {
+            Directory.SetCurrentDirectory(root);
+            Assert.False(File.Exists(manifest));
+            // Act
+            var responses = await Talk(solution, lines, beforeLine: index =>
+            {
+                if (index != 3) return;
+                held = new FileStream(Path.Combine(Path.GetDirectoryName(manifest)!, ".write.lock"),
+                    FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None);
+            });
+
+            // Assert
+            var published = Envelope(responses[0], false);
+            Assert.Equal("index", published["command"]!.GetValue<string>());
+            Assert.False(published["freshness"]!["isStale"]!.GetValue<bool>());
+            Assert.Empty(published["freshness"]!["changedFiles"]!.AsArray());
+            Assert.Equal("tracked-input-content-hashes", published["freshness"]!["scope"]!.GetValue<string>());
+            var generation = published["result"]!["generationId"]!.GetValue<string>();
+            Assert.Equal(IndexStore.SchemaVersion, published["result"]!["schemaVersion"]!.GetValue<int>());
+            Assert.Equal(1, published["result"]!["contractVersion"]!.GetValue<int>());
+            Assert.False(string.IsNullOrEmpty(published["result"]!["appVersion"]!.GetValue<string>()));
+            Assert.Equal(2, published["result"]!["counts"]!["projects"]!.GetValue<int>());
+            Assert.True(published["result"]!["counts"]!["files"]!.GetValue<int>() > 0);
+            Assert.True(published["result"]!["counts"]!["symbols"]!.GetValue<int>() > 0);
+            Assert.Equal(Path.GetFullPath(manifest), published["result"]!["index"]!.GetValue<string>());
+            AssertZeroPage(published, generation);
+            Assert.Empty(published["coverage"]!["limitations"]!.AsArray());
+            Assert.Equal("unknown", published["coverage"]!["templateCoverage"]!.GetValue<string>());
+
+            var status = Envelope(responses[1], false);
+            Assert.Equal("index_status", status["command"]!.GetValue<string>());
+            Assert.Equal(generation, status["result"]!["generationId"]!.GetValue<string>());
+            Assert.False(status["freshness"]!["isStale"]!.GetValue<bool>());
+            Assert.Equal(published["warningCount"]!.GetValue<int>(), status["warningCount"]!.GetValue<int>());
+            Assert.Contains(Envelope(responses[2], false)["result"]!["symbols"]!.AsArray(),
+                symbol => symbol!["qualifiedName"]!.GetValue<string>().Contains("Calculate", StringComparison.Ordinal));
+
+            var busy = Envelope(responses[3], true);
+            Assert.Equal("index", busy["command"]!.GetValue<string>());
+            Assert.Equal("index_busy", busy["error"]!["code"]!.GetValue<string>());
+            Assert.Equal("Another writer is publishing this solution. Retry later.", busy["error"]!["message"]!.GetValue<string>());
+            Assert.Null(busy["freshness"]);
+            Assert.Null(busy["coverage"]);
+            Assert.False(busy.ContainsKey("pagination"));
+            Assert.False(busy.ContainsKey("result"));
+            Assert.Equal(generation, Envelope(responses[4], false)["result"]!["generationId"]!.GetValue<string>());
+            Assert.Equal(new[] { "find_symbol", "index_status", "coverage", "index" },
+                responses[5]["result"]!["tools"]!.AsArray().Select(tool => tool!["name"]!.GetValue<string>()));
+        }
+        finally
+        {
+            held?.Dispose();
+            Directory.SetCurrentDirectory(previous);
+            try { Directory.Delete(Path.GetDirectoryName(root)!, recursive: true); }
+            catch (IOException) { }
+        }
+    }
+
+    [Fact]
+    public async Task IndexRejectsAForeignWorkspaceAndAFailedLoad()
+    {
+        // Arrange
+        var parent = Directory.CreateTempSubdirectory("codeatlas-mcp-index-").FullName;
+        var root = Directory.CreateDirectory(Path.Combine(parent, "repo")).FullName;
+        var solution = Path.Combine(root, "Sample.slnx");
+        File.Copy(Path.Combine(Repository(), "tests", "Fixtures", "Sample.slnx"), solution);
+        var manifest = IndexStore.DefaultPath(solution);
+        var previous = Directory.GetCurrentDirectory();
+        var lines = new[]
+        {
+            Tool(1, "index", new JsonObject { ["workspace"] = "missing-workspace" }),
+            Tool(2, "index", new JsonObject { ["workspace"] = "" }),
+            Tool(3, "index"),
+            Tool(4, "index", new JsonObject { ["workspace"] = "repo" }),
+            Request(5, "tools/list")
+        };
+        try
+        {
+            Directory.SetCurrentDirectory(parent);
+            // Act
+            var responses = await Talk(solution, lines);
+
+            // Assert
+            Assert.Equal("workspace must be the solution directory.", Envelope(responses[0], true)["error"]!["message"]!.GetValue<string>());
+            Assert.Equal("invalid_arguments", Envelope(responses[0], true)["error"]!["code"]!.GetValue<string>());
+            Assert.Equal("workspace must not be empty.", Envelope(responses[1], true)["error"]!["message"]!.GetValue<string>());
+            Assert.Equal("workspace must be the solution directory.", Envelope(responses[2], true)["error"]!["message"]!.GetValue<string>());
+            var failed = Envelope(responses[3], true);
+            Assert.Equal("index", failed["command"]!.GetValue<string>());
+            Assert.Equal("analysis_failed", failed["error"]!["code"]!.GetValue<string>());
+            Assert.Equal("Solution analysis is incomplete. Restore dependencies and resolve the reported errors.", failed["error"]!["message"]!.GetValue<string>());
+            Assert.Null(failed["freshness"]);
+            Assert.Null(failed["coverage"]);
+            Assert.False(failed.ContainsKey("pagination"));
+            Assert.False(failed.ContainsKey("result"));
+            Assert.False(File.Exists(manifest));
+            Assert.Equal("index", responses[4]["result"]!["tools"]!.AsArray().Last()!["name"]!.GetValue<string>());
+        }
+        finally
+        {
+            Directory.SetCurrentDirectory(previous);
+            try { Directory.Delete(parent, recursive: true); }
+            catch (IOException) { }
+        }
+    }
+
+    private static void AssertZeroPage(JsonObject envelope, string snapshotId)
+    {
+        var page = envelope["pagination"]!;
+        Assert.Equal(0, page["offset"]!.GetValue<int>());
+        Assert.Equal(0, page["limit"]!.GetValue<int>());
+        Assert.Equal(0, page["returned"]!.GetValue<int>());
+        Assert.Equal(0, page["total"]!.GetValue<int>());
+        Assert.False(page["hasMore"]!.GetValue<bool>());
+        Assert.Null(page["nextOffset"]);
+        Assert.Equal(snapshotId, page["snapshotId"]!.GetValue<string>());
+        Assert.False(page["continuationSupported"]!.GetValue<bool>());
+    }
+
+    private static async Task<string> FreshSampleAsync()
+    {
+        var repository = Repository();
+        var parent = Directory.CreateTempSubdirectory("codeatlas-mcp-publish-").FullName;
+        var root = Directory.CreateDirectory(Path.Combine(parent, "repo")).FullName;
+        var fixture = Path.Combine(repository, "tests", "Fixtures");
+        foreach (var relative in new[] { "Sample.slnx", "Library/Library.csproj", "Library/Calculator.cs", "Library/packages.lock.json", "Caller/Caller.csproj", "Caller/Consumer.cs", "Caller/packages.lock.json" })
+        {
+            var target = Path.Combine(root, relative);
+            Directory.CreateDirectory(Path.GetDirectoryName(target)!);
+            File.Copy(Path.Combine(fixture, relative), target);
+        }
+        File.Copy(Path.Combine(repository, "Directory.Build.props"), Path.Combine(root, "Directory.Build.props"));
+        File.Copy(Path.Combine(repository, "Version.props"), Path.Combine(root, "Version.props"));
+        var start = new ProcessStartInfo("dotnet") { WorkingDirectory = root, RedirectStandardOutput = true, RedirectStandardError = true };
+        foreach (var argument in new[] { "restore", "Sample.slnx", "--locked-mode" }) start.ArgumentList.Add(argument);
+        using var process = Process.Start(start)!;
+        var output = process.StandardOutput.ReadToEndAsync();
+        var error = process.StandardError.ReadToEndAsync();
+        await process.WaitForExitAsync();
+        Assert.True(process.ExitCode == 0, await output + await error);
+        return root;
     }
 }
 
