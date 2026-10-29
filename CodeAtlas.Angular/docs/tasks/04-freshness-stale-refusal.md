@@ -18,7 +18,7 @@ User stories: 3, 4, 48. PRD: [Freshness inputs](../prd/0001-initial.md#freshness
 
 - [02 — Index a minimal workspace and report index status](02-index-minimal-workspace-index-status.md)
 
-Status: in-test
+Status: rejected
 
 ## Acceptance criteria
 
@@ -68,3 +68,28 @@ Status: in-test
 - 2026-10-29: Component stylesheets (`.css`, `.scss`, `.sass`, `.less` under `sourceRoot`, and `styleUrl` / `styleUrls` targets) are warning-only. Editing one stays `fresh` with a warning that names the file. `MCP-CONTRACT.md` records that.
 - 2026-10-29: Developer self-review. Stale-making inputs are classified before asset and style warning roots, so an `options.assets` input of `src` does not hide a `.ts` edit or an added `.ts`. An `extends` base in `node_modules` or outside the workspace stays untracked. CLI exit 3 is marked deferred to task 18 in `MCP-CONTRACT.md`, and the unticked criterion says moved to task 18.
 - 2026-10-29: Merged task 03 (schema version 2). `find_symbol` uses the same freshness check as `coverage`: a stale index returns `stale_index` with `changedFiles`, and a fresh index reports style and asset warnings in `warningCount`. `architect.test.options.tsConfig` and test-program files are stale-making.
+- 2026-10-29: Tester REJECT, attempt 2. HEAD reviewed `7f64a128d0dcf45b170120ef54b5a2a7c2e8e99e` (PR #4) against `angular/main` `8af3f1a`. Node 24.22.1. `npm run lint` and `npm run typecheck` pass. `npm pack --dry-run` packs 31 files. Tests were 112/112 before the seam tests added in this review. After them, `npm test` is 117 passed and 3 failed (120 total). No previously passing test failed. Checks used `dist/cli.js` and `dist/mcp.js` over stdio.
+
+  **What passed.** Added `.ts`, added `.html` under `sourceRoot`, and added root `tsconfig*.json` are `stale` with that path in `changedFiles` on `index_status` (success, not an error), `coverage`, and `find_symbol` (`success: false`, `error.code` `stale_index`, message `The saved index is stale.`, `error.diagnostics` `[]`, no pagination, `contractVersion` 1). Edits and deletes of `.ts` and `.html` do the same. Added styles and assets stay `fresh`, `warningCount` goes up, and `freshness.diagnostics` is `Style or asset changed: <path>.`. Editing `node_modules/leftpad/index.ts` (imported by the program) stays `fresh` with `warningCount` 0, and that path is not in `tracked_files`. An in-workspace `extends` chain, including the base of the base (`cfg/tsconfig.app.json` → `cfg/tsconfig.mid.json` → `cfg/tsconfig.base.json`) and an `extends` array, is stale when that base changes. A base in `node_modules` or outside the workspace stays `fresh` (task 29, not a rejection). `styleUrl`, `styleUrls`, and an `angular.json` `styles` entry stay `fresh` with `warningCount` 1 and the warning naming the file. `find_symbol` on that fresh stylesheet edit reports `warningCount` 1, not 0, and still returns `Cart`. An `assets` entry `{ glob, input: "src" }` does not hide a `.ts` or `.html` edit or add: those stay stale. `codeatlas-ng coverage` exits 2 with `invalid_arguments` and empty stdout. `codeatlas-ng index` after a `.ts` edit exits 0 and publishes a fresh generation. The PR body does not claim CLI exit 3. The exit-3 criterion stays unticked and deferred to task 18, as `MCP-CONTRACT.md` says. Envelopes match the contract (`scope` `tracked-input-content-hashes`, `inputCoverage.status` `complete` when a generation is loaded).
+
+  **Judged, not rejected.** Renaming `src/cart.ts` to `src/basket.ts` is stale with `changedFiles` `["src/basket.ts", "src/cart.ts"]` on all three tools. An added `.ts` and `.html` in a second project's `sourceRoot` are stale with those paths. A whitespace-only `.ts` or `.html` edit is stale. A whitespace-only stylesheet edit stays `fresh` with `warningCount` 1. An unreferenced `notes/readme.html` outside `sourceRoot` stays `fresh`: it is not a component template, not under `sourceRoot`, and not `options.index`. A spec the program includes is stale; a spec excluded from the build, with no test `tsConfig`, stays `fresh`. An unused nested `tsconfig*.json` and a `.ts` file outside the include stay `fresh`.
+
+  **What failed.** A component `templateUrl` whose file is outside `sourceRoot` is not tracked. Editing that template leaves the index `fresh`.
+
+  Setup: `tmpl/cart.html` is `<p>Cart</p>`, and `src/cart.ts` is `@Component({ selector: "app-cart", templateUrl: "../tmpl/cart.html" })` with `export class Cart {}`. `sourceRoot` is `src`. Index, then change the template to `<p>Cart changed</p>`.
+
+  `tracked_files` at publish: `angular.json`, `package.json`, `src/cart.ts`, `tsconfig.app.json`. `tmpl/cart.html` is absent.
+
+  Dist MCP over stdio, all three tools: `contractVersion` 1, `success` true, `warningCount` 0, `freshness.state` `fresh`, `isStale` false, `changedFiles` `[]`, `diagnostics` `[]`. `find_symbol` for `Cart` is not an error and `result.symbols` is `["Cart"]`. Creating `tmpl/cart.html` only after index (the `templateUrl` already points at it) is the same: `fresh`, and the path was never stored.
+
+  Vitest, `tests/mcp-stale-refusal.test.ts`:
+
+  - `refuses coverage after a templateUrl file outside sourceRoot changes` — `expected false to be true` at `expect(result.isError).toBe(true)` (`isError` is false; the tool succeeded).
+  - `refuses find_symbol after a templateUrl file outside sourceRoot changes` — `expected undefined to be true` at `expect(result.isError).toBe(true)` (`isError` is omitted because the call succeeded).
+  - `reports a changed templateUrl file from index_status` — `expected 'fresh' to be 'stale'` at `expect(envelope.freshness.state).toBe("stale")`.
+
+  Why it matters: GLOSSARY defines a template as the markup that renders a component, including a separate file, and says a template change makes the index stale. PRD freshness inputs hash templates. Stories 3 and 4 refuse a stale index and list the changed files so the agent does not act on outdated facts. `styleUrl` outside `sourceRoot` is already hashed. `templateUrl` is the same kind of reference and is not. Task 07 inherits this: a template edit would still look `fresh`.
+
+  **Required changes**
+
+  1. Track each in-workspace `templateUrl` string literal as a stale-making template. Resolve it relative to the source file, the same way `styleUrl` is resolved, including a path outside `sourceRoot`. A byte change, a delete, or a file that exists only after publish must put that workspace-relative path in `changedFiles`. `coverage` and `find_symbol` refuse with `stale_index` (message `The saved index is stale.`, `error.diagnostics` `[]`, freshness not null, no pagination). `index_status` reports the same path and does not refuse. A target outside the workspace stays untracked. Update the Templates bullet in `MCP-CONTRACT.md`. The three tests named above must pass. An unreferenced `.html` outside `sourceRoot` is not a template and must stay `fresh`.
