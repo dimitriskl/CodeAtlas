@@ -345,46 +345,36 @@ public sealed class SnapshotInputModelTests : IDisposable
 
         // Act
         var fresh = await SnapshotInputModel.CheckAsync(manifest, query);
+        query["BUILD_FLAVOR"] = "private-value-not-for-reports";
+        var changed = await SnapshotInputModel.CheckAsync(manifest, query);
+        query.Remove("BUILD_FLAVOR");
+        var removed = await SnapshotInputModel.CheckAsync(manifest, query);
 
         // Assert
         Assert.Equal(["BUILD_FLAVOR"], manifest.RelevantEnvironment!);
         Assert.Equal("fresh", fresh.Status);
         Assert.DoesNotContain("<environment>", fresh.ChangedInputs);
-        var changedFlavor = new Dictionary<string, string>(query, SnapshotInputModel.PathComparer) { ["BUILD_FLAVOR"] = "private-value-not-for-reports" };
-        var removedFlavor = new Dictionary<string, string>(query, SnapshotInputModel.PathComparer);
-        removedFlavor.Remove("BUILD_FLAVOR");
-        Assert.NotEqual(manifest.EnvironmentDigest, SnapshotInputModel.EnvironmentDigest(changedFlavor, manifest.RelevantEnvironment));
-        Assert.NotEqual(manifest.EnvironmentDigest, SnapshotInputModel.EnvironmentDigest(removedFlavor, manifest.RelevantEnvironment));
-        var serialized = System.Text.Json.JsonSerializer.Serialize(fresh) + System.Text.Json.JsonSerializer.Serialize(manifest);
+        Assert.Equal("stale", changed.Status);
+        Assert.Contains("<environment>", changed.ChangedInputs);
+        Assert.Equal("stale", removed.Status);
+        var serialized = System.Text.Json.JsonSerializer.Serialize(changed) + System.Text.Json.JsonSerializer.Serialize(manifest);
+        Assert.DoesNotContain("private-value-not-for-reports", serialized);
         Assert.DoesNotContain("query-shell", serialized);
     }
 
     [Fact]
-    public async Task WindowsMixedCaseReferencedVariableInvalidatesWhenItsValueChanges()
+    public async Task RelevantEnvironmentNamesAreUpperCasedOnWindows()
     {
+        if (!OperatingSystem.IsWindows()) return;
+
         // Arrange
-        if (!OperatingSystem.IsWindows())
-            return;
-        var indexing = new Dictionary<string, string>(SnapshotInputModel.PathComparer)
-        {
-            ["BUILD_FLAVOR"] = "Debug", ["PWD"] = @"C:\indexing-shell", ["OLDPWD"] = @"C:\old", ["CODEX_TOOL_CALL_ID"] = "index-call"
-        };
-        var manifest = await SnapshotInputModel.CaptureAsync([], [], [], indexing, CompleteEvidence, relevantEnvironment: ["build_flavor"]);
-        var query = new Dictionary<string, string>(SnapshotInputModel.PathComparer)
-        {
-            ["BUILD_FLAVOR"] = "private-value-not-for-reports", ["PWD"] = @"C:\query-shell", ["OLDPWD"] = @"C:\other", ["CODEX_TOOL_CALL_ID"] = "query-call"
-        };
+        var environment = new Dictionary<string, string> { ["BUILD_FLAVOR"] = "Debug" };
 
         // Act
-        var changed = await SnapshotInputModel.CheckAsync(manifest, query);
+        var manifest = await SnapshotInputModel.CaptureAsync([], [], [], environment, CompleteEvidence, relevantEnvironment: ["build_flavor"]);
 
         // Assert
         Assert.Equal(["BUILD_FLAVOR"], manifest.RelevantEnvironment!);
-        Assert.Equal("stale", changed.Status);
-        Assert.Contains("<environment>", changed.ChangedInputs);
-        var serialized = System.Text.Json.JsonSerializer.Serialize(changed) + System.Text.Json.JsonSerializer.Serialize(manifest);
-        Assert.DoesNotContain("private-value-not-for-reports", serialized);
-        Assert.DoesNotContain("query-shell", serialized);
     }
 
     [Fact]
