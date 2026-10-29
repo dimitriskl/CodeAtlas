@@ -185,13 +185,7 @@ export async function runConfigureAi(
     },
     dependencies.fetchImpl,
   );
-  if (entered && key !== null) {
-    if (!keychain.isAvailable()) {
-      saveAiSettings(settingsPath, selected);
-      throw new CommandError("ai_configuration_invalid", noKeychainMessage(variable), 1);
-    }
-    location = saveKey(keychain, selected.provider, key);
-  }
+  if (entered && key !== null) location = saveKey(keychain, selected.provider, key);
   saveAiSettings(settingsPath, selected);
   return configureAiSuccessEnvelope({
     provider: selected.provider,
@@ -225,12 +219,18 @@ async function resolveMissingKey(
   return readPipedKey(stdin, firstByteTimeoutMs);
 }
 
-/** The only read of CODEATLAS_STDIN_FIRST_BYTE_TIMEOUT_MS. Unset or invalid stays 2000. */
+/**
+ * Internal, for tests only, not a public setting.
+ * The only read of CODEATLAS_STDIN_FIRST_BYTE_TIMEOUT_MS.
+ * Unset, invalid, or non-positive stays 2000. Values above 2147483647 are clamped
+ * so Node does not print TimeoutOverflowWarning on stderr.
+ */
 function stdinFirstByteTimeoutMs(env: NodeJS.ProcessEnv): number {
   const raw = env.CODEATLAS_STDIN_FIRST_BYTE_TIMEOUT_MS;
   if (typeof raw !== "string" || !/^\d+$/.test(raw.trim())) return 2_000;
   const value = Number(raw.trim());
-  return Number.isSafeInteger(value) ? value : 2_000;
+  if (!Number.isSafeInteger(value) || value <= 0) return 2_000;
+  return Math.min(value, 2_147_483_647);
 }
 
 function selectPreferences(
@@ -382,7 +382,6 @@ async function readPipedKey(
   stdin: SecretInput,
   firstByteTimeoutMs: number,
 ): Promise<string | null> {
-  if (stdin.isTTY === true) return null;
   const fd = stdin.fd;
   if (fd === undefined) return null;
   let stat: ReturnType<typeof fstatSync>;
@@ -458,8 +457,7 @@ async function readPipedKey(
       finish(normalizeStreamedKey(data));
     };
     const onError = () => {
-      absorb();
-      finish(sawByte ? normalizeStreamedKey(data) : null);
+      finish(null);
     };
     stdin.on("readable", onReadable);
     stdin.on("end", onEnd);

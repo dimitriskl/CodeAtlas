@@ -111,3 +111,4 @@ Status: in-test
   2. Open pipe with no keychain: stdin is never read. Exit 1 immediately with `No OS keychain is available, so the API key was not saved. Set CODEATLAS_AI_<PROVIDER>_KEY.` (the real provider name, upper-cased) and still save provider, model, and endpoint.
   3. After the first byte, the pipe is read through EOF, so a pause between `part1` and `part2` stores `part1part2`. A short idle cutoff is not applied after the first byte.
   4. Closed or empty stdin fails at once with the same interactive-terminal message and writes no settings, even when the first-byte wait is longer than the harness timeout.
+  5. A stdin error after the first byte is no key (that message, no settings). The test-only wait is clamped to 2147483647 so a larger value cannot print TimeoutOverflowWarning.
