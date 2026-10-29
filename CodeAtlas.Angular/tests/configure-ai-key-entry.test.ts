@@ -18,7 +18,7 @@ import { runConfigureAi, type SecretInput } from "../src/configure-ai.js";
 import { createKeychain, windowsPowershellExecutable, type Keychain } from "../src/keychain.js";
 import { createProcessRunner } from "../src/process-runner.js";
 import { compileCSharpExe } from "./support/compile-csharp.js";
-import { runCli, packageRoot } from "./support/run-cli.js";
+import { childEnv, packageRoot, runCli } from "./support/run-cli.js";
 import { installFakeWindowsPowerShell } from "./support/windows-keychain-tool.js";
 
 const endpoint = "http://127.0.0.1:9/v1/chat/completions";
@@ -1234,7 +1234,10 @@ describe("configure-ai key entry", () => {
     },
   );
 
-  it.skipIf(process.platform === "darwin")(
+  // Windows rejects a TCP socket as child stdin (spawn ENOTSUP). The in-process
+  // test "does not save a partial key when the stdin pipe errors after the
+  // first byte" covers that mid-stream reset there.
+  it.skipIf(process.platform === "darwin" || process.platform === "win32")(
     "discards a partial key when stdin resets after the first byte",
     async () => {
       // Arrange
@@ -1247,7 +1250,7 @@ describe("configure-ai key entry", () => {
       let result: { code: number | null; stdout: string; stderr: string };
       try {
         // Act
-        result = await stdinResetAfterPartial(root, cliEnv(env), cli, slowEndpoint);
+        result = await stdinResetAfterPartial(root, childEnv(env), cli, slowEndpoint);
       } finally {
         await provider.close();
       }
@@ -1269,25 +1272,6 @@ describe("configure-ai key entry", () => {
     },
   );
 });
-
-function cliEnv(source: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
-  const env: NodeJS.ProcessEnv = { ...source };
-  if (process.platform !== "win32") return env;
-  const real = process.env.SystemRoot ?? process.env.SYSTEMROOT;
-  const requested = env.SystemRoot ?? env.SYSTEMROOT;
-  if (real === undefined || requested === undefined) return env;
-  if (path.normalize(real) === path.normalize(requested)) return env;
-  env.CODEATLAS_FAKE_SYSTEM_ROOT = requested;
-  env.SystemRoot = real;
-  env.SYSTEMROOT = real;
-  const preload = path
-    .join(packageRoot, "tests", "support", "win-system-root.cjs")
-    .replace(/\\/g, "/");
-  const requirement = `--require "${preload}"`;
-  const existing = env.NODE_OPTIONS ?? "";
-  env.NODE_OPTIONS = existing.length === 0 ? requirement : `${existing} ${requirement}`;
-  return env;
-}
 
 function stdinResetAfterPartial(
   root: string,
@@ -1327,19 +1311,30 @@ function stdinResetAfterPartial(
         );
         let stdout = "";
         let stderr = "";
+        let settled = false;
+        const timer = setTimeout(() => {
+          child.kill();
+        }, 4_000);
+        const settle = (): boolean => {
+          if (settled) return false;
+          settled = true;
+          clearTimeout(timer);
+          client.destroy();
+          server.close();
+          return true;
+        };
+        child.on("error", (error: Error) => {
+          if (!settle()) return;
+          reject(error);
+        });
         child.stdout.on("data", (chunk: Buffer) => {
           stdout += chunk.toString("utf8");
         });
         child.stderr.on("data", (chunk: Buffer) => {
           stderr += chunk.toString("utf8");
         });
-        const timer = setTimeout(() => {
-          child.kill();
-        }, 4_000);
         child.on("close", (code) => {
-          clearTimeout(timer);
-          client.destroy();
-          server.close();
+          if (!settle()) return;
           resolve({ code, stdout, stderr });
         });
       });

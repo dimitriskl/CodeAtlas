@@ -90,7 +90,7 @@ export function runCli(
  * real OS directory. Keep that value for startup, and restore a fixture root
  * before the CLI reads it so tests do not call Credential Manager.
  */
-function childEnv(source: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
+export function childEnv(source: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
   const env: NodeJS.ProcessEnv = { ...source };
   if (process.platform !== "win32") return env;
   const real = process.env.SystemRoot ?? process.env.SYSTEMROOT;

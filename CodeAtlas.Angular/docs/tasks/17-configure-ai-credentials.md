@@ -17,7 +17,7 @@ User stories: 36, 37, 38, 60. PRD: [Modules](../prd/0001-initial.md#modules) (pr
 
 - [01 — Scaffold package, CI and MCP server skeleton](01-scaffold-package-ci-mcp-skeleton.md)
 
-Status: rejected
+Status: in-qa
 
 ## Acceptance criteria
 
@@ -162,3 +162,7 @@ Status: rejected
   - Consider moving the first-byte wait into `ConfigureAiDependencies` for in-process tests, and keep the env var only for spawned CLI tests.
   - `isJsonObject` appears in `ai-provider.ts`, `ai-settings.ts` and `credentials.ts`. `configure-ai-key-entry.test.ts` (1572 lines) repeats its Arrange blocks. Shared fixtures would shorten it.
   - These suggestions from attempt 1 are still open: read the keychain entry back after writing it; make the `reg query` parser a pure function; remove the `.js` extension in `resolveCommand`; remove the `rmSync` before `renameSync` in `saveAiSettings`.
+- 2026-10-29 Tester fix after QA REJECT attempt 3. Test-only. No `src/` or `CodeAtlas.Net/` changes, and no other test assertions changed.
+  1. `discards a partial key when stdin resets after the first byte` is skipped on `win32` (a TCP socket cannot be child stdin; `spawn ENOTSUP`). Linux assertions are unchanged. `child.on("error")` rejects, so a failed spawn fails at once instead of hanging. The in-process test `does not save a partial key when the stdin pipe errors after the first byte` still asserts no keychain write and no `.codeatlas/appsettings.json`. No other test in that file spawns with a socket or another Linux-only stdin (the real-terminal test already skips when `script` has no PTY).
+  2. Removed the copied `cliEnv`. Exported `childEnv` from `tests/support/run-cli.ts` and the reset test calls it. Behavior is unchanged.
+  Local Node v24.22.1: `npm ci`, lint, typecheck, and test passed, 168/168.
