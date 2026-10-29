@@ -108,7 +108,7 @@ describe("codeatlas-ng index", () => {
     expect(manifest).toEqual({
       manifestVersion: 1,
       generationId: envelope.result.generationId,
-      schemaVersion: 3,
+      schemaVersion: 4,
       workspace: storage.identity,
       artifacts: {
         "index.db": {
@@ -127,7 +127,7 @@ describe("codeatlas-ng index", () => {
       );
       expect(metadata).toEqual({
         generationId: envelope.result.generationId,
-        schemaVersion: "3",
+        schemaVersion: "4",
         contractVersion: "1",
         appVersion: "0.00.01",
         templateCoverage: "complete",
@@ -195,7 +195,7 @@ describe("codeatlas-ng index", () => {
       },
       result: {
         generationId: "GENERATION",
-        schemaVersion: 3,
+        schemaVersion: 4,
         contractVersion: 1,
         appVersion: "0.00.01",
         counts: { projects: 1, files: 4, symbols: 1 },

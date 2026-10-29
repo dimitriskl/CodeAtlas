@@ -48,7 +48,7 @@ const staticCoverage = {
 };
 
 describe("MCP coverage tool", () => {
-  it("lists coverage, index_status and find_symbol", async () => {
+  it("lists coverage, index_status, find_symbol and find_references", async () => {
     // Arrange
     const connection = await connectInProcess();
 
@@ -61,6 +61,7 @@ describe("MCP coverage tool", () => {
         "coverage",
         "index_status",
         "find_symbol",
+        "find_references",
       ]);
     } finally {
       await connection.close();

@@ -81,6 +81,21 @@ export type FindSymbolEnvelope = SuccessEnvelope & {
   };
 };
 
+export type FindReferenceHit = {
+  targetId: string;
+  kind: string;
+  project: string;
+  path: string;
+  line: number;
+  column: number;
+};
+
+export type FindReferencesEnvelope = SuccessEnvelope & {
+  result: {
+    references: FindReferenceHit[];
+  };
+};
+
 export type ErrorEnvelope = {
   contractVersion: number;
   command: string | null;
@@ -335,6 +350,34 @@ export function findSymbolEnvelope(input: {
   };
 }
 
+export function findReferencesEnvelope(input: {
+  references: readonly FindReferenceHit[];
+  pagination: Pagination;
+  freshness: Freshness;
+  coverage: Coverage;
+}): FindReferencesEnvelope {
+  return {
+    contractVersion,
+    command: "find_references",
+    success: true,
+    responseToolVersion: appVersion,
+    warningCount: input.freshness.diagnostics.length,
+    freshness: input.freshness,
+    coverage: input.coverage,
+    pagination: input.pagination,
+    result: {
+      references: input.references.map((reference) => ({
+        targetId: reference.targetId,
+        kind: reference.kind,
+        project: reference.project,
+        path: reference.path,
+        line: reference.line,
+        column: reference.column,
+      })),
+    },
+  };
+}
+
 export function commandErrorEnvelope(command: string | null, error: CommandError): ErrorEnvelope {
   return {
     contractVersion,
@@ -374,6 +417,7 @@ export function formatEnvelope(
     | SuccessEnvelope
     | IndexSuccessEnvelope
     | FindSymbolEnvelope
+    | FindReferencesEnvelope
     | ErrorEnvelope
     | ConfigureAiSuccessEnvelope,
 ): string {

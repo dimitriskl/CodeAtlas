@@ -24,12 +24,19 @@ export type SourceSymbolKind =
   | "enum"
   | "type-alias";
 
+export type NamePosition = {
+  line: number;
+  column: number;
+};
+
 export type IndexedDeclaration = {
   qualifiedName: string;
   kind: SourceSymbolKind;
   line: number;
   column: number;
   signatures: string[];
+  /** Every declaration name, including overloads and accessors. */
+  names: NamePosition[];
 };
 
 type FoundSymbol = {
@@ -460,12 +467,14 @@ function mergeDeclarations(found: readonly FoundSymbol[]): IndexedDeclaration[] 
         line: item.line,
         column: item.column,
         signatures: item.signature === null ? [] : [item.signature],
+        names: [{ line: item.line, column: item.column }],
       };
       byName.set(item.qualifiedName, created);
       order.push(created);
       continue;
     }
     if (item.signature !== null) existing.signatures.push(item.signature);
+    existing.names.push({ line: item.line, column: item.column });
     if (kindRank[item.kind] < kindRank[existing.kind]) {
       existing.kind = item.kind;
       existing.line = item.line;

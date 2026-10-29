@@ -78,7 +78,7 @@ async function indexedDeclarationsWorkspace(): Promise<{
 }
 
 describe("Angular declaration query edges", () => {
-  it("publishes schema version 3 and the model() Change outputs for the declarations workspace", async () => {
+  it("publishes schema version 4 and the model() Change outputs for the declarations workspace", async () => {
     // Arrange
     const workspace = await copyDeclarationsWorkspace();
 
@@ -92,7 +92,7 @@ describe("Angular declaration query edges", () => {
       const envelope = JSON.parse(indexed.stdout) as ToolEnvelope;
       expect(envelope.success).toBe(true);
       expect(envelope.freshness?.state).toBe("fresh");
-      expect(envelope.result?.schemaVersion).toBe(3);
+      expect(envelope.result?.schemaVersion).toBe(4);
       expect(envelope.coverage?.templateCoverage).toBe("complete");
       expect(envelope.coverage?.symbols).toEqual([
         "component",
