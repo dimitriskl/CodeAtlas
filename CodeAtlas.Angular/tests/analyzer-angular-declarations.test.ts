@@ -33,6 +33,8 @@ describe("Angular declaration analyzer", () => {
       { member: "saved", kind: "output", signatures: [] },
       { member: "quantity", kind: "input", signatures: [] },
       { member: "quantityChange", kind: "output", signatures: [] },
+      { member: "label", kind: "input", signatures: [] },
+      { member: "labelChange", kind: "output", signatures: [] },
     ];
 
     // Act
@@ -43,6 +45,35 @@ describe("Angular declaration analyzer", () => {
 
     // Assert
     expect(compared).toEqual({ decorator: expected, signal: expected });
+  });
+
+  it("gives directive, pipe and service kinds in standalone and NgModule files", () => {
+    // Arrange
+    const files = [
+      "src/highlight.directive.ts",
+      "src/legacy-highlight.directive.ts",
+      "src/price.pipe.ts",
+      "src/legacy-price.pipe.ts",
+      "src/cart.service.ts",
+      "src/legacy-cart.service.ts",
+    ];
+    const expected = [
+      { name: "HighlightDirective", kind: "directive" },
+      { name: "LegacyHighlightDirective", kind: "directive" },
+      { name: "PricePipe", kind: "pipe" },
+      { name: "LegacyPricePipe", kind: "pipe" },
+      { name: "CartService", kind: "service" },
+      { name: "LegacyCartService", kind: "service" },
+    ];
+
+    // Act
+    const indexed = files.map((file) => {
+      const symbol = indexFixture(file)[0];
+      return { name: symbol?.qualifiedName, kind: symbol?.kind };
+    });
+
+    // Assert
+    expect(indexed).toEqual(expected);
   });
 
   it("functional and class-based guards and interceptors get guard and interceptor kinds", () => {

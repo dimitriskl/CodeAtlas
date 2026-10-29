@@ -15,4 +15,8 @@ export class DecoratorPanel {
   @Input() quantity = 0;
 
   @Output() quantityChange = new EventEmitter<number>();
+
+  @Input({ required: true }) label!: string;
+
+  @Output() labelChange = new EventEmitter<string>();
 }

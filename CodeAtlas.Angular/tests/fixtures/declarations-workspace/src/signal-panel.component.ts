@@ -13,4 +13,6 @@ export class SignalPanel {
   readonly saved = output<void>();
 
   readonly quantity = model(0);
+
+  readonly label = model.required<string>();
 }
