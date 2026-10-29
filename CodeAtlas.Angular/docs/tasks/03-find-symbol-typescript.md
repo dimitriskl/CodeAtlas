@@ -13,7 +13,7 @@ User stories: 5, 6, 7, 26, 27, 28, 29. PRD: [Identity and schema](../prd/0001-in
 
 - [02 — Index a minimal workspace and report index status](02-index-minimal-workspace-index-status.md)
 
-Status: in-test
+Status: in-qa
 
 ## Acceptance criteria
 
@@ -28,3 +28,4 @@ Status: in-test
 ## Review log
 
 - 2026-10-29 Developer: MCP `find_symbol` looks up plain TypeScript symbols (classes, interfaces, functions, methods, properties, enums, and type aliases) with exact kind and project filters and snapshot pagination (`snapshotId`, including `snapshot_mismatch` after a re-index). Tests are in `tests/mcp-find-symbol.test.ts` with the `tests/fixtures/symbols-workspace` fixtures. Run them with `cd CodeAtlas.Angular && npm ci && npm test`. `findSymbolEnvelope` uses `warningCount: 0` until task 04's freshness and stale refusal merge.
+- 2026-10-29 Tester PASS (attempt 1, head 9a6ab1c). Node 24.22.1: `npm ci`, lint, typecheck, and test passed (46 tests before added seam tests, 72 after). `npm pack --dry-run` and `node scripts/pack-contents.mjs` each list 31 files. Diff vs `angular/main` `da97817` is only `CodeAtlas.Angular/`; CLI stays `index` (a `find_symbol` CLI call exits 2, `Unknown command.`). Dist MCP checks: shopService id/kind/file/line/column, parse overloads, kind and project filters, page 2 plus `snapshot_mismatch` after re-index, spec symbol, pagination fields, and the `find_symbol` plus qualified-name sections in `MCP-CONTRACT.md`. Added seam tests for case, simple vs qualified names, empty/untrimmed/missing name, long names, private identifiers, get/set, limits, unknown project, no index, and offset-0 `snapshot_mismatch`. `warningCount` stays 0. Stale refusal was not tested; that is task 04.
