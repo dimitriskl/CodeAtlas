@@ -227,6 +227,37 @@ function rewriteAsSchemaVersion1(workspacePath: string): void {
   writeFileSync(storage.currentJson, `${JSON.stringify(manifest, null, 2)}\n`);
 }
 
+/** Schema version 2: Angular kinds were still stored as class and property. */
+function rewriteAsSchemaVersion2(workspacePath: string): void {
+  const storage = workspaceStorage(workspacePath);
+  const manifest = JSON.parse(readFileSync(storage.currentJson, "utf8")) as {
+    manifestVersion: number;
+    generationId: string;
+    schemaVersion: number;
+    workspace: string;
+    artifacts: { "index.db": { length: number; sha256: string } };
+  };
+  const databasePath = path.join(
+    storage.directory,
+    "generations",
+    manifest.generationId,
+    "index.db",
+  );
+  const database = new Database(databasePath);
+  try {
+    database.prepare("UPDATE metadata SET value = ? WHERE key = ?").run("2", "schemaVersion");
+  } finally {
+    database.close();
+  }
+  const bytes = readFileSync(databasePath);
+  manifest.schemaVersion = 2;
+  manifest.artifacts["index.db"] = {
+    length: bytes.length,
+    sha256: createHash("sha256").update(bytes).digest("hex"),
+  };
+  writeFileSync(storage.currentJson, `${JSON.stringify(manifest, null, 2)}\n`);
+}
+
 describe("MCP find_symbol", () => {
   it("returns the id, kind, file, line and column of shopService", async () => {
     // Arrange
@@ -1520,6 +1551,29 @@ describe("MCP find_symbol", () => {
         },
         result: { symbols: [] },
       });
+    } finally {
+      await connection.close();
+      await workspace.remove();
+    }
+  });
+
+  it("refuses a schema version 2 index with unsupported_index and tells the user to re-index", async () => {
+    // Arrange
+    const workspace = await indexedSymbolsWorkspace();
+    rewriteAsSchemaVersion2(workspace.path);
+    const connection = await connectInProcess();
+    const message = `Unsupported index schema. Run codeatlas-ng index --workspace ${workspace.path} to rebuild it.`;
+
+    try {
+      // Act
+      const result = await connection.client.callTool({
+        name: "find_symbol",
+        arguments: { workspace: workspace.path, name: "parse" },
+      });
+
+      // Assert
+      expect(result.isError).toBe(true);
+      expect(parseToolText(result)).toEqual(errorEnvelope("unsupported_index", message));
     } finally {
       await connection.close();
       await workspace.remove();
