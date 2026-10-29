@@ -83,9 +83,11 @@ export function loadWorkspace(workspacePath: string): LoadedWorkspace {
     const tsconfig = resolveTsConfig(storage.canonical, value);
     if (tsconfig !== undefined) {
       track(files, storage.canonical, tsconfig);
+      trackExtendsChain(storage.canonical, tsconfig, files);
       symbols.push(...classesInProject(storage.canonical, project.name, tsconfig, files));
     }
     trackTemplates(storage.canonical, project, value, files);
+    trackSourceRootStyles(storage.canonical, project, files);
     for (const entry of styleAndAssetEntries(value)) {
       trackOptionalPath(files, storage.canonical, entry);
     }
@@ -127,6 +129,9 @@ function classesInProject(
     const relative = workspacePathOf(canonical, sourcePath);
     if (relative === null || relative.split("/").includes("node_modules")) continue;
     track(files, canonical, sourcePath);
+    for (const spec of styleReferences(sourceFile)) {
+      trackStyleReference(files, canonical, sourcePath, spec);
+    }
     for (const statement of sourceFile.statements) {
       if (!ts.isClassDeclaration(statement) || statement.name === undefined) continue;
       const position = sourceFile.getLineAndCharacterOfPosition(
@@ -145,6 +150,62 @@ function classesInProject(
     }
   }
   return symbols;
+}
+
+/** Hash `extends` bases that stay inside the workspace. External bases are task 29. */
+function trackExtendsChain(canonical: string, start: string, files: Map<string, string>): void {
+  const pending = [start];
+  const seen = new Set<string>();
+  while (pending.length > 0) {
+    const current = pending.pop();
+    if (current === undefined) break;
+    let real: string;
+    try {
+      real = realpathSync(current);
+    } catch {
+      continue;
+    }
+    if (seen.has(real)) continue;
+    seen.add(real);
+    if (workspacePathOf(canonical, real) !== null) track(files, canonical, real);
+    const read = ts.readConfigFile(real, ts.sys.readFile);
+    if (read.error !== undefined || !isRecord(read.config)) continue;
+    const directory = path.dirname(real);
+    for (const spec of extendsSpecs(read.config.extends)) {
+      const resolved = resolveExtendsInsideWorkspace(directory, spec, canonical);
+      if (resolved !== null) pending.push(resolved);
+    }
+  }
+}
+
+function extendsSpecs(value: unknown): string[] {
+  if (typeof value === "string" && value.length > 0) return [value];
+  if (!Array.isArray(value)) return [];
+  return value.filter((entry): entry is string => typeof entry === "string" && entry.length > 0);
+}
+
+function resolveExtendsInsideWorkspace(
+  fromDir: string,
+  spec: string,
+  canonical: string,
+): string | null {
+  if (!spec.startsWith(".") && !path.isAbsolute(spec)) return null;
+  const absolute = path.resolve(fromDir, spec);
+  const candidates = absolute.endsWith(".json")
+    ? [absolute]
+    : [`${absolute}.json`, path.join(absolute, "tsconfig.json")];
+  for (const candidate of candidates) {
+    if (!existsSync(candidate)) continue;
+    try {
+      const real = realpathSync(candidate);
+      if (!statSync(real).isFile()) continue;
+      if (workspacePathOf(canonical, real) === null) return null;
+      return real;
+    } catch {
+      continue;
+    }
+  }
+  return null;
 }
 
 function resolveTsConfig(canonical: string, raw: Record<string, unknown>): string | undefined {
@@ -214,18 +275,30 @@ function angularMajor(manifest: unknown): number | null {
   return match === null ? null : Number(match[0]);
 }
 
-/** Compare stored hashes. Style and asset edits become warnings; other tracked edits are stale. */
+/**
+ * Compare the current tracked inputs with the hashes stored at publish.
+ * A path that is tracked now and was not stored is a change. Style and asset
+ * changes become warnings; other tracked changes are stale. When discovery
+ * fails, only the stored paths are compared, so an unreadable tracked file
+ * still reports stale.
+ */
 export function assessTrackedFreshness(
   canonical: string,
   files: readonly TrackedFile[],
 ): { changedFiles: string[]; warnings: string[] } {
   const roots = warningInputRoots(canonical);
+  const stored = new Map(files.map((file) => [file.path, file.sha256]));
+  const paths = new Set(stored.keys());
+  for (const filePath of discoverTrackedPaths(canonical)) paths.add(filePath);
   const changedFiles: string[] = [];
   const warningPaths: string[] = [];
-  for (const file of files) {
-    if (trackedContentHash(canonical, file.path) === file.sha256) continue;
-    if (isWarningInput(file.path, roots)) warningPaths.push(file.path);
-    else changedFiles.push(file.path);
+  for (const filePath of paths) {
+    const storedHash = stored.get(filePath);
+    if (storedHash !== undefined && trackedContentHash(canonical, filePath) === storedHash) {
+      continue;
+    }
+    if (isWarningInput(filePath, roots)) warningPaths.push(filePath);
+    else changedFiles.push(filePath);
   }
   changedFiles.sort(compareCodeUnit);
   warningPaths.sort(compareCodeUnit);
@@ -235,8 +308,17 @@ export function assessTrackedFreshness(
   };
 }
 
+/** Current tracked paths, or none when the workspace cannot be re-read. */
+function discoverTrackedPaths(canonical: string): Iterable<string> {
+  try {
+    return loadWorkspace(canonical).files.map((file) => file.path);
+  } catch {
+    return [];
+  }
+}
+
 function isWarningInput(filePath: string, roots: readonly string[]): boolean {
-  if (styleExtensions.has(path.posix.extname(filePath).toLowerCase())) return true;
+  if (isStyleFile(filePath)) return true;
   return roots.some((root) => filePath === root || filePath.startsWith(`${root}/`));
 }
 
@@ -278,6 +360,71 @@ function trackTemplates(
     }
   }
   for (const indexPath of indexHtmlEntries(raw)) trackOptionalPath(files, canonical, indexPath);
+}
+
+function trackSourceRootStyles(
+  canonical: string,
+  project: ProjectRecord,
+  files: Map<string, string>,
+): void {
+  if (project.sourceRoot.length === 0) return;
+  const absolute = path.join(canonical, ...project.sourceRoot.split("/"));
+  if (!existsSync(absolute)) return;
+  let real: string;
+  try {
+    real = realpathSync(absolute);
+  } catch {
+    return;
+  }
+  if (!statSync(real).isDirectory()) return;
+  walkFiles(real, (file) => {
+    if (isStyleFile(file)) track(files, canonical, file);
+  });
+}
+
+function styleReferences(sourceFile: ts.SourceFile): string[] {
+  const refs: string[] = [];
+  const visit = (node: ts.Node): void => {
+    if (ts.isPropertyAssignment(node) && ts.isIdentifier(node.name)) {
+      if (node.name.text === "styleUrl") collectStyleLiteral(node.initializer, false, refs);
+      else if (node.name.text === "styleUrls") collectStyleLiteral(node.initializer, true, refs);
+    }
+    ts.forEachChild(node, visit);
+  };
+  visit(sourceFile);
+  return refs;
+}
+
+function collectStyleLiteral(node: ts.Expression, asArray: boolean, refs: string[]): void {
+  if (!asArray && ts.isStringLiteralLike(node) && node.text.length > 0) {
+    refs.push(node.text);
+    return;
+  }
+  if (!asArray || !ts.isArrayLiteralExpression(node)) return;
+  for (const element of node.elements) {
+    if (ts.isStringLiteralLike(element) && element.text.length > 0) refs.push(element.text);
+  }
+}
+
+function trackStyleReference(
+  files: Map<string, string>,
+  canonical: string,
+  sourcePath: string,
+  spec: string,
+): void {
+  const absolute = path.resolve(path.dirname(sourcePath), spec);
+  if (!existsSync(absolute)) return;
+  try {
+    const real = realpathSync(absolute);
+    if (!statSync(real).isFile() || !isStyleFile(real)) return;
+    track(files, canonical, real);
+  } catch {
+    // A missing stylesheet is not a tracked input.
+  }
+}
+
+function isStyleFile(filePath: string): boolean {
+  return styleExtensions.has(path.posix.extname(filePath.replaceAll("\\", "/")).toLowerCase());
 }
 
 function styleAndAssetEntries(project: Record<string, unknown>): string[] {

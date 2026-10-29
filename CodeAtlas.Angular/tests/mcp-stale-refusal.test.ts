@@ -632,10 +632,10 @@ describe("MCP freshness and stale refusal", () => {
     }
   });
 
-  it("stays fresh when a TypeScript file is added after indexing", async () => {
+  it("refuses coverage when a TypeScript file is added after indexing", async () => {
     // Arrange
     const workspace = await copyMinimalWorkspace();
-    const generationId = await indexWorkspace(workspace.path);
+    await indexWorkspace(workspace.path);
     writeFileSync(path.join(workspace.path, "src", "extra.ts"), "export class Extra {}\n");
     const connection = await connectInProcess();
 
@@ -647,7 +647,7 @@ describe("MCP freshness and stale refusal", () => {
       });
 
       // Assert
-      expect(result.isError).toBeFalsy();
+      expect(result.isError).toBe(true);
       const envelope = toolEnvelope(result);
       const body = envelope.freshness as { checkedAtUtc: string };
       expect(body.checkedAtUtc).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/);
@@ -657,22 +657,307 @@ describe("MCP freshness and stale refusal", () => {
       }).toEqual({
         contractVersion: 1,
         command: "coverage",
-        success: true,
+        success: false,
         responseToolVersion: "0.00.01",
         warningCount: 0,
-        freshness: freshness({ state: "fresh", changedFiles: [], diagnostics: [] }),
+        freshness: freshness({
+          state: "stale",
+          changedFiles: ["src/extra.ts"],
+          diagnostics: [],
+        }),
         coverage: generationCoverage("complete"),
-        pagination: {
-          offset: 0,
-          limit: 0,
-          returned: 0,
-          total: 0,
-          hasMore: false,
-          nextOffset: null,
-          snapshotId: generationId,
-          continuationSupported: false,
+        error: {
+          code: "stale_index",
+          message: staleMessage,
+          diagnostics: [],
         },
       });
+    } finally {
+      await connection.close();
+      await workspace.remove();
+    }
+  });
+
+  it("refuses coverage when an html file is added under sourceRoot", async () => {
+    // Arrange
+    const workspace = await copyMinimalWorkspace();
+    await indexWorkspace(workspace.path);
+    writeFileSync(path.join(workspace.path, "src", "page.html"), "<p>Page</p>\n");
+    const connection = await connectInProcess();
+
+    try {
+      // Act
+      const result = await connection.client.callTool({
+        name: "coverage",
+        arguments: { workspace: workspace.path },
+      });
+
+      // Assert
+      expect(result.isError).toBe(true);
+      const envelope = toolEnvelope(result) as {
+        success: boolean;
+        error: { code: string };
+        freshness: { state: string; changedFiles: string[] };
+      };
+      expect(envelope.success).toBe(false);
+      expect(envelope.error.code).toBe("stale_index");
+      expect(envelope.freshness.state).toBe("stale");
+      expect(envelope.freshness.changedFiles).toEqual(["src/page.html"]);
+    } finally {
+      await connection.close();
+      await workspace.remove();
+    }
+  });
+
+  it("refuses coverage when a workspace tsconfig is added", async () => {
+    // Arrange
+    const workspace = await copyMinimalWorkspace();
+    await indexWorkspace(workspace.path);
+    writeFileSync(path.join(workspace.path, "tsconfig.extra.json"), "{}\n");
+    const connection = await connectInProcess();
+
+    try {
+      // Act
+      const result = await connection.client.callTool({
+        name: "coverage",
+        arguments: { workspace: workspace.path },
+      });
+
+      // Assert
+      expect(result.isError).toBe(true);
+      const envelope = toolEnvelope(result) as {
+        success: boolean;
+        error: { code: string };
+        freshness: { state: string; changedFiles: string[] };
+      };
+      expect(envelope.success).toBe(false);
+      expect(envelope.error.code).toBe("stale_index");
+      expect(envelope.freshness.state).toBe("stale");
+      expect(envelope.freshness.changedFiles).toEqual(["tsconfig.extra.json"]);
+    } finally {
+      await connection.close();
+      await workspace.remove();
+    }
+  });
+
+  it("warns when a style file is added and stays fresh", async () => {
+    // Arrange
+    const workspace = await copyMinimalWorkspace();
+    const theme = path.join(workspace.path, "src", "theme");
+    mkdirSync(theme);
+    writeFileSync(path.join(theme, "base.css"), "body { color: black; }\n");
+    setBuildOptions(workspace.path, { styles: ["src/theme"] });
+    await indexWorkspace(workspace.path);
+    writeFileSync(path.join(theme, "extra.css"), "h1 { color: navy; }\n");
+    const connection = await connectInProcess();
+
+    try {
+      // Act
+      const result = await connection.client.callTool({
+        name: "coverage",
+        arguments: { workspace: workspace.path },
+      });
+
+      // Assert
+      expect(result.isError).toBeFalsy();
+      const envelope = toolEnvelope(result) as {
+        success: boolean;
+        warningCount: number;
+        freshness: {
+          state: string;
+          isStale: boolean;
+          changedFiles: string[];
+          diagnostics: string[];
+        };
+      };
+      expect(envelope.success).toBe(true);
+      expect(envelope.freshness.state).toBe("fresh");
+      expect(envelope.freshness.isStale).toBe(false);
+      expect(envelope.freshness.changedFiles).toEqual([]);
+      expect(envelope.warningCount).toBe(1);
+      expect(envelope.freshness.diagnostics).toEqual([styleOrAssetWarning("src/theme/extra.css")]);
+    } finally {
+      await connection.close();
+      await workspace.remove();
+    }
+  });
+
+  it("warns when an asset file is added and stays fresh", async () => {
+    // Arrange
+    const workspace = await copyMinimalWorkspace();
+    const assetDirectory = path.join(workspace.path, "src", "assets");
+    mkdirSync(assetDirectory);
+    writeFileSync(path.join(assetDirectory, "logo.svg"), "<svg></svg>\n");
+    setBuildOptions(workspace.path, { assets: ["src/assets"] });
+    await indexWorkspace(workspace.path);
+    writeFileSync(path.join(assetDirectory, "mark.svg"), "<svg></svg>\n");
+    const connection = await connectInProcess();
+
+    try {
+      // Act
+      const result = await connection.client.callTool({
+        name: "coverage",
+        arguments: { workspace: workspace.path },
+      });
+
+      // Assert
+      expect(result.isError).toBeFalsy();
+      const envelope = toolEnvelope(result) as {
+        success: boolean;
+        warningCount: number;
+        freshness: {
+          state: string;
+          isStale: boolean;
+          changedFiles: string[];
+          diagnostics: string[];
+        };
+      };
+      expect(envelope.success).toBe(true);
+      expect(envelope.freshness.state).toBe("fresh");
+      expect(envelope.freshness.isStale).toBe(false);
+      expect(envelope.freshness.changedFiles).toEqual([]);
+      expect(envelope.warningCount).toBe(1);
+      expect(envelope.freshness.diagnostics).toEqual([styleOrAssetWarning("src/assets/mark.svg")]);
+    } finally {
+      await connection.close();
+      await workspace.remove();
+    }
+  });
+
+  it("stays fresh and warns after a component stylesheet changes", async () => {
+    // Arrange
+    const workspace = await copyMinimalWorkspace();
+    const stylesheet = path.join(workspace.path, "src", "cart.component.scss");
+    writeFileSync(stylesheet, "h1 { color: black; }\n");
+    await indexWorkspace(workspace.path);
+    writeFileSync(stylesheet, "h1 { color: navy; }\n");
+    const connection = await connectInProcess();
+
+    try {
+      // Act
+      const result = await connection.client.callTool({
+        name: "coverage",
+        arguments: { workspace: workspace.path },
+      });
+
+      // Assert
+      expect(result.isError).toBeFalsy();
+      const envelope = toolEnvelope(result) as {
+        success: boolean;
+        warningCount: number;
+        error?: { code: string };
+        freshness: {
+          state: string;
+          isStale: boolean;
+          changedFiles: string[];
+          diagnostics: string[];
+        };
+      };
+      expect(envelope.success).toBe(true);
+      expect(envelope.error).toBeUndefined();
+      expect(envelope.freshness.state).toBe("fresh");
+      expect(envelope.freshness.isStale).toBe(false);
+      expect(envelope.freshness.changedFiles).toEqual([]);
+      expect(envelope.warningCount).toBe(1);
+      expect(envelope.freshness.diagnostics).toEqual([
+        styleOrAssetWarning("src/cart.component.scss"),
+      ]);
+    } finally {
+      await connection.close();
+      await workspace.remove();
+    }
+  });
+
+  it("stays fresh and warns after a styleUrls target outside sourceRoot changes", async () => {
+    // Arrange
+    const workspace = await copyMinimalWorkspace();
+    const brand = path.join(workspace.path, "brand");
+    mkdirSync(brand);
+    const stylesheet = path.join(brand, "cart.less");
+    writeFileSync(stylesheet, "h1 { color: black; }\n");
+    writeFileSync(
+      path.join(workspace.path, "src", "cart.ts"),
+      [
+        'import { Component } from "@angular/core";',
+        '@Component({ selector: "app-cart", template: "<p></p>", styleUrls: ["../brand/cart.less"] })',
+        "export class Cart {}",
+        "",
+      ].join("\n"),
+    );
+    await indexWorkspace(workspace.path);
+    writeFileSync(stylesheet, "h1 { color: navy; }\n");
+    const connection = await connectInProcess();
+
+    try {
+      // Act
+      const result = await connection.client.callTool({
+        name: "coverage",
+        arguments: { workspace: workspace.path },
+      });
+
+      // Assert
+      expect(result.isError).toBeFalsy();
+      const envelope = toolEnvelope(result) as {
+        success: boolean;
+        warningCount: number;
+        freshness: {
+          state: string;
+          isStale: boolean;
+          changedFiles: string[];
+          diagnostics: string[];
+        };
+      };
+      expect(envelope.success).toBe(true);
+      expect(envelope.freshness.state).toBe("fresh");
+      expect(envelope.freshness.isStale).toBe(false);
+      expect(envelope.freshness.changedFiles).toEqual([]);
+      expect(envelope.warningCount).toBe(1);
+      expect(envelope.freshness.diagnostics).toEqual([styleOrAssetWarning("brand/cart.less")]);
+    } finally {
+      await connection.close();
+      await workspace.remove();
+    }
+  });
+
+  it("refuses coverage after an in-workspace tsconfig extends base changes", async () => {
+    // Arrange
+    const workspace = await copyMinimalWorkspace();
+    const configDirectory = path.join(workspace.path, "cfg");
+    mkdirSync(configDirectory);
+    writeFileSync(
+      path.join(configDirectory, "tsconfig.base.json"),
+      `${JSON.stringify({ compilerOptions: { strict: true }, include: ["src/**/*.ts"] }, null, 2)}\n`,
+    );
+    writeFileSync(
+      path.join(configDirectory, "tsconfig.app.json"),
+      `${JSON.stringify({ extends: "./tsconfig.base.json" }, null, 2)}\n`,
+    );
+    setBuildOptions(workspace.path, { tsConfig: "cfg/tsconfig.app.json" });
+    await indexWorkspace(workspace.path);
+    writeFileSync(
+      path.join(configDirectory, "tsconfig.base.json"),
+      `${JSON.stringify({ compilerOptions: { strict: false }, include: ["src/**/*.ts"] }, null, 2)}\n`,
+    );
+    const connection = await connectInProcess();
+
+    try {
+      // Act
+      const result = await connection.client.callTool({
+        name: "coverage",
+        arguments: { workspace: workspace.path },
+      });
+
+      // Assert
+      expect(result.isError).toBe(true);
+      const envelope = toolEnvelope(result) as {
+        success: boolean;
+        error: { code: string };
+        freshness: { state: string; changedFiles: string[] };
+      };
+      expect(envelope.success).toBe(false);
+      expect(envelope.error.code).toBe("stale_index");
+      expect(envelope.freshness.state).toBe("stale");
+      expect(envelope.freshness.changedFiles).toEqual(["cfg/tsconfig.base.json"]);
     } finally {
       await connection.close();
       await workspace.remove();

@@ -56,21 +56,21 @@ With no index loaded, freshness is unknown:
 
 ### Freshness scope
 
-Every query hashes the tracked inputs stored in the generation. `node_modules` is never hashed. Adding a file under `node_modules` does not change freshness. A file that was not tracked at publish is not part of the comparison until the next `index`.
+Every query re-discovers the tracked inputs and hashes them against the generation. `node_modules` is never hashed. Adding a file under `node_modules` does not change freshness. A file that is a tracked input now, and was not stored at publish, is part of the comparison: a stale-making path is listed in `changedFiles`, and a style or asset path adds a warning.
 
 A tracked input is stale-making or warning-only.
 
-Stale-making. A byte change, or a file that can no longer be read, adds the workspace-relative path to `changedFiles`. `state` becomes `stale` and `isStale` becomes true:
+Stale-making. A byte change, a file that can no longer be read, or a stale-making path that was not stored at publish adds the workspace-relative path to `changedFiles`. `state` becomes `stale` and `isStale` becomes true:
 
 - TypeScript sources, including specs: each non-declaration file in a project's program that sits inside the workspace and is not under `node_modules`. An inline template is part of that file's bytes.
 - Templates: every `.html` file under a project's non-empty `sourceRoot`, and each architect target's `options.index` when that value is a path (or an object with `input`) to a file inside the workspace. Paths under `node_modules` are skipped. An `.html` file that is also a style or asset is warning-only instead.
 - `angular.json`.
 - `package.json` and `package-lock.json`, when they exist.
-- Every workspace-root file whose name matches `tsconfig*.json`, and each project's `architect.build.options.tsConfig`.
+- Every workspace-root file whose name matches `tsconfig*.json`, each project's `architect.build.options.tsConfig`, and each `extends` base of that config when the base resolves to a file inside the workspace. A base outside the workspace, including a package name, is not a tracked input.
 
-Warning-only. A byte change, or a file that can no longer be read, does not make the index stale. `state` stays `fresh`, `isStale` stays false, and the path is not added to `changedFiles`. Each such path adds one diagnostic, `Style or asset changed: <path>.`, sorted by the path in ascending code-unit order. `warningCount` is the number of those diagnostics. `freshness.diagnostics` lists them.
+Warning-only. A byte change, a file that can no longer be read, or a warning-only path that was not stored at publish does not make the index stale. `state` stays `fresh`, `isStale` stays false, and the path is not added to `changedFiles`. Each such path adds one diagnostic, `Style or asset changed: <path>.`, sorted by the path in ascending code-unit order. `warningCount` is the number of those diagnostics. `freshness.diagnostics` lists them.
 
-- Styles named by any architect target's `options.styles`. An entry is a string path or an object with `input`. Files whose extension is `.css`, `.scss`, `.sass`, or `.less` are warning-only even when that list cannot be read.
+- Styles. Any architect target's `options.styles` entry (a string path or an object with `input`; a directory entry hashes every file under it); every `.css`, `.scss`, `.sass`, and `.less` file under a project's non-empty `sourceRoot`; and each `styleUrl` or `styleUrls` target in a tracked TypeScript source when that target is one of those style files inside the workspace. Files with those extensions are warning-only even when the style list cannot be read.
 - Assets named by `options.assets`, in the same entry shapes. A directory entry hashes every file under it. A changed file is warning-only when its path equals one of those entries or sits inside a directory entry.
 
 Entries are literal paths, not globs. A path that does not exist at publish is not tracked. `options` on every architect target is read. Paths that contain `node_modules` or `..` are ignored. Directory walks also skip `.codeatlas` and `.git`.
@@ -311,9 +311,11 @@ Tracked paths, and whether a change is stale-making or warning-only, are the Fre
 - `package.json` and `package-lock.json`, when they exist (stale)
 - every workspace-root file whose name matches `tsconfig*.json` (stale)
 - each project's `architect.build.options.tsConfig`, when that file is not already included (stale)
+- each in-workspace `extends` base of that config (stale). A base outside the workspace is not tracked
 - each non-declaration TypeScript file in that project's program that sits inside the workspace and is not under `node_modules` (stale)
 - `.html` templates under a non-empty `sourceRoot`, and `options.index` HTML (stale, unless the file is a style or asset)
-- `options.styles` and `options.assets` (warning-only)
+- `options.styles`, `.css` / `.scss` / `.sass` / `.less` files under `sourceRoot`, and `styleUrl` / `styleUrls` targets (warning-only)
+- `options.assets` (warning-only)
 
 `node_modules` is not a tracked path.
 

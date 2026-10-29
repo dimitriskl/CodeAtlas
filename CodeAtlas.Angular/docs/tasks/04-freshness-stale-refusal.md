@@ -18,7 +18,7 @@ User stories: 3, 4, 48. PRD: [Freshness inputs](../prd/0001-initial.md#freshness
 
 - [02 — Index a minimal workspace and report index status](02-index-minimal-workspace-index-status.md)
 
-Status: rejected
+Status: in-test
 
 ## Acceptance criteria
 
@@ -63,3 +63,6 @@ Status: rejected
   - Templates are not tracked when `sourceRoot` is empty, and `angular.json` is re-read and parse errors are swallowed on every query. Document or test both.
   - `README.md` still describes `coverage` without the `workspace` input and the stale refusal.
   - Merge with PR #5 (task 03): `envelope.ts`, `generation-store.ts`, `workspace.ts`, `MCP-CONTRACT.md` and `BOARD.md` conflict. `mcp-server.ts` merges cleanly, but `find_symbol` will not use the stale gate until it is wired in after the merge.
+- 2026-10-29: A new TypeScript program file, `.html` under `sourceRoot`, or workspace `tsconfig*.json` makes `coverage` refuse `stale_index` with that path in `changedFiles`. Added styles and assets only warn, and `node_modules` stays excluded. Replaced "stays fresh when a TypeScript file is added after indexing". The Freshness scope sentence in `MCP-CONTRACT.md` matches.
+- 2026-10-29: Each project's in-workspace `tsconfig` `extends` chain is stale-making. Editing that base makes `coverage` refuse as stale. Bases outside the workspace are left to task 29.
+- 2026-10-29: Component stylesheets (`.css`, `.scss`, `.sass`, `.less` under `sourceRoot`, and `styleUrl` / `styleUrls` targets) are warning-only. Editing one stays `fresh` with a warning that names the file. `MCP-CONTRACT.md` records that.
