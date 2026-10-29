@@ -34,10 +34,11 @@ export function runCli(
   const options: RunCliOptions =
     typeof cwdOrOptions === "string" ? { cwd: cwdOrOptions } : cwdOrOptions;
   const cli = path.join(packageRoot, "dist", "cli.js");
+  const env = childEnv(options.env ?? process.env);
   return new Promise((resolve, reject) => {
     const child = spawn(process.execPath, [cli, ...args], {
       cwd: options.cwd ?? packageRoot,
-      env: options.env ?? process.env,
+      env,
       stdio: ["pipe", "pipe", "pipe"],
     });
     const stdout: Buffer[] = [];
@@ -82,4 +83,28 @@ export function runCli(
     if (options.stdin === undefined) child.stdin.end();
     else child.stdin.end(options.stdin);
   });
+}
+
+/**
+ * A Windows process aborts if it is started with a SystemRoot that is not the
+ * real OS directory. Keep that value for startup, and restore a fixture root
+ * before the CLI reads it so tests do not call Credential Manager.
+ */
+function childEnv(source: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
+  const env: NodeJS.ProcessEnv = { ...source };
+  if (process.platform !== "win32") return env;
+  const real = process.env.SystemRoot ?? process.env.SYSTEMROOT;
+  const requested = env.SystemRoot ?? env.SYSTEMROOT;
+  if (real === undefined || requested === undefined) return env;
+  if (path.normalize(real) === path.normalize(requested)) return env;
+  env.CODEATLAS_FAKE_SYSTEM_ROOT = requested;
+  env.SystemRoot = real;
+  env.SYSTEMROOT = real;
+  const preload = path
+    .join(packageRoot, "tests", "support", "win-system-root.cjs")
+    .replace(/\\/g, "/");
+  const requirement = `--require "${preload}"`;
+  const existing = env.NODE_OPTIONS ?? "";
+  env.NODE_OPTIONS = existing.length === 0 ? requirement : `${existing} ${requirement}`;
+  return env;
 }
