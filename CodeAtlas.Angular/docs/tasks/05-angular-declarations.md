@@ -12,7 +12,7 @@ User stories: 6, 47, 49. PRD: [Identity and schema](../prd/0001-initial.md#ident
 
 - [03 — find_symbol for plain TypeScript](03-find-symbol-typescript.md)
 
-Status: in-qa
+Status: done-awaiting-merge
 
 ## Acceptance criteria
 
@@ -62,3 +62,20 @@ Status: in-qa
   **Open question for the Analyst/Dimitris.** Optional chaining is not mentioned in the contract. The implementation currently treats these as signal calls, because they are still calls whose last identifier is `input`, `output`, or `model`: `core?.input()`, `core.input?.()`, `core?.input?.()`, `core?.input.required()`, `core.input?.required()`, `input?.()`, `core?.model()`, `model?.required()`, and `a?.b?.model.required()` (the `model` forms also emit `<property>Change` at the property name). Whether `?.` is covered by "qualified name" and "initializer call" is not stated. No test was added. Separately, limiting signal recognition to direct property initializers on component or directive classes is pending Dimitris, as noted above.
 
   **Non-blocking.** The unrelated-qualifier match is the contract's last-identifier rule, shared with decorators and guards. Signal calls on plain-class, service, and pipe fields are the same property-initializer rule and are pending Dimitris. No import-alias recognition was added. No spawn-based test was added.
+- 2026-10-29 QA APPROVE, attempt 1. HEAD reviewed `e5f2b6a` (`e5f2b6a0ca68bfaae1749210fcbb814d6b0eb973`; Developer fix `c48bf4f`, then the Tester edge tests) against `angular/main` `13461eb`, which is an ancestor via `8f818ec`. CI run [40880710229](https://github.com/dimitriskl/CodeAtlas/actions/runs/40880710229) on `e5f2b6a` concluded `success`. Local Node 24.22.1 with `npm ci --ignore-scripts` plus the prebuilt Node 24 `better-sqlite3` binary: lint, typecheck, build, test (248/248) and `npm pack --dry-run` (45 files, shasum `9494ecb7dd7fbad590cf59b73e49d176cb41c7b1`; the only new entries are `dist/angular-kinds.js` and `dist/angular-kinds.d.ts`) pass.
+
+  **Spec**
+
+  All four acceptance criteria are met at the seams they name, user stories 6, 47 and 49 are covered, and the `MCP-CONTRACT.md` "Angular declarations" section, the merged-kind order, schema version `3` in all four places, and the `unsupported_index` refusal of a schema 2 index (tested in `tests/mcp-find-symbol.test.ts`) are consistent with the code and with GLOSSARY "Symbol kind"; the diff touches only `CodeAtlas.Angular/`, and there is no scope creep.
+
+  **Standards**
+
+  Strict TS/ESM, ESLint and Prettier are clean, the Angular rules live in one new module (`src/angular-kinds.ts`) with a single last-identifier helper (`expressionName`) shared by decorators, `implements` and signal callees, no new error type or envelope was added, and the new tests assert public MCP, CLI and analyzer-seam results with Arrange/Act/Assert and one Act each; no hard DRY, SOLID or security issue.
+
+  **Optional suggestions (non-blocking)**
+  - Off-position signal calls, evidence for the open question with Dimitris (reproduced with the built CLI on a scratch workspace). Only a direct class property initializer is recognized. A component field `input("")` is `input`. A local `input("")` / `model(0)` in a method or constructor body, `this.title = input("")` in the constructor, an arrow `() => input("")` or object literal `{ nested: input("") }` as the field initializer, a top-level `export const topIn = input("")`, and a local in a plain function all give no symbol. A plain undecorated `class PlainBox` field `input("")` / `model(0)` is `input` (plus `boxModelChange` `output`), an `@Injectable` field `output()` is `output`, and a field of a class declared inside a method (`OffPanel.work.Inner.innerIn`) is `input`. Contract line 528 does not limit the rule to components or directives, so this is consistent with the text as written.
+  - A local `const g: CanActivateFn = ...` inside a function body is indexed as `guard` `helper.g`. That matches the contract table as written (no top-level restriction) and the existing indexing of local classes, but it is worth confirming alongside the open question.
+  - `visitVariable` visits only the initializer, not the binding name. A class declared in a function inside a destructuring default (`const { a = function () { class Hidden {} } } = obj;`) was indexed on `angular/main` and no longer is. That is very unlikely in real code. Visiting `declaration.name` as well (or calling `ts.forEachChild` on the declaration after the kind check) restores it.
+  - `SourceSymbolKind` restates the members of `ClassSymbolKind` and `MemberSymbolKind`. Building it from those two unions keeps the kind lists from drifting when task 10 adds `route`.
+  - `signalForm` returns a string that `propertyBinding` maps again to a `MemberBinding`. Returning the binding directly removes the second switch.
+  - The optional-chaining forms (`core?.input()`, `input?.()`, `model?.required()`) are recognized today, as the Tester recorded. Pin them with a test once the Analyst/Dimitris decide.
