@@ -26,6 +26,13 @@ export async function copyReferencesWorkspace(): Promise<{
   return copyWorkspace("references-workspace");
 }
 
+export async function copyDeclarationsWorkspace(): Promise<{
+  path: string;
+  remove: () => Promise<void>;
+}> {
+  return copyWorkspace("declarations-workspace");
+}
+
 async function copyWorkspace(name: string): Promise<{
   path: string;
   remove: () => Promise<void>;

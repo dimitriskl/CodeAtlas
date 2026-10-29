@@ -1,7 +1,28 @@
 import ts from "typescript";
+import {
+  accessorBinding,
+  classDeclarationKind,
+  modelOutputName,
+  propertyBinding,
+  variableDeclarationKind,
+} from "./angular-kinds.js";
 
 export type SourceSymbolKind =
-  "class" | "interface" | "function" | "method" | "property" | "enum" | "type-alias";
+  | "component"
+  | "directive"
+  | "pipe"
+  | "service"
+  | "guard"
+  | "interceptor"
+  | "class"
+  | "interface"
+  | "function"
+  | "method"
+  | "property"
+  | "input"
+  | "output"
+  | "enum"
+  | "type-alias";
 
 export type NamePosition = {
   line: number;
@@ -26,14 +47,23 @@ type FoundSymbol = {
   signature: string | null;
 };
 
+/** Earliest kind wins when declarations merge. Angular kinds outrank the plain class or property. */
 const kindRank: Record<SourceSymbolKind, number> = {
-  class: 0,
-  interface: 1,
-  enum: 2,
-  function: 3,
-  "type-alias": 4,
-  method: 5,
-  property: 6,
+  component: 0,
+  directive: 1,
+  pipe: 2,
+  guard: 3,
+  interceptor: 4,
+  service: 5,
+  class: 6,
+  interface: 7,
+  enum: 8,
+  function: 9,
+  "type-alias": 10,
+  method: 11,
+  input: 12,
+  output: 13,
+  property: 14,
 };
 
 const skippedModifiers = new Set<ts.SyntaxKind>([
@@ -66,7 +96,16 @@ function visitNode(
   if (ts.isClassDeclaration(node)) {
     const nameNode = node.name;
     if (nameNode !== undefined) {
-      emit(found, sourceFile, nameNode, containers, nameNode.text, "class", false, null);
+      emit(
+        found,
+        sourceFile,
+        nameNode,
+        containers,
+        nameNode.text,
+        classDeclarationKind(node),
+        false,
+        null,
+      );
       visitMembers(node.members, [...containers, nameNode.text], sourceFile, found);
     }
     return;
@@ -116,7 +155,39 @@ function visitNode(
     visitList(node.statements, containers, sourceFile, found);
     return;
   }
+  if (ts.isVariableStatement(node)) {
+    for (const declaration of node.declarationList.declarations) {
+      visitVariable(declaration, containers, sourceFile, found);
+    }
+    return;
+  }
   ts.forEachChild(node, (child) => visitNode(child, containers, sourceFile, found));
+}
+
+function visitVariable(
+  declaration: ts.VariableDeclaration,
+  containers: readonly string[],
+  sourceFile: ts.SourceFile,
+  found: FoundSymbol[],
+): void {
+  if (ts.isIdentifier(declaration.name)) {
+    const kind = variableDeclarationKind(declaration);
+    if (kind !== undefined) {
+      emit(
+        found,
+        sourceFile,
+        declaration.name,
+        containers,
+        declaration.name.text,
+        kind,
+        false,
+        null,
+      );
+    }
+  }
+  if (declaration.initializer !== undefined) {
+    visitNode(declaration.initializer, containers, sourceFile, found);
+  }
 }
 
 function visitModule(
@@ -190,7 +261,16 @@ function visitMember(
     const name = propertyName(member.name);
     if (name === undefined) return;
     const isStaticMember = hasModifier(member, ts.SyntaxKind.StaticKeyword);
-    emit(found, sourceFile, member.name, containers, name, "property", isStaticMember, null);
+    emit(
+      found,
+      sourceFile,
+      member.name,
+      containers,
+      name,
+      accessorBinding(member),
+      isStaticMember,
+      null,
+    );
     if (member.body !== undefined) {
       visitList(
         member.body.statements,
@@ -205,7 +285,22 @@ function visitMember(
     const name = propertyName(member.name);
     if (name === undefined) return;
     const isStaticMember = hasModifier(member, ts.SyntaxKind.StaticKeyword);
-    emit(found, sourceFile, member.name, containers, name, "property", isStaticMember, null);
+    const binding = ts.isPropertyDeclaration(member)
+      ? propertyBinding(member)
+      : { kind: "property" as const, modelOutput: false };
+    emit(found, sourceFile, member.name, containers, name, binding.kind, isStaticMember, null);
+    if (binding.modelOutput) {
+      emit(
+        found,
+        sourceFile,
+        member.name,
+        containers,
+        modelOutputName(name),
+        "output",
+        isStaticMember,
+        null,
+      );
+    }
     if (ts.isPropertyDeclaration(member) && member.initializer !== undefined) {
       visitNode(
         member.initializer,
