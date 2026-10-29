@@ -125,6 +125,49 @@ public sealed class SqliteStoreTests(SemanticSolution semantic, DocumentationCli
                 Text(DuplicateSnapshotQueries.FindGroups(stored, index.IndexId, new QueryRequest(Limit: 1))));
     }
 
+    [Fact]
+    public void RepeatedStoredSearchRanksOnce()
+    {
+        // Arrange
+        var index = Fixture("documented");
+        var path = Write(index);
+        var symbol = index.Symbols!.First(item => item.Kind == "method");
+        var before = PurposeSearch.StoredRankingPasses;
+
+        // Act
+        Search();
+        Search();
+
+        // Assert
+        Assert.Equal(before + 1, PurposeSearch.StoredRankingPasses);
+
+        void Search()
+        {
+            using var corpus = new SqliteSearchCorpus(new SqliteIndexReader(path), index.StructuralCatalog!.Coverage);
+            var result = PurposeSearch.Search(corpus, symbol.Name, "assisted", "all", new QueryRequest(),
+                index.IndexId, "csharp", CancellationToken.None, null);
+            Assert.NotEmpty(result.Page.Items);
+        }
+    }
+
+    [Fact]
+    public void StoredSearchPreloadsOwnerFacts()
+    {
+        // Arrange
+        var index = Fixture("documented");
+        var path = Write(index);
+        var symbol = index.Symbols!.First(item => item.Kind == "method");
+        using var corpus = new SqliteSearchCorpus(new SqliteIndexReader(path), index.StructuralCatalog!.Coverage);
+
+        // Act
+        var result = PurposeSearch.Search(corpus, symbol.Name, "assisted", "all", new QueryRequest(),
+            index.IndexId, "csharp", CancellationToken.None, null);
+
+        // Assert
+        Assert.NotEmpty(result.Page.Items);
+        Assert.Equal(0, corpus.FactReadsWhileSelecting);
+    }
+
     [Theory]
     [InlineData("semantic")]
     [InlineData("documented")]

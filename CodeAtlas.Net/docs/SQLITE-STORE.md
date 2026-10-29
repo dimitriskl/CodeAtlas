@@ -138,8 +138,24 @@ Notes:
 
 Harness scripts were kept outside the repository (`C:\temp\codeatlas-sqlite`). `measure.py` samples the process peak working set. `queries.py` runs the five queries. `compare_queries.py` derives queries from an export and compares two CLIs, and `fixtures.sh` handles the small corpora. Those runs used one fixed environment. An index built before the referenced-variable digest is still stale from a shell whose `PWD` or `OLDPWD` differs. An index built after that change is not: only environment variables referenced by the solution's own project files are hashed. See [Snapshot reliability](SNAPSHOT-RELIABILITY.md).
 
+## Live host on Jellyfin
+
+Jellyfin 10.11.9 (`e83a7e62`), the solution pinned by `benchmarks/agent/target.json`, measured on Linux with `benchmarks/agent/measure-live-host.py`. Each query ran in one `codeatlas live --solution` process. The figure excludes one warmup. Median is the middle of 20 rounds. p95 is nearest rank (`ceil(0.95 × 20)`). `find-symbol` uses `HandleRequest` (77 methods). `search` uses assisted `authenticate user password`. `find-references` uses `ApplicationHost.Dispose` (780 references). The edit appends a comment to `MediaBrowser.Model/Globalization/CultureDto.cs` through the host, then publishes the original text again so the files on disk still match.
+
+Before this change, a query of the loaded generation hashed every tracked input. Two samples: find-symbol 453 ms and 245 ms, search 880 ms and 746 ms, find-references of one `HandleRequest` 318 ms and 234 ms. Cold load was 24.9 s. After the host's own edit, find-symbol was about 20 ms, and five searches were 406–569 ms (median 474 ms). Publishing that one-file edit took 83–99 s.
+
+After the change, opening the host checks freshness once and then compares file stamps. Warm rounds:
+
+| Query | Loaded median / p95 | After the edit median / p95 |
+| --- | --- | --- |
+| find-symbol | 37.2 / 63.1 ms | 18.8 / 19.6 ms |
+| search | 68.1 / 103.8 ms | 44.2 / 89.8 ms |
+| find-references | 41.5 / 44.5 ms | 17.6 / 32.7 ms |
+
+Cold load was 26.2 s, including that one freshness check. The excluded search warmup was 400.1 ms on the loaded generation and 267.8 ms after the edit; repeats of the same search reuse the ranked page. Publishing the edit took 91.7 s. That publish is not part of the 300 ms query budget. Every warm median and p95 in the table is under 300 ms.
+
 ## Open items
 
 - Not verified on Linux or macOS: the bundled native library, the system-library fallback and the printed instructions were exercised on Windows only. Unavailability was tested through injected failures.
-- The 0.00.39 same-checkout Jellyfin export matches the 0.00.34 export for projects, types, methods, symbols, the structural catalog, duplicates, warnings, documentation coverage and schema. Of 6,527 reference keys, one differs: `IDirectStreamProvider.GetStream` has 1 reference in the new index and 4 in the 0.00.34 export. The three extra export entries are `ILiveStream.GetStream` call sites. Those call sites are present under `ILiveStream.GetStream` in both indexes, and that key matches. A live `find-references` for `IDirectStreamProvider.GetStream` with the 0.00.34 CLI and the 0.00.39 CLI both return the one direct call. The 160-query suite was not rerun. Documentation models are still held until that stage finishes. The live process serves edit, find-symbol, search and find-references from one loaded session, and those queries no longer hash every input after the session's own edit. The 300 ms warm target on a large solution is still open.
+- The 0.00.39 same-checkout Jellyfin export matches the 0.00.34 export for projects, types, methods, symbols, the structural catalog, duplicates, warnings, documentation coverage and schema. Of 6,527 reference keys, one differs: `IDirectStreamProvider.GetStream` has 1 reference in the new index and 4 in the 0.00.34 export. The three extra export entries are `ILiveStream.GetStream` call sites. Those call sites are present under `ILiveStream.GetStream` in both indexes, and that key matches. A live `find-references` for `IDirectStreamProvider.GetStream` with the 0.00.34 CLI and the 0.00.39 CLI both return the one direct call. The 160-query suite was not rerun. Documentation models are still held until that stage finishes. The live process serves edit, find-symbol, search and find-references from one loaded session. On Jellyfin, the warm medians and p95 values for those queries are under the 300 ms target. Cold load and the publish that follows an edit are outside that budget. See [Live host on Jellyfin](#live-host-on-jellyfin).
 - The large private 30-project solution from the PRD was not re-measured. These numbers are for Jellyfin.

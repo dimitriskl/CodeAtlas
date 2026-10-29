@@ -33,7 +33,12 @@ public sealed class LiveIndexSession : IDisposable
         var workingCopy = Path.Combine(Path.GetDirectoryName(manifest)!, "working-copy.db");
         File.Copy(current.ArtifactPath(SqliteIndexSchema.ArtifactName), workingCopy, overwrite: true);
         var analysis = await SolutionAnalysis.LoadAsync(full, cancellationToken);
-        return new LiveIndexSession(analysis, full, workingCopy);
+        var session = new LiveIndexSession(analysis, full, workingCopy);
+        var snapshot = await IndexStore.OpenSnapshotAsync(manifest, cancellationToken: cancellationToken);
+        var freshness = await IndexStore.CheckFreshnessAsync(snapshot.Index, cancellationToken);
+        if (!freshness.IsStale && freshness.Diagnostics.Length == 0)
+            session.Remember(snapshot.Index);
+        return session;
     }
 
     public async Task ApplyAsync(string path, string text, CancellationToken cancellationToken = default)

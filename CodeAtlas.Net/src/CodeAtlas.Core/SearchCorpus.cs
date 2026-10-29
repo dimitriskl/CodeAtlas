@@ -63,11 +63,19 @@ internal sealed class SqliteSearchCorpus : ISearchCorpus
 
     public SqliteSearchCorpus(Storage.SqliteIndexReader store, StructuralCoverage coverage)
     {
+        DatabasePath = store.Path;
         Coverage = coverage;
         session = store.OpenSession();
     }
 
+    internal string DatabasePath { get; }
+
     public StructuralCoverage Coverage { get; }
+
+    /// <summary>Per-owner fact queries while selecting candidates. A preloaded selection stays at zero.</summary>
+    internal int FactReadsWhileSelecting { get; private set; }
+
+    private int uncachedFactReads;
 
     public void Dispose() => session.Dispose();
 
@@ -81,7 +89,10 @@ internal sealed class SqliteSearchCorpus : ISearchCorpus
     public IReadOnlyList<StructuralFact> FactsOwnedBy(string id)
     {
         if (!facts.TryGetValue(id, out var owned))
+        {
+            uncachedFactReads++;
             facts[id] = owned = Read(() => session.FactsOwnedBy(id));
+        }
         return owned;
     }
 
@@ -106,18 +117,50 @@ internal sealed class SqliteSearchCorpus : ISearchCorpus
                     if (claimTokens.Contains(token) && postings[token].Add(ordinal))
                         candidates.Add(ordinal);
             }
-        var documents = new List<SearchDocument>(candidates.Count);
-        foreach (var ordinal in candidates.Order())
-        {
-            cancellationToken.ThrowIfCancellationRequested();
-            var symbol = session.SymbolAt(ordinal)
-                ?? throw new IndexFormatException("invalid_index", "A search posting references a missing symbol. Rebuild the index.");
-            symbols.TryAdd(symbol.Id, symbol);
-            documents.Add(new(symbol, Fields(symbol, Symbol, FactsOwnedBy, mode, accepted).ToArray()));
-        }
+        var documents = Documents(candidates.Order().ToArray(), mode, accepted, cancellationToken);
         var documentFrequency = postings.ToDictionary(pair => pair.Key, pair => pair.Value.Count, StringComparer.Ordinal);
+        FactReadsWhileSelecting = uncachedFactReads;
         return new SearchSelection(documents, documentCount, documentFrequency, averageLengths);
     });
+
+    private List<SearchDocument> Documents(long[] ordinals, string mode,
+        IReadOnlyDictionary<string, Explanations.AcceptedExplanation>? accepted, CancellationToken cancellationToken)
+    {
+        var loaded = session.SymbolsForOrdinals(ordinals);
+        var owners = new List<string>(ordinals.Length);
+        var seenOwners = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var ordinal in ordinals)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            if (!loaded.TryGetValue(ordinal, out var symbol))
+                throw new IndexFormatException("invalid_index", "A search posting references a missing symbol. Rebuild the index.");
+            symbols.TryAdd(symbol.Id, symbol);
+            if (seenOwners.Add(symbol.Id)) owners.Add(symbol.Id);
+        }
+        foreach (var (id, owned) in session.FactsForOwners(owners))
+            facts.TryAdd(id, owned);
+        var linked = LinkedIds();
+        if (linked.Count > 0) session.RememberSymbols(linked, symbols);
+        var documents = new List<SearchDocument>(ordinals.Length);
+        foreach (var ordinal in ordinals)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            documents.Add(new(loaded[ordinal], Fields(loaded[ordinal], Symbol, FactsOwnedBy, mode, accepted).ToArray()));
+        }
+        return documents;
+    }
+
+    private List<string> LinkedIds()
+    {
+        var linked = new List<string>();
+        var seen = new HashSet<string>(symbols.Keys, StringComparer.Ordinal);
+        foreach (var fact in facts.Values.SelectMany(owned => owned))
+        {
+            if (fact.Kind is not ("containing-type" or "implements-member" or "overrides-member" or "resolved-invocation")) continue;
+            if (fact.Target.SourceSymbolId is { } id && seen.Add(id)) linked.Add(id);
+        }
+        return linked;
+    }
 
     private static T Read<T>(Func<T> action)
     {

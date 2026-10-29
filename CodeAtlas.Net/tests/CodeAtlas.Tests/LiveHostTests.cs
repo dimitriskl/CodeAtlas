@@ -14,6 +14,33 @@ public sealed partial class SqliteFileUpdateTests
     public SqliteFileUpdateTests(ITestOutputHelper output) => this.output = output;
 
     [Fact]
+    public async Task SessionQueryOfTheLoadedGenerationSkipsTheFullFreshnessHash()
+    {
+        // Arrange
+        using var fixture = await SampleCopy.CreateAsync();
+        await IndexStore.PublishAsync(await SolutionAnalysis.CreateIndexAsync(fixture.Solution));
+        using var host = await LiveHost.StartAsync(fixture.Solution);
+        SnapshotInputs.ResetFullFreshnessChecks(fixture.Solution);
+
+        // Act
+        var symbols = await host.HandleAsync(Request("find-symbol", ("name", "Calculate")));
+        var search = await host.HandleAsync(Request("search", ("query", "Calculate")));
+        var references = await host.HandleAsync(Request("find-references", ("symbol", Calculate)));
+        var checks = SnapshotInputs.FullFreshnessChecks(fixture.Solution);
+
+        // Assert
+        Assert.Equal(0, checks);
+        AssertSucceeded(symbols);
+        AssertSucceeded(search);
+        AssertSucceeded(references);
+        await File.AppendAllTextAsync(fixture.Calculator, "\n// changed outside the session\n");
+        var stale = await host.HandleAsync(Request("find-symbol", ("name", "Calculate")));
+        Assert.False(stale["success"]!.GetValue<bool>());
+        Assert.Equal("stale_index", stale["error"]!["code"]!.GetValue<string>());
+        Assert.Equal(0, SnapshotInputs.FullFreshnessChecks(fixture.Solution));
+    }
+
+    [Fact]
     public async Task SessionQueryAfterItsOwnEditSkipsTheFullFreshnessHash()
     {
         // Arrange
