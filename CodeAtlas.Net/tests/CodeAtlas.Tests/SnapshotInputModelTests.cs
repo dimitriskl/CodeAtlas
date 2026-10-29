@@ -411,6 +411,10 @@ public sealed class SnapshotInputModelTests : IDisposable
             </Project>
             $([System.Environment]::GetEnvironmentVariable('EXTRA_BUILD_INPUT'))
             """;
+        var dotnetRoot = Path.Combine("C:", "Program Files", "dotnet");
+        var outputPath = Path.Combine("C:", "repo", "obj", "project.assets.json");
+        var sdkPath = Path.Combine(dotnetRoot, "sdk", "10.0.402", "Sdk.targets");
+        var projectPath = Path.Combine("C:", "repo", "Directory.Build.props");
 
         // Act
         var selected = BuildEnvironment.Select(BuildEnvironment.ReferencesIn(xml),
@@ -421,9 +425,9 @@ public sealed class SnapshotInputModelTests : IDisposable
         // Assert
         Assert.Equal(["CODEATLAS_FIXTURE_FLAVOR", "EXTRA_BUILD_INPUT"], selected);
         Assert.Equal(["BUILD_FLAVOR"], unset);
-        Assert.True(BuildEnvironment.IsOutputPath(@"C:\repo\obj\project.assets.json"));
-        Assert.True(BuildEnvironment.IsSdkOrPackage(@"C:\Program Files\dotnet\sdk\10.0.402\Sdk.targets", @"C:\Program Files\dotnet"));
-        Assert.False(BuildEnvironment.IsSdkOrPackage(@"C:\repo\Directory.Build.props", @"C:\Program Files\dotnet"));
+        Assert.True(BuildEnvironment.IsOutputPath(outputPath));
+        Assert.True(BuildEnvironment.IsSdkOrPackage(sdkPath, dotnetRoot));
+        Assert.False(BuildEnvironment.IsSdkOrPackage(projectPath, dotnetRoot));
     }
 
     [Fact]
