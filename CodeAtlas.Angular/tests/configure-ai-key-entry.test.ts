@@ -5,8 +5,10 @@ import {
   mkdirSync,
   mkdtempSync,
   readFileSync,
+  statSync,
   writeFileSync,
 } from "node:fs";
+import net from "node:net";
 import { createServer } from "node:http";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -1018,7 +1020,333 @@ describe("configure-ai key entry", () => {
     expect(recorded).not.toContain(secret);
     expect(JSON.stringify(output)).not.toContain("user-scope-key");
   });
+
+  it.skipIf(process.platform === "darwin")(
+    "leaves an existing settings file unchanged after the default first-byte wait",
+    async () => {
+      // Arrange
+      const root = mkdtempSync(path.join(tmpdir(), "codeatlas-key-entry-"));
+      const env = isolatedEnv(root);
+      installFakeKeychain(root, env);
+      const settings = path.join(root, ".codeatlas", "appsettings.json");
+      mkdirSync(path.dirname(settings), { recursive: true });
+      const original = `${JSON.stringify({ logging: { level: "warning" } })}\n`;
+      writeFileSync(settings, original);
+      const before = statSync(settings).mtimeMs;
+      const started = Date.now();
+
+      // Act
+      const result = await runCli(["configure-ai", ...configureArgs], {
+        cwd: root,
+        env,
+        holdStdin: true,
+        timeoutMs: 4_000,
+      });
+
+      // Assert
+      const elapsed = Date.now() - started;
+      expect(elapsed).toBeGreaterThan(1_500);
+      expect(elapsed).toBeLessThan(3_200);
+      expect(result.exitCode).toBe(1);
+      expect(result.stdout).toBe("");
+      expect(JSON.parse(result.stderr)).toMatchObject({
+        success: false,
+        error: {
+          code: "ai_configuration_invalid",
+          message:
+            "An API key is required. Run configure-ai in an interactive terminal or set CODEATLAS_AI_OPENAI_KEY.",
+        },
+      });
+      expect(readFileSync(settings, "utf8")).toBe(original);
+      expect(statSync(settings).mtimeMs).toBe(before);
+    },
+  );
+
+  it.skipIf(process.platform === "darwin")(
+    "saves part1part2 when the first byte arrives before the injected wait and the rest arrives after it",
+    async () => {
+      // Arrange
+      const root = mkdtempSync(path.join(tmpdir(), "codeatlas-key-entry-"));
+      const env = isolatedEnv(root);
+      env.CODEATLAS_STDIN_FIRST_BYTE_TIMEOUT_MS = "800";
+      const state = installFakeKeychain(root, env);
+      const provider = await startOkProvider();
+      const slowEndpoint = `http://127.0.0.1:${provider.port}/v1/chat/completions`;
+      let result: Awaited<ReturnType<typeof runCli>>;
+      try {
+        // Act
+        result = await runCli(
+          ["configure-ai", "--provider", "openai", "--model", "gpt-x", "--endpoint", slowEndpoint],
+          {
+            cwd: root,
+            env,
+            stdinWrites: [
+              { delayMs: 500, text: "part1" },
+              { delayMs: 1_300, text: "part2", end: true },
+            ],
+            timeoutMs: 5_000,
+          },
+        );
+      } finally {
+        await provider.close();
+      }
+
+      // Assert
+      expect(result.exitCode).toBe(0);
+      expect(result.stdout).not.toContain("part1part2");
+      expect(provider.authorizations).toEqual(["Bearer part1part2"]);
+      expect(readFileSync(path.join(state, "stdin"), "utf8")).toBe("part1part2");
+      expect(readFileSync(path.join(state, "args"), "utf8")).not.toContain("part1part2");
+    },
+  );
+
+  it.skipIf(process.platform === "darwin")(
+    "rejects a first byte that arrives after the injected wait and saves nothing",
+    async () => {
+      // Arrange
+      const root = mkdtempSync(path.join(tmpdir(), "codeatlas-key-entry-"));
+      const env = isolatedEnv(root);
+      env.CODEATLAS_STDIN_FIRST_BYTE_TIMEOUT_MS = "400";
+      const state = installFakeKeychain(root, env);
+      const started = Date.now();
+
+      // Act
+      const result = await runCli(["configure-ai", ...configureArgs], {
+        cwd: root,
+        env,
+        stdinWrites: [{ delayMs: 2_500, text: "latekey", end: true }],
+        timeoutMs: 4_000,
+      });
+
+      // Assert
+      expect(Date.now() - started).toBeLessThan(2_000);
+      expect(result.exitCode).toBe(1);
+      expect(result.stdout).toBe("");
+      expect(JSON.parse(result.stderr)).toMatchObject({
+        error: {
+          code: "ai_configuration_invalid",
+          message:
+            "An API key is required. Run configure-ai in an interactive terminal or set CODEATLAS_AI_OPENAI_KEY.",
+        },
+      });
+      expect(result.stderr).not.toContain("latekey");
+      expect(existsSync(path.join(root, ".codeatlas", "appsettings.json"))).toBe(false);
+      expect(existsSync(path.join(state, "stdin"))).toBe(false);
+    },
+  );
+
+  it.skipIf(process.platform === "darwin")(
+    "stores a piped key without its trailing CRLF",
+    async () => {
+      // Arrange
+      const root = mkdtempSync(path.join(tmpdir(), "codeatlas-key-entry-"));
+      const env = isolatedEnv(root);
+      const state = installFakeKeychain(root, env);
+      const provider = await startOkProvider();
+      const slowEndpoint = `http://127.0.0.1:${provider.port}/v1/chat/completions`;
+      const piped = "sk-crlf-key\r\n";
+      let result: Awaited<ReturnType<typeof runCli>>;
+      try {
+        // Act
+        result = await runCli(
+          ["configure-ai", "--provider", "openai", "--model", "gpt-x", "--endpoint", slowEndpoint],
+          { cwd: root, env, stdin: piped, timeoutMs: 4_000 },
+        );
+      } finally {
+        await provider.close();
+      }
+
+      // Assert
+      expect(result.exitCode).toBe(0);
+      expect(result.stdout).not.toContain("sk-crlf-key");
+      expect(result.stderr).not.toContain("sk-crlf-key");
+      expect(provider.authorizations).toEqual(["Bearer sk-crlf-key"]);
+      expect(readFileSync(path.join(state, "stdin"), "utf8")).toBe("sk-crlf-key");
+      expect(readFileSync(path.join(state, "args"), "utf8")).not.toContain("sk-crlf-key");
+      expect(readFileSync(path.join(root, ".codeatlas", "appsettings.json"), "utf8")).not.toContain(
+        "sk-crlf-key",
+      );
+    },
+  );
+
+  it.skipIf(process.platform === "darwin")(
+    "treats a newline-only pipe as no key and does not wait out a long first-byte timeout",
+    async () => {
+      // Arrange
+      const root = mkdtempSync(path.join(tmpdir(), "codeatlas-key-entry-"));
+      const env = isolatedEnv(root);
+      env.CODEATLAS_STDIN_FIRST_BYTE_TIMEOUT_MS = "10000";
+      const state = installFakeKeychain(root, env);
+      const started = Date.now();
+
+      // Act
+      const result = await runCli(["configure-ai", ...configureArgs], {
+        cwd: root,
+        env,
+        stdin: "\n",
+        timeoutMs: 3_000,
+      });
+
+      // Assert
+      expect(Date.now() - started).toBeLessThan(1_500);
+      expect(result.exitCode).toBe(1);
+      expect(JSON.parse(result.stderr)).toMatchObject({
+        error: {
+          code: "ai_configuration_invalid",
+          message:
+            "An API key is required. Run configure-ai in an interactive terminal or set CODEATLAS_AI_OPENAI_KEY.",
+        },
+      });
+      expect(existsSync(path.join(root, ".codeatlas", "appsettings.json"))).toBe(false);
+      expect(existsSync(path.join(state, "stdin"))).toBe(false);
+    },
+  );
+
+  it.skipIf(process.platform === "darwin")(
+    "does not save a whitespace-only piped key",
+    async () => {
+      // Arrange
+      const root = mkdtempSync(path.join(tmpdir(), "codeatlas-key-entry-"));
+      const env = isolatedEnv(root);
+      const state = installFakeKeychain(root, env);
+      const started = Date.now();
+
+      // Act
+      const result = await runCli(["configure-ai", ...configureArgs], {
+        cwd: root,
+        env,
+        stdin: "   \n",
+        timeoutMs: 3_000,
+      });
+
+      // Assert
+      expect(Date.now() - started).toBeLessThan(1_500);
+      expect(result.exitCode).toBe(1);
+      expect(JSON.parse(result.stderr)).toMatchObject({
+        error: {
+          code: "ai_configuration_invalid",
+          message:
+            "AI requires a model and a valid cloud-provider key; its endpoint must use HTTPS (HTTP is allowed only for loopback). Ollama needs no key.",
+        },
+      });
+      expect(existsSync(path.join(root, ".codeatlas", "appsettings.json"))).toBe(false);
+      expect(existsSync(path.join(state, "stdin"))).toBe(false);
+    },
+  );
+
+  it.skipIf(process.platform === "darwin")(
+    "discards a partial key when stdin resets after the first byte",
+    async () => {
+      // Arrange
+      const root = mkdtempSync(path.join(tmpdir(), "codeatlas-key-entry-"));
+      const env = isolatedEnv(root);
+      const state = installFakeKeychain(root, env);
+      const provider = await startOkProvider();
+      const slowEndpoint = `http://127.0.0.1:${provider.port}/v1/chat/completions`;
+      const cli = path.join(packageRoot, "dist", "cli.js");
+      let result: { code: number | null; stdout: string; stderr: string };
+      try {
+        // Act
+        result = await stdinResetAfterPartial(root, cliEnv(env), cli, slowEndpoint);
+      } finally {
+        await provider.close();
+      }
+
+      // Assert
+      expect(result.code).toBe(1);
+      expect(result.stdout).toBe("");
+      expect(JSON.parse(result.stderr)).toMatchObject({
+        error: {
+          code: "ai_configuration_invalid",
+          message:
+            "An API key is required. Run configure-ai in an interactive terminal or set CODEATLAS_AI_OPENAI_KEY.",
+        },
+      });
+      expect(result.stderr).not.toContain("part1");
+      expect(provider.authorizations).toEqual([]);
+      expect(existsSync(path.join(root, ".codeatlas", "appsettings.json"))).toBe(false);
+      expect(existsSync(path.join(state, "stdin"))).toBe(false);
+    },
+  );
 });
+
+function cliEnv(source: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
+  const env: NodeJS.ProcessEnv = { ...source };
+  if (process.platform !== "win32") return env;
+  const real = process.env.SystemRoot ?? process.env.SYSTEMROOT;
+  const requested = env.SystemRoot ?? env.SYSTEMROOT;
+  if (real === undefined || requested === undefined) return env;
+  if (path.normalize(real) === path.normalize(requested)) return env;
+  env.CODEATLAS_FAKE_SYSTEM_ROOT = requested;
+  env.SystemRoot = real;
+  env.SYSTEMROOT = real;
+  const preload = path
+    .join(packageRoot, "tests", "support", "win-system-root.cjs")
+    .replace(/\\/g, "/");
+  const requirement = `--require "${preload}"`;
+  const existing = env.NODE_OPTIONS ?? "";
+  env.NODE_OPTIONS = existing.length === 0 ? requirement : `${existing} ${requirement}`;
+  return env;
+}
+
+function stdinResetAfterPartial(
+  root: string,
+  env: NodeJS.ProcessEnv,
+  cli: string,
+  endpointUrl: string,
+): Promise<{ code: number | null; stdout: string; stderr: string }> {
+  return new Promise((resolve, reject) => {
+    const server = net.createServer((socket) => {
+      socket.write("part1");
+      setTimeout(() => {
+        socket.resetAndDestroy();
+      }, 400);
+    });
+    server.once("error", reject);
+    server.listen(0, "127.0.0.1", () => {
+      const address = server.address();
+      if (address === null || typeof address === "string") {
+        reject(new Error("The reset socket did not bind."));
+        return;
+      }
+      const client = net.connect(address.port, "127.0.0.1", () => {
+        client.pause();
+        const child = spawn(
+          process.execPath,
+          [
+            cli,
+            "configure-ai",
+            "--provider",
+            "openai",
+            "--model",
+            "gpt-x",
+            "--endpoint",
+            endpointUrl,
+          ],
+          { cwd: root, env, stdio: [client, "pipe", "pipe"] },
+        );
+        let stdout = "";
+        let stderr = "";
+        child.stdout.on("data", (chunk: Buffer) => {
+          stdout += chunk.toString("utf8");
+        });
+        child.stderr.on("data", (chunk: Buffer) => {
+          stderr += chunk.toString("utf8");
+        });
+        const timer = setTimeout(() => {
+          child.kill();
+        }, 4_000);
+        child.on("close", (code) => {
+          clearTimeout(timer);
+          client.destroy();
+          server.close();
+          resolve({ code, stdout, stderr });
+        });
+      });
+      client.on("error", reject);
+    });
+  });
+}
 
 function controllableTty(): {
   stdin: SecretInput;

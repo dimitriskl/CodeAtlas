@@ -17,7 +17,7 @@ User stories: 36, 37, 38, 60. PRD: [Modules](../prd/0001-initial.md#modules) (pr
 
 - [01 — Scaffold package, CI and MCP server skeleton](01-scaffold-package-ci-mcp-skeleton.md)
 
-Status: in-test
+Status: in-qa
 
 ## Acceptance criteria
 
@@ -112,3 +112,8 @@ Status: in-test
   3. After the first byte, the pipe is read through EOF, so a pause between `part1` and `part2` stores `part1part2`. A short idle cutoff is not applied after the first byte.
   4. Closed or empty stdin fails at once with the same interactive-terminal message and writes no settings, even when the first-byte wait is longer than the harness timeout.
   5. A stdin error after the first byte is no key (that message, no settings). The test-only wait is clamped to 2147483647 so a larger value cannot print TimeoutOverflowWarning.
+- 2026-10-29 Tester PASS, attempt 3. HEAD tested `11ca1de` (`11ca1de060bd4b02cd229141593eec99868e0f03`). Ancestors include `273bacd` and `8af3f1a`. CI run [40862556009](https://github.com/dimitriskl/CodeAtlas/actions/runs/40862556009) is green on that SHA. Node v24.22.1. `npm ci`, `npm run lint`, `npm run typecheck`, and `npm test` passed, 161/161, before the new tests. After them: 168/168. `npm pack --dry-run`: 43 files, package 29.4 kB, unpacked 117.0 kB, shasum `62b2349be68bc0d1c723a4932922f9663411c484`. The three tests from `273bacd` are unchanged and passed: `fails without waiting when a keychain exists and the stdin pipe stays open` (2235 ms), `saves settings when no keychain and the stdin pipe stays open`, and `reads part1part2 when the pipe pauses a second between writes` (2052 ms).
+
+  Live `node dist/cli.js` with a fake `secret-tool`: an open pipe and a keychain exits 1 at 2227 ms, envelope `ai_configuration_invalid`, and does not create or change `.codeatlas/appsettings.json` (sha256 and mtime unchanged). `CODEATLAS_STDIN_FIRST_BYTE_TIMEOUT_MS=300` exits 1 at 520 ms; `0` falls back to 2224 ms. A first byte at 1700 ms then `part2` saves `part1part2`; a first byte at 2800 ms exits 1 at 2225 ms with no key and no settings. `(printf part1; sleep 1; printf part2)` saves `part1part2`. `printf key |` saves the key. `printf 'key\n'` and `printf 'key\r\n'` save the key without the line ending. A newline-only pipe exits 1 in 217 ms and saves nothing. Closed stdin, empty stdin, an empty file, and `</dev/null` exit 1 in about 210 ms and save no key. A socket reset after `part1` (`ECONNRESET`) exits 1, writes no settings, and stores no key. No keychain: `</dev/null`, a closed pipe, an open pipe, `script -qec`, and a Python PTY all exit 1 in under 260 ms, name `CODEATLAS_AI_OPENAI_KEY`, write provider, model, and endpoint, and do not prompt. Python PTY with a keychain stays alive at the hidden prompt (not exit 13), does not echo `sk-pty-hidden-7f3a`, saves that key, and exits 0. Ctrl+C on that PTY exits 1 with `An API key is required. Set CODEATLAS_AI_OPENAI_KEY.` and saves nothing. PowerShell and `reg.exe` are absolute System32 paths, `shell: false`, and `rg CredentialStoreError src` is empty. Invalid arguments exit 2 through the same `CommandError`. Exit code 3 stays on task 18 (`describe` against a stale index); PR #4 is unmerged and says that seam was deferred. Success and error envelopes are `configureAiSuccessEnvelope` and `commandErrorEnvelope`.
+
+  Non-blocking: a whitespace-only pipe (`   \n`) exits 1 immediately and saves nothing, with the shared endpoint message rather than the missing-key sentence.
