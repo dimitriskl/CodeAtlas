@@ -3,6 +3,7 @@ import { existsSync, readFileSync, readdirSync, realpathSync } from "node:fs";
 import path from "node:path";
 import ts from "typescript";
 import { CommandError, workspaceNotFoundMessage } from "./errors.js";
+import { indexSourceFile, type SourceSymbolKind } from "./symbols.js";
 import {
   changedTrackedFiles,
   workspaceStorage,
@@ -25,21 +26,22 @@ export type TrackedFile = {
   sha256: string;
 };
 
-export type ClassSymbol = {
+export type IndexedSymbol = {
   id: string;
   project: string;
   path: string;
   qualifiedName: string;
-  kind: "class";
+  kind: SourceSymbolKind;
   line: number;
   column: number;
+  signatures: string[];
 };
 
 export type LoadedWorkspace = WorkspaceStorage & {
   templateCoverage: TemplateCoverage;
   projects: ProjectRecord[];
   files: TrackedFile[];
-  symbols: ClassSymbol[];
+  symbols: IndexedSymbol[];
 };
 
 export function loadWorkspace(workspacePath: string): LoadedWorkspace {
@@ -68,7 +70,7 @@ export function loadWorkspace(workspacePath: string): LoadedWorkspace {
   }
 
   const projects: ProjectRecord[] = [];
-  const symbols: ClassSymbol[] = [];
+  const symbols: IndexedSymbol[] = [];
   for (const [name, value] of Object.entries(angular.projects)) {
     if (!isRecord(value)) {
       throw new CommandError(
@@ -78,10 +80,15 @@ export function loadWorkspace(workspacePath: string): LoadedWorkspace {
     }
     const project = readProject(name, value);
     projects.push(project);
-    const tsconfig = resolveTsConfig(storage.canonical, value);
-    if (tsconfig === undefined) continue;
-    track(files, storage.canonical, tsconfig);
-    symbols.push(...classesInProject(storage.canonical, project.name, tsconfig, files));
+    const indexedPaths = new Set<string>();
+    for (const target of ["build", "test"] as const) {
+      const tsconfig = resolveTsConfig(storage.canonical, value, target);
+      if (tsconfig === undefined) continue;
+      track(files, storage.canonical, tsconfig);
+      symbols.push(
+        ...symbolsInProject(storage.canonical, project.name, tsconfig, files, indexedPaths),
+      );
+    }
   }
 
   return {
@@ -93,12 +100,13 @@ export function loadWorkspace(workspacePath: string): LoadedWorkspace {
   };
 }
 
-function classesInProject(
+function symbolsInProject(
   canonical: string,
   project: string,
   tsconfigPath: string,
   files: Map<string, string>,
-): ClassSymbol[] {
+  indexedPaths: Set<string>,
+): IndexedSymbol[] {
   const config = ts.readConfigFile(tsconfigPath, ts.sys.readFile);
   if (config.error !== undefined) {
     throw new CommandError(
@@ -108,7 +116,7 @@ function classesInProject(
   }
   const parsed = ts.parseJsonConfigFileContent(config.config, ts.sys, path.dirname(tsconfigPath));
   const program = ts.createProgram({ rootNames: parsed.fileNames, options: parsed.options });
-  const symbols: ClassSymbol[] = [];
+  const symbols: IndexedSymbol[] = [];
   for (const sourceFile of program.getSourceFiles()) {
     if (sourceFile.isDeclarationFile) continue;
     let sourcePath: string;
@@ -120,28 +128,30 @@ function classesInProject(
     const relative = workspacePathOf(canonical, sourcePath);
     if (relative === null || relative.split("/").includes("node_modules")) continue;
     track(files, canonical, sourcePath);
-    for (const statement of sourceFile.statements) {
-      if (!ts.isClassDeclaration(statement) || statement.name === undefined) continue;
-      const position = sourceFile.getLineAndCharacterOfPosition(
-        statement.name.getStart(sourceFile, false),
-      );
-      const qualifiedName = statement.name.text;
+    if (indexedPaths.has(relative)) continue;
+    indexedPaths.add(relative);
+    for (const declaration of indexSourceFile(sourceFile)) {
       symbols.push({
-        id: `${project}::${relative}#${qualifiedName}`,
+        id: `${project}::${relative}#${declaration.qualifiedName}`,
         project,
         path: relative,
-        qualifiedName,
-        kind: "class",
-        line: position.line + 1,
-        column: position.character + 1,
+        qualifiedName: declaration.qualifiedName,
+        kind: declaration.kind,
+        line: declaration.line,
+        column: declaration.column,
+        signatures: declaration.signatures,
       });
     }
   }
   return symbols;
 }
 
-function resolveTsConfig(canonical: string, raw: Record<string, unknown>): string | undefined {
-  const configured = readTsConfigOption(raw);
+function resolveTsConfig(
+  canonical: string,
+  raw: Record<string, unknown>,
+  target: "build" | "test",
+): string | undefined {
+  const configured = readTsConfigOption(raw, target);
   if (configured !== undefined) {
     const relative = normalizeRelative(configured);
     const absolute = path.join(canonical, ...relative.split("/").filter((part) => part.length > 0));
@@ -150,22 +160,26 @@ function resolveTsConfig(canonical: string, raw: Record<string, unknown>): strin
     }
     return absolute;
   }
+  if (target !== "build") return undefined;
   const fallback = path.join(canonical, "tsconfig.json");
   return existsSync(fallback) ? fallback : undefined;
 }
 
-function readTsConfigOption(project: Record<string, unknown>): string | undefined {
+function readTsConfigOption(
+  project: Record<string, unknown>,
+  target: "build" | "test",
+): string | undefined {
   const architect = project.architect;
   if (architect === undefined) return undefined;
   if (!isRecord(architect)) {
     throw new CommandError("analysis_failed", "angular.json build options are invalid.");
   }
-  const build = architect.build;
-  if (build === undefined) return undefined;
-  if (!isRecord(build)) {
+  const section = architect[target];
+  if (section === undefined) return undefined;
+  if (!isRecord(section)) {
     throw new CommandError("analysis_failed", "angular.json build options are invalid.");
   }
-  const options = build.options;
+  const options = section.options;
   if (options === undefined) return undefined;
   if (!isRecord(options)) {
     throw new CommandError("analysis_failed", "angular.json build options are invalid.");
