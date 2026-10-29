@@ -337,7 +337,10 @@ public sealed class SnapshotInputModelTests : IDisposable
         {
             ["BUILD_FLAVOR"] = "Debug", ["PWD"] = @"C:\indexing-shell", ["OLDPWD"] = @"C:\old", ["CODEX_TOOL_CALL_ID"] = "index-call"
         };
-        var manifest = await SnapshotInputModel.CaptureAsync([], [], [], indexing, CompleteEvidence, relevantEnvironment: ["build_flavor"]);
+        var referencedFlavor = SnapshotInputModel.PathComparer.Equals("build_flavor", "BUILD_FLAVOR")
+            ? "build_flavor"
+            : "BUILD_FLAVOR";
+        var manifest = await SnapshotInputModel.CaptureAsync([], [], [], indexing, CompleteEvidence, relevantEnvironment: [referencedFlavor]);
         var query = new Dictionary<string, string>(SnapshotInputModel.PathComparer)
         {
             ["BUILD_FLAVOR"] = "Debug", ["PWD"] = @"C:\query-shell", ["OLDPWD"] = @"C:\other", ["CODEX_TOOL_CALL_ID"] = "query-call"
