@@ -2,6 +2,7 @@ import { coverageForGeneration, staticCoverage } from "./coverage.js";
 import {
   findSymbolEnvelope,
   commandErrorEnvelope,
+  staleIndexError,
   trackedFreshness,
   unknownFreshness,
   type ErrorEnvelope,
@@ -75,6 +76,13 @@ function queryFindSymbol(args: FindSymbolArguments): FindSymbolEnvelope {
       coverage: staticCoverage(),
     });
   }
+  if (published.status.changedFiles.length > 0) {
+    throw staleIndexError({
+      changedFiles: published.status.changedFiles,
+      warnings: published.status.warnings,
+      templateCoverage: published.status.templateCoverage,
+    });
+  }
 
   const matches = published.symbols
     .filter((symbol) => nameMatches(symbol, args.name))
@@ -85,7 +93,11 @@ function queryFindSymbol(args: FindSymbolArguments): FindSymbolEnvelope {
   return findSymbolEnvelope({
     symbols,
     pagination: page(offset, limit, symbols.length, matches.length, published.status.generationId),
-    freshness: trackedFreshness(published.status.changedFiles),
+    freshness: trackedFreshness(
+      published.status.changedFiles,
+      undefined,
+      published.status.warnings,
+    ),
     coverage: coverageForGeneration(published.status.templateCoverage),
   });
 }

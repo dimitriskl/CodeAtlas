@@ -263,7 +263,7 @@ export function findSymbolEnvelope(input: {
     command: "find_symbol",
     success: true,
     responseToolVersion: appVersion,
-    warningCount: 0,
+    warningCount: input.freshness.diagnostics.length,
     freshness: input.freshness,
     coverage: input.coverage,
     pagination: input.pagination,

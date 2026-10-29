@@ -120,6 +120,41 @@ function installLeftpad(workspacePath: string): { jsFile: string; tsFile: string
   return { jsFile, tsFile };
 }
 
+function useTestProgram(workspacePath: string): void {
+  const appConfigPath = path.join(workspacePath, "tsconfig.app.json");
+  const appConfig = JSON.parse(readFileSync(appConfigPath, "utf8")) as { exclude?: string[] };
+  appConfig.exclude = ["src/**/*.spec.ts"];
+  writeFileSync(appConfigPath, `${JSON.stringify(appConfig, null, 2)}\n`);
+  mkdirSync(path.join(workspacePath, "cfg"));
+  writeFileSync(
+    path.join(workspacePath, "cfg", "tsconfig.spec.json"),
+    `${JSON.stringify(
+      {
+        compilerOptions: {
+          strict: true,
+          target: "ES2022",
+          module: "ES2022",
+          moduleResolution: "bundler",
+          skipLibCheck: true,
+        },
+        include: ["../src/**/*.spec.ts"],
+      },
+      null,
+      2,
+    )}\n`,
+  );
+  const angularPath = path.join(workspacePath, "angular.json");
+  const angular = JSON.parse(readFileSync(angularPath, "utf8")) as {
+    projects: { shop: { architect: Record<string, unknown> } };
+  };
+  angular.projects.shop.architect.test = {
+    builder: "@angular-devkit/build-angular:karma",
+    options: { tsConfig: "cfg/tsconfig.spec.json" },
+  };
+  writeFileSync(angularPath, `${JSON.stringify(angular, null, 2)}\n`);
+  writeFileSync(path.join(workspacePath, "src", "cart.spec.ts"), "export class CartSpec {}\n");
+}
+
 function setBuildOptions(workspacePath: string, options: Record<string, unknown>): void {
   const angularPath = path.join(workspacePath, "angular.json");
   const angular = JSON.parse(readFileSync(angularPath, "utf8")) as {
@@ -1308,6 +1343,185 @@ describe("MCP freshness and stale refusal", () => {
       expect(envelope.freshness.state).toBe("stale");
       expect(envelope.freshness.isStale).toBe(true);
       expect(envelope.freshness.changedFiles).toEqual(["index.html"]);
+    } finally {
+      await connection.close();
+      await workspace.remove();
+    }
+  });
+
+  it("refuses find_symbol after a TypeScript source changes", async () => {
+    // Arrange
+    const workspace = await copyMinimalWorkspace();
+    await indexWorkspace(workspace.path);
+    writeFileSync(
+      path.join(workspace.path, "src", "cart.ts"),
+      "export class Cart { total = 1; }\n",
+    );
+    const connection = await connectInProcess();
+
+    try {
+      // Act
+      const result = await connection.client.callTool({
+        name: "find_symbol",
+        arguments: { workspace: workspace.path, name: "Cart" },
+      });
+
+      // Assert
+      expect(result.isError).toBe(true);
+      const envelope = toolEnvelope(result);
+      const body = envelope.freshness as { checkedAtUtc: string };
+      expect(body.checkedAtUtc).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/);
+      expect({
+        ...envelope,
+        freshness: { ...body, checkedAtUtc: "TIMESTAMP" },
+      }).toEqual({
+        contractVersion: 1,
+        command: "find_symbol",
+        success: false,
+        responseToolVersion: "0.00.01",
+        warningCount: 0,
+        freshness: freshness({
+          state: "stale",
+          changedFiles: ["src/cart.ts"],
+          diagnostics: [],
+        }),
+        coverage: generationCoverage("complete"),
+        error: {
+          code: "stale_index",
+          message: staleMessage,
+          diagnostics: [],
+        },
+      });
+    } finally {
+      await connection.close();
+      await workspace.remove();
+    }
+  });
+
+  it("returns style warnings from find_symbol and stays fresh", async () => {
+    // Arrange
+    const workspace = await copyMinimalWorkspace();
+    const stylesheet = path.join(workspace.path, "src", "styles.css");
+    writeFileSync(stylesheet, "body { color: black; }\n");
+    setBuildOptions(workspace.path, { styles: ["src/styles.css"] });
+    const generationId = await indexWorkspace(workspace.path);
+    writeFileSync(stylesheet, "body { color: white; }\n");
+    const connection = await connectInProcess();
+
+    try {
+      // Act
+      const result = await connection.client.callTool({
+        name: "find_symbol",
+        arguments: { workspace: workspace.path, name: "Cart" },
+      });
+
+      // Assert
+      expect(result.isError).toBeFalsy();
+      const envelope = toolEnvelope(result);
+      const body = envelope.freshness as { checkedAtUtc: string };
+      expect(body.checkedAtUtc).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/);
+      const symbols = (envelope.result as { symbols: { qualifiedName: string }[] }).symbols;
+      expect(symbols.map((symbol) => symbol.qualifiedName)).toEqual(["Cart"]);
+      expect({
+        ...envelope,
+        freshness: { ...body, checkedAtUtc: "TIMESTAMP" },
+        result: { symbols: ["Cart"] },
+      }).toEqual({
+        contractVersion: 1,
+        command: "find_symbol",
+        success: true,
+        responseToolVersion: "0.00.01",
+        warningCount: 1,
+        freshness: freshness({
+          state: "fresh",
+          changedFiles: [],
+          diagnostics: [styleOrAssetWarning("src/styles.css")],
+        }),
+        coverage: generationCoverage("complete"),
+        pagination: {
+          offset: 0,
+          limit: 100,
+          returned: 1,
+          total: 1,
+          hasMore: false,
+          nextOffset: null,
+          snapshotId: generationId,
+          continuationSupported: true,
+        },
+        result: { symbols: ["Cart"] },
+      });
+    } finally {
+      await connection.close();
+      await workspace.remove();
+    }
+  });
+
+  it("refuses coverage after architect.test.options.tsConfig changes", async () => {
+    // Arrange
+    const workspace = await copyMinimalWorkspace();
+    useTestProgram(workspace.path);
+    await indexWorkspace(workspace.path);
+    const specConfig = path.join(workspace.path, "cfg", "tsconfig.spec.json");
+    const parsed = JSON.parse(readFileSync(specConfig, "utf8")) as {
+      compilerOptions: { target: string };
+    };
+    parsed.compilerOptions.target = "ES2023";
+    writeFileSync(specConfig, `${JSON.stringify(parsed, null, 2)}\n`);
+    const connection = await connectInProcess();
+
+    try {
+      // Act
+      const result = await connection.client.callTool({
+        name: "coverage",
+        arguments: { workspace: workspace.path },
+      });
+
+      // Assert
+      expect(result.isError).toBe(true);
+      const envelope = toolEnvelope(result) as {
+        success: boolean;
+        error: { code: string };
+        freshness: { state: string; changedFiles: string[] };
+      };
+      expect(envelope.success).toBe(false);
+      expect(envelope.error.code).toBe("stale_index");
+      expect(envelope.freshness.state).toBe("stale");
+      expect(envelope.freshness.changedFiles).toEqual(["cfg/tsconfig.spec.json"]);
+    } finally {
+      await connection.close();
+      await workspace.remove();
+    }
+  });
+
+  it("refuses coverage after a test-program file changes", async () => {
+    // Arrange
+    const workspace = await copyMinimalWorkspace();
+    useTestProgram(workspace.path);
+    await indexWorkspace(workspace.path);
+    writeFileSync(
+      path.join(workspace.path, "src", "cart.spec.ts"),
+      "export class CartSpec { total = 1; }\n",
+    );
+    const connection = await connectInProcess();
+
+    try {
+      // Act
+      const result = await connection.client.callTool({
+        name: "coverage",
+        arguments: { workspace: workspace.path },
+      });
+
+      // Assert
+      expect(result.isError).toBe(true);
+      const envelope = toolEnvelope(result) as {
+        success: boolean;
+        error: { code: string };
+        freshness: { state: string; changedFiles: string[] };
+      };
+      expect(envelope.success).toBe(false);
+      expect(envelope.error.code).toBe("stale_index");
+      expect(envelope.freshness.state).toBe("stale");
+      expect(envelope.freshness.changedFiles).toEqual(["src/cart.spec.ts"]);
     } finally {
       await connection.close();
       await workspace.remove();

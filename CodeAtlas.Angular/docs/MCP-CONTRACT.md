@@ -77,7 +77,7 @@ Entries are literal paths, not globs. On an object entry, `input` is the tracked
 
 `changedFiles` is sorted in ascending code-unit order.
 
-`index` and `index_status` report this freshness and do not refuse a stale generation. Every other query refuses one. `coverage` is that query in this edition until later tools exist. The refusal is:
+`index` and `index_status` report this freshness and do not refuse a stale generation. Every other query refuses one. `coverage` and `find_symbol` are those queries in this edition. The refusal is:
 
 - `success` is false
 - `error.code` is `stale_index`
@@ -591,7 +591,7 @@ On success, `command` is `find_symbol`. `result.symbols` is the page. Each symbo
 
 Pagination uses every envelope field. `snapshotId` is the generation id. `continuationSupported` is true whenever a generation is loaded, including when `hasMore` is false. `nextOffset` is `offset + returned` when `hasMore` is true, and null otherwise.
 
-Freshness is computed the same way as `index_status`: the tracked files are hashed again. `find_symbol` reports that state and does not refuse a stale generation. `warningCount` is 0. Coverage is the edition boundary for the loaded generation, with the generation's `templateCoverage` and no `no-index` limitation.
+Freshness is the same check as `coverage`. A stale-making change returns the `stale_index` refusal from Freshness scope. `command` is `find_symbol`. The tool result is an MCP error. There is no `result` and no pagination. When the index is fresh, `warningCount` is the number of style and asset warnings, and `freshness.diagnostics` lists them. Coverage is the edition boundary for the loaded generation, with the generation's `templateCoverage` and no `no-index` limitation.
 
 When the workspace has no published generation, and `snapshotId` was not supplied, the tool still succeeds. `result.symbols` is `[]`. Freshness and coverage are the no-index values. Pagination echoes `offset` and `limit` after defaults, with `returned` 0, `total` 0, `hasMore` false, `nextOffset` null, `snapshotId` null, and `continuationSupported` false. Nothing is written.
 
