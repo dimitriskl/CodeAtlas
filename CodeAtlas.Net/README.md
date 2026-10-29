@@ -93,6 +93,17 @@ Queries return at most 100 results by default; `--limit` accepts 1 through 1000.
 
 The original live queries remain available: replace `--index <index.json>` with `--solution <solution.slnx>` to analyze current source directly.
 
+`live --solution <path.sln>` keeps that solution loaded and reads one JSON object from each stdin line. It writes one JSON object per line to stdout, using the same response envelope as the other commands. A malformed line or an unknown path is an error object (`success: false`) and the process keeps reading. No file watcher is started.
+
+```json
+{"command":"edit","path":"Library/Calculator.cs","text":"full file text"}
+{"command":"find-symbol","name":"Calculate"}
+{"command":"search","query":"calculate total"}
+{"command":"find-references","symbol":"Library/Library.csproj::M:Sample.Calculator.Calculate(System.Int32)"}
+```
+
+`edit` takes `path` and `text` and publishes a new generation. `find-symbol` takes `name` and optional `kind` (`method` by default). `search` takes `query` and optional `mode` and `kind` (defaults `assisted` and `method`, the same as `search-symbols`). `find-references` takes `symbol`. Each answer is read from the current generation.
+
 ## Freshness and agent workflow
 
 Check the snapshot before relying on the overview:

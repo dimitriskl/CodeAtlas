@@ -7,7 +7,7 @@ using Xunit;
 namespace CodeAtlas.Tests;
 
 /// <summary>One file's method and reference rows on a private working copy, compared with a full rebuild.</summary>
-public sealed class SqliteFileUpdateTests
+public sealed partial class SqliteFileUpdateTests
 {
     private const string CalculatorFile = "Library/Calculator.cs";
     private const string Calculate = "Library/Library.csproj::M:Sample.Calculator.Calculate(System.Int32)";

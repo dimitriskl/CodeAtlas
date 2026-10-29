@@ -77,6 +77,8 @@ Those rows come from the loaded workspace after `ApplyDocumentText`, via `FileRo
 
 `LiveIndexSession` keeps that solution loaded. One edit calls `UpdateWorkingCopyAsync` and `PublishWorkingCopyAsync`. Find-references, find-symbol and search read the new current generation. The edited file's type, symbol, fact, search and duplicate rows, and its incremental tree hash, match a full rebuild of that text. A later edit in the same session publishes from the updated hash.
 
+`codeatlas live --solution <path>` is that session as a process. It loads the solution once, then reads one JSON request per stdin line (`edit` with `path` and `text`, `find-symbol`, `search`, `find-references`) and writes one JSON response per line with the existing CLI envelope. It does not start a file watcher.
+
 ## Legacy JSON
 
 - Generations written before 0.00.35 (manifest version 1, `index.json` and `catalog.json`) are still read through the previous full-load path, with its whole-file SHA-256 checks.
@@ -139,5 +141,5 @@ Harness scripts were kept outside the repository (`C:\temp\codeatlas-sqlite`). `
 ## Open items
 
 - Not verified on Linux or macOS: the bundled native library, the system-library fallback and the printed instructions were exercised on Windows only. Unavailability was tested through injected failures.
-- The 0.00.39 same-checkout Jellyfin export matches the 0.00.34 export for projects, types, methods, symbols, the structural catalog, duplicates, warnings, documentation coverage and schema. Of 6,527 reference keys, one differs: `IDirectStreamProvider.GetStream` has 1 reference in the new index and 4 in the 0.00.34 export. The three extra export entries are `ILiveStream.GetStream` call sites. Those call sites are present under `ILiveStream.GetStream` in both indexes, and that key matches. A live `find-references` for `IDirectStreamProvider.GetStream` with the 0.00.34 CLI and the 0.00.39 CLI both return the one direct call. The 160-query suite was not rerun. Documentation models are still held until that stage finishes. The live process and the edit-to-query latency target are still open.
+- The 0.00.39 same-checkout Jellyfin export matches the 0.00.34 export for projects, types, methods, symbols, the structural catalog, duplicates, warnings, documentation coverage and schema. Of 6,527 reference keys, one differs: `IDirectStreamProvider.GetStream` has 1 reference in the new index and 4 in the 0.00.34 export. The three extra export entries are `ILiveStream.GetStream` call sites. Those call sites are present under `ILiveStream.GetStream` in both indexes, and that key matches. A live `find-references` for `IDirectStreamProvider.GetStream` with the 0.00.34 CLI and the 0.00.39 CLI both return the one direct call. The 160-query suite was not rerun. Documentation models are still held until that stage finishes. The live process now serves edit, find-symbol, search and find-references from one loaded session. The edit-to-query latency target is still open.
 - The large private 30-project solution from the PRD was not re-measured. These numbers are for Jellyfin.
