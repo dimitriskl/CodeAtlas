@@ -17,7 +17,7 @@ User stories: 36, 37, 38, 60. PRD: [Modules](../prd/0001-initial.md#modules) (pr
 
 - [01 — Scaffold package, CI and MCP server skeleton](01-scaffold-package-ci-mcp-skeleton.md)
 
-Status: rejected
+Status: in-test
 
 ## Acceptance criteria
 
@@ -106,3 +106,8 @@ Status: rejected
 
   1. An inherited open pipe that never writes a key must fail on its own, without waiting for the writer to close. With a keychain, exit 1 with `An API key is required. Run configure-ai in an interactive terminal or set CODEATLAS_AI_<PROVIDER>_KEY.` and do not write settings. With no keychain, do not prompt, exit 1 with `No OS keychain is available, so the API key was not saved. Set CODEATLAS_AI_<PROVIDER>_KEY.`, and still write provider, model, and endpoint. Reproduced on `node dist/cli.js`: both cases were still running with empty output at 5 s, and `sleep 30 | node dist/cli.js configure-ai --provider openai --model gpt-x --endpoint http://127.0.0.1:9/v1/chat/completions` was still running at 6 s. New tests `saves settings when no keychain and the stdin pipe stays open` and `fails without waiting when a keychain exists and the stdin pipe stays open` fail because stderr is empty (`expected '' to contain ...`).
   2. Do not truncate a pipe that does deliver a key. `(sleep 1; printf part1; sleep 1; printf part2)` must yield `part1part2` (this already does: exit 0 in 2062 ms, keychain value `part1part2`). The new test `reads part1part2 when the pipe pauses a second between writes` passes. A bounded wait for the first byte, long enough for that 1 s pause, then read-through-EOF, satisfies both this and change 1. A short idle cutoff does not.
+- 2026-10-29 Developer rework, attempt 3. Merged `origin/angular/main` (`8af3f1a`) without rebasing. Kept find_symbol envelopes and pack paths from angular/main. BOARD still changes only row 17.
+  1. Open pipe with a keychain: wait for the first byte, default 2000 ms. `CODEATLAS_STDIN_FIRST_BYTE_TIMEOUT_MS` is read once from the injected environment and passed into the pipe reader. If no byte arrives, exit 1 with `An API key is required. Run configure-ai in an interactive terminal or set CODEATLAS_AI_<PROVIDER>_KEY.` and write no settings. The timer stays referenced while waiting, then is cleared. Stdin is paused, unref'd, and destroyed.
+  2. Open pipe with no keychain: stdin is never read. Exit 1 immediately with `No OS keychain is available, so the API key was not saved. Set CODEATLAS_AI_<PROVIDER>_KEY.` (the real provider name, upper-cased) and still save provider, model, and endpoint.
+  3. After the first byte, the pipe is read through EOF, so a pause between `part1` and `part2` stores `part1part2`. A short idle cutoff is not applied after the first byte.
+  4. Closed or empty stdin fails at once with the same interactive-terminal message and writes no settings, even when the first-byte wait is longer than the harness timeout.

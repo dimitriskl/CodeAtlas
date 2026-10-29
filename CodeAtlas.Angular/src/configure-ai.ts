@@ -149,7 +149,13 @@ export async function runConfigureAi(
       key = found.value;
       location = found.location;
     } else {
-      const typed = await resolveMissingKey(variable, keychain, stdin, stderr);
+      const typed = await resolveMissingKey(
+        variable,
+        keychain,
+        stdin,
+        stderr,
+        stdinFirstByteTimeoutMs(env),
+      );
       if (typed === null || typed.length === 0) {
         if (!keychain.isAvailable()) {
           saveAiSettings(settingsPath, selected);
@@ -204,20 +210,27 @@ function noKeychainMessage(variable: string): string {
 
 /**
  * A missing key is prompted only when it can be saved and stdin is a terminal.
- * A pipe or file is read through EOF. An open terminal is never waited on here.
+ * With no keychain, stdin is not read. A pipe waits for the first byte, then
+ * reads through EOF. Closed or empty stdin fails at once.
  */
 async function resolveMissingKey(
   variable: string,
   keychain: Keychain,
   stdin: SecretInput,
   stderr: NodeJS.WritableStream,
+  firstByteTimeoutMs: number,
 ): Promise<string | null> {
-  if (!keychain.isAvailable()) {
-    if (stdin.isTTY === true) return null;
-    return readPipedKey(stdin);
-  }
+  if (!keychain.isAvailable()) return null;
   if (stdin.isTTY === true) return readSecret(variable, stdin, stderr);
-  return readPipedKey(stdin);
+  return readPipedKey(stdin, firstByteTimeoutMs);
+}
+
+/** The only read of CODEATLAS_STDIN_FIRST_BYTE_TIMEOUT_MS. Unset or invalid stays 2000. */
+function stdinFirstByteTimeoutMs(env: NodeJS.ProcessEnv): number {
+  const raw = env.CODEATLAS_STDIN_FIRST_BYTE_TIMEOUT_MS;
+  if (typeof raw !== "string" || !/^\d+$/.test(raw.trim())) return 2_000;
+  const value = Number(raw.trim());
+  return Number.isSafeInteger(value) ? value : 2_000;
 }
 
 function selectPreferences(
@@ -365,7 +378,10 @@ function windowsRegExecutable(env: NodeJS.ProcessEnv): string | null {
   return path.isAbsolute(executable) ? executable : null;
 }
 
-async function readPipedKey(stdin: SecretInput): Promise<string | null> {
+async function readPipedKey(
+  stdin: SecretInput,
+  firstByteTimeoutMs: number,
+): Promise<string | null> {
   if (stdin.isTTY === true) return null;
   const fd = stdin.fd;
   if (fd === undefined) return null;
@@ -384,45 +400,82 @@ async function readPipedKey(stdin: SecretInput): Promise<string | null> {
       return null;
     }
   }
-  // Read a pipe through EOF. A short timer would cut a slow writer off mid-key.
-  // An already-closed empty pipe ends immediately, so a missing key does not wait.
+  // Wait for the first byte, then read through EOF. The timer stays referenced so the
+  // process does not exit before it fires. An already-closed pipe ends immediately.
   stdin.ref?.();
   stdin.setEncoding("utf8");
   return new Promise((resolve) => {
     let settled = false;
     let data = "";
+    let sawByte = false;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const cleanup = () => {
+      if (timer !== undefined) {
+        clearTimeout(timer);
+        timer = undefined;
+      }
+      stdin.off("readable", onReadable);
+      stdin.off("end", onEnd);
+      stdin.off("close", onEnd);
+      stdin.off("error", onError);
+      stdin.on("error", () => {});
+      try {
+        stdin.pause();
+      } catch {
+        // The pipe can already be closed.
+      }
+      stdin.unref?.();
+      try {
+        stdin.destroy();
+      } catch {
+        // Windows can reject destroy on a stdin that has already ended.
+      }
+    };
     const finish = (value: string | null) => {
       if (settled) return;
       settled = true;
-      stdin.off("readable", onReadable);
-      stdin.off("end", onEnd);
-      stdin.pause();
-      stdin.unref?.();
+      cleanup();
       resolve(value);
     };
-    const take = (): boolean => {
-      let chunk = stdin.read() as string | null;
+    const absorb = () => {
+      let chunk = stdin.read() as string | Buffer | null;
       while (chunk !== null) {
-        data += chunk;
-        if (data.includes("\n") || data.includes("\r")) {
-          finish(normalizeStreamedKey(data));
-          return true;
-        }
-        chunk = stdin.read() as string | null;
+        const text = typeof chunk === "string" ? chunk : chunk.toString("utf8");
+        if (text.length > 0) sawByte = true;
+        data += text;
+        chunk = stdin.read() as string | Buffer | null;
       }
-      return false;
     };
     const onReadable = () => {
-      take();
+      absorb();
+      if (sawByte && timer !== undefined) {
+        clearTimeout(timer);
+        timer = undefined;
+      }
     };
     const onEnd = () => {
-      take();
+      absorb();
       finish(normalizeStreamedKey(data));
+    };
+    const onError = () => {
+      absorb();
+      finish(sawByte ? normalizeStreamedKey(data) : null);
     };
     stdin.on("readable", onReadable);
     stdin.on("end", onEnd);
-    if (stdin.readableEnded === true) onEnd();
-    else take();
+    stdin.on("close", onEnd);
+    stdin.on("error", onError);
+    if (stdin.readableEnded === true) {
+      onEnd();
+      return;
+    }
+    absorb();
+    // EOF during absorb emits "end" on a later turn, which clears this timer.
+    if (settled || sawByte) return;
+    timer = setTimeout(() => {
+      timer = undefined;
+      if (!sawByte) finish(null);
+    }, firstByteTimeoutMs);
   });
 }
 

@@ -182,6 +182,7 @@ describe("codeatlas-ng configure-ai", () => {
       `export class CartService { total() { return "${canary}"; } }\n`,
     );
     const env = blankCredentialEnv(isolatedEnv(root));
+    env.CODEATLAS_AI_OPENAI_KEY = secret;
     env.PATH = path.join(root, "empty-path");
     env.Path = env.PATH;
     mkdirSync(env.PATH, { recursive: true });
@@ -192,14 +193,14 @@ describe("codeatlas-ng configure-ai", () => {
       // Act
       result = await runCli(
         ["configure-ai", "--provider", "openai", "--model", "test-model", "--endpoint", endpoint],
-        { cwd: root, env, stdin: `${secret}\n` },
+        { cwd: root, env },
       );
     } finally {
       await provider.close();
     }
 
     // Assert
-    expect(result.exitCode).toBe(1);
+    expect(result.exitCode).toBe(0);
     const body = provider.bodies[0] ?? "";
     const sent = JSON.parse(body) as { messages: Array<{ role: string; content: string }> };
     expect(sent.messages).toEqual([
@@ -578,6 +579,7 @@ describe("configure-ai secret handling", () => {
     // Arrange
     const root = mkdtempSync(path.join(tmpdir(), "codeatlas-configure-ai-"));
     const env = blankCredentialEnv(isolatedEnv(root));
+    env.CODEATLAS_AI_OPENAI_KEY = secret;
     env.PATH = path.join(root, "empty-path");
     env.Path = env.PATH;
     mkdirSync(env.PATH, { recursive: true });
@@ -588,7 +590,7 @@ describe("configure-ai secret handling", () => {
       // Act
       result = await runCli(
         ["configure-ai", "--provider", "openai", "--model", "test-model", "--endpoint", endpoint],
-        { cwd: root, env, stdin: `${secret}\n` },
+        { cwd: root, env },
       );
     } finally {
       await provider.close();
@@ -608,6 +610,7 @@ describe("configure-ai secret handling", () => {
     // Arrange
     const root = mkdtempSync(path.join(tmpdir(), "codeatlas-configure-ai-"));
     const env = blankCredentialEnv(isolatedEnv(root));
+    env.CODEATLAS_AI_ANTHROPIC_KEY = secret;
     env.PATH = path.join(root, "empty-path");
     env.Path = env.PATH;
     mkdirSync(env.PATH, { recursive: true });
@@ -628,7 +631,7 @@ describe("configure-ai secret handling", () => {
           "--endpoint",
           endpoint,
         ],
-        { cwd: root, env, stdin: `${secret}\n` },
+        { cwd: root, env },
       );
     } finally {
       await provider.close();
