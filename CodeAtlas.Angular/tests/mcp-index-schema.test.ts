@@ -176,7 +176,7 @@ describe("MCP index schema", () => {
     }
   });
 
-  it("returns invalid_index from find_symbol when a schema 2 index has no symbol_signatures table", async () => {
+  it("returns invalid_index from find_symbol when a schema 3 index has no symbol_signatures table", async () => {
     // Arrange
     const workspace = await indexedSymbolsWorkspace();
     dropSymbolSignatures(workspace.path);
@@ -231,7 +231,7 @@ describe("MCP index schema", () => {
   it("refuses a future schema version with unsupported_index", async () => {
     // Arrange
     const workspace = await indexedSymbolsWorkspace();
-    setManifestSchemaVersion(workspace.path, 3);
+    setManifestSchemaVersion(workspace.path, 4);
     const connection = await connectInProcess();
 
     try {

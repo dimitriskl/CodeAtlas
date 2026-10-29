@@ -11,7 +11,7 @@ Three numbers, kept separate so each can change on its own:
 | Number              | Constant          | Initial value | Meaning                                                                                                |
 | ------------------- | ----------------- | ------------- | ------------------------------------------------------------------------------------------------------ |
 | Contract version    | `contractVersion` | `1`           | Shape of this JSON envelope.                                                                           |
-| Schema version      | `schemaVersion`   | `2`           | Persisted index schema. `index` writes it into each generation.                                        |
+| Schema version      | `schemaVersion`   | `3`           | Persisted index schema. `index` writes it into each generation.                                        |
 | Application version | `appVersion`      | `0.00.01`     | This package. Format `x.xx.xx`. Printed by `codeatlas-ng --version` and sent as `responseToolVersion`. |
 
 `responseToolVersion` is the application version of the process that answered. It is not the contract version and not the schema version.
@@ -287,14 +287,14 @@ Paths stored in the generation are workspace-relative and use `/`. They do not s
 | --------------------------- | ------------------------------------------------ |
 | `manifestVersion`           | `1`                                              |
 | `generationId`              | The published generation.                        |
-| `schemaVersion`             | `2`                                              |
+| `schemaVersion`             | `3`                                              |
 | `workspace`                 | The workspace identity from the naming rules.    |
 | `artifacts.index.db.length` | Byte length of that generation's `index.db`.     |
 | `artifacts.index.db.sha256` | SHA-256 of those bytes, 64 lowercase hex digits. |
 
 Publication writes a new `generations/<generationId>/` directory and its `index.db`, then replaces `current.json` by renaming a temporary file in the same directory. The generation directory is not modified after the pointer names it. Indexing the same workspace again publishes a new generation id, leaves the previous `index.db` bytes unchanged, and keeps the same folder name.
 
-### Schema version 2
+### Schema version 3
 
 `index.db` is SQLite. This version stores:
 
@@ -345,7 +345,7 @@ Other `index` failures:
 | `index_busy`          | 1    | The writer lock is held, as above.                                                                                                                     |
 | `analysis_failed`     | 1    | The workspace could not be indexed, including a `tsConfig` that was named and is missing, or `angular.json` that is not JSON.                          |
 | `invalid_index`       | 1    | `current.json` or `index.db` is present but is not a valid generation of this schema. A missing `symbol_signatures` table is this error.               |
-| `unsupported_index`   | 1    | The generation's `schemaVersion` is not `2`. Message: `Unsupported index schema. Run codeatlas-ng index --workspace <path> to rebuild it.`             |
+| `unsupported_index`   | 1    | The generation's `schemaVersion` is not `3`. Message: `Unsupported index schema. Run codeatlas-ng index --workspace <path> to rebuild it.`             |
 
 `--workspace` defaults to the current directory. A relative path is resolved from there.
 
@@ -358,7 +358,7 @@ Other `index` failures:
 | Field             | Type   | Meaning                                                                  |
 | ----------------- | ------ | ------------------------------------------------------------------------ |
 | `generationId`    | string | The generation just published.                                           |
-| `schemaVersion`   | number | `2`, from the generation.                                                |
+| `schemaVersion`   | number | `3`, from the generation.                                                |
 | `contractVersion` | number | Contract version stored in the generation.                               |
 | `appVersion`      | string | Application version stored in the generation.                            |
 | `counts.projects` | number | Rows in `projects`.                                                      |

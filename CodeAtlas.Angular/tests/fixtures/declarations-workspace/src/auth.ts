@@ -1,4 +1,6 @@
+import { HttpInterceptor, HttpInterceptorFn } from "@angular/common/http";
 import { Injectable } from "@angular/core";
+import { CanActivate, CanActivateFn } from "@angular/router";
 
 @Injectable()
 export class AuthGuard implements CanActivate {

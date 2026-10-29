@@ -1,4 +1,4 @@
-import { Component } from "@angular/core";
+import { Component, input, model, output } from "@angular/core";
 
 @Component({
   selector: "app-signal-panel",

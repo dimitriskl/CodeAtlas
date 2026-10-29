@@ -44,9 +44,8 @@ export function classDeclarationKind(node: ts.ClassDeclaration): ClassSymbolKind
 
 /** `@Input`, `@Output`, or a signal `input()`, `output()`, or `model()` initializer. */
 export function propertyBinding(node: ts.PropertyDeclaration): MemberBinding {
-  const decorators = decoratorNames(node);
-  if (decorators.has("Input")) return { kind: "input", modelOutput: false };
-  if (decorators.has("Output")) return { kind: "output", modelOutput: false };
+  const decorated = inputOrOutput(decoratorNames(node));
+  if (decorated !== undefined) return { kind: decorated, modelOutput: false };
   const signal = signalForm(node.initializer);
   if (signal === "input") return { kind: "input", modelOutput: false };
   if (signal === "output") return { kind: "output", modelOutput: false };
@@ -58,10 +57,13 @@ export function propertyBinding(node: ts.PropertyDeclaration): MemberBinding {
 export function accessorBinding(
   node: ts.GetAccessorDeclaration | ts.SetAccessorDeclaration,
 ): MemberSymbolKind {
-  const decorators = decoratorNames(node);
+  return inputOrOutput(decoratorNames(node)) ?? "property";
+}
+
+function inputOrOutput(decorators: ReadonlySet<string>): "input" | "output" | undefined {
   if (decorators.has("Input")) return "input";
   if (decorators.has("Output")) return "output";
-  return "property";
+  return undefined;
 }
 
 /**
