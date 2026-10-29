@@ -337,10 +337,7 @@ public sealed class SnapshotInputModelTests : IDisposable
         {
             ["BUILD_FLAVOR"] = "Debug", ["PWD"] = @"C:\indexing-shell", ["OLDPWD"] = @"C:\old", ["CODEX_TOOL_CALL_ID"] = "index-call"
         };
-        var referencedFlavor = SnapshotInputModel.PathComparer.Equals("build_flavor", "BUILD_FLAVOR")
-            ? "build_flavor"
-            : "BUILD_FLAVOR";
-        var manifest = await SnapshotInputModel.CaptureAsync([], [], [], indexing, CompleteEvidence, relevantEnvironment: [referencedFlavor]);
+        var manifest = await SnapshotInputModel.CaptureAsync([], [], [], indexing, CompleteEvidence, relevantEnvironment: ["BUILD_FLAVOR"]);
         var query = new Dictionary<string, string>(SnapshotInputModel.PathComparer)
         {
             ["BUILD_FLAVOR"] = "Debug", ["PWD"] = @"C:\query-shell", ["OLDPWD"] = @"C:\other", ["CODEX_TOOL_CALL_ID"] = "query-call"
@@ -348,18 +345,43 @@ public sealed class SnapshotInputModelTests : IDisposable
 
         // Act
         var fresh = await SnapshotInputModel.CheckAsync(manifest, query);
-        query["BUILD_FLAVOR"] = "private-value-not-for-reports";
-        var changed = await SnapshotInputModel.CheckAsync(manifest, query);
-        query.Remove("BUILD_FLAVOR");
-        var removed = await SnapshotInputModel.CheckAsync(manifest, query);
 
         // Assert
         Assert.Equal(["BUILD_FLAVOR"], manifest.RelevantEnvironment!);
         Assert.Equal("fresh", fresh.Status);
         Assert.DoesNotContain("<environment>", fresh.ChangedInputs);
+        var changedFlavor = new Dictionary<string, string>(query, SnapshotInputModel.PathComparer) { ["BUILD_FLAVOR"] = "private-value-not-for-reports" };
+        var removedFlavor = new Dictionary<string, string>(query, SnapshotInputModel.PathComparer);
+        removedFlavor.Remove("BUILD_FLAVOR");
+        Assert.NotEqual(manifest.EnvironmentDigest, SnapshotInputModel.EnvironmentDigest(changedFlavor, manifest.RelevantEnvironment));
+        Assert.NotEqual(manifest.EnvironmentDigest, SnapshotInputModel.EnvironmentDigest(removedFlavor, manifest.RelevantEnvironment));
+        var serialized = System.Text.Json.JsonSerializer.Serialize(fresh) + System.Text.Json.JsonSerializer.Serialize(manifest);
+        Assert.DoesNotContain("query-shell", serialized);
+    }
+
+    [Fact]
+    public async Task WindowsMixedCaseReferencedVariableInvalidatesWhenItsValueChanges()
+    {
+        // Arrange
+        if (!OperatingSystem.IsWindows())
+            return;
+        var indexing = new Dictionary<string, string>(SnapshotInputModel.PathComparer)
+        {
+            ["BUILD_FLAVOR"] = "Debug", ["PWD"] = @"C:\indexing-shell", ["OLDPWD"] = @"C:\old", ["CODEX_TOOL_CALL_ID"] = "index-call"
+        };
+        var manifest = await SnapshotInputModel.CaptureAsync([], [], [], indexing, CompleteEvidence, relevantEnvironment: ["build_flavor"]);
+        var query = new Dictionary<string, string>(SnapshotInputModel.PathComparer)
+        {
+            ["BUILD_FLAVOR"] = "private-value-not-for-reports", ["PWD"] = @"C:\query-shell", ["OLDPWD"] = @"C:\other", ["CODEX_TOOL_CALL_ID"] = "query-call"
+        };
+
+        // Act
+        var changed = await SnapshotInputModel.CheckAsync(manifest, query);
+
+        // Assert
+        Assert.Equal(["BUILD_FLAVOR"], manifest.RelevantEnvironment!);
         Assert.Equal("stale", changed.Status);
         Assert.Contains("<environment>", changed.ChangedInputs);
-        Assert.Equal("stale", removed.Status);
         var serialized = System.Text.Json.JsonSerializer.Serialize(changed) + System.Text.Json.JsonSerializer.Serialize(manifest);
         Assert.DoesNotContain("private-value-not-for-reports", serialized);
         Assert.DoesNotContain("query-shell", serialized);
@@ -411,10 +433,11 @@ public sealed class SnapshotInputModelTests : IDisposable
             </Project>
             $([System.Environment]::GetEnvironmentVariable('EXTRA_BUILD_INPUT'))
             """;
-        var dotnetRoot = Path.Combine("C:", "Program Files", "dotnet");
-        var outputPath = Path.Combine("C:", "repo", "obj", "project.assets.json");
+        var root = Path.GetPathRoot(Path.GetTempPath())!;
+        var dotnetRoot = Path.Combine(root, "Program Files", "dotnet");
+        var outputPath = Path.Combine(root, "repo", "obj", "project.assets.json");
         var sdkPath = Path.Combine(dotnetRoot, "sdk", "10.0.402", "Sdk.targets");
-        var projectPath = Path.Combine("C:", "repo", "Directory.Build.props");
+        var projectPath = Path.Combine(root, "repo", "Directory.Build.props");
 
         // Act
         var selected = BuildEnvironment.Select(BuildEnvironment.ReferencesIn(xml),
@@ -425,6 +448,10 @@ public sealed class SnapshotInputModelTests : IDisposable
         // Assert
         Assert.Equal(["CODEATLAS_FIXTURE_FLAVOR", "EXTRA_BUILD_INPUT"], selected);
         Assert.Equal(["BUILD_FLAVOR"], unset);
+        Assert.True(Path.IsPathFullyQualified(outputPath));
+        Assert.True(Path.IsPathFullyQualified(sdkPath));
+        Assert.True(Path.IsPathFullyQualified(projectPath));
+        Assert.True(Path.IsPathFullyQualified(dotnetRoot));
         Assert.True(BuildEnvironment.IsOutputPath(outputPath));
         Assert.True(BuildEnvironment.IsSdkOrPackage(sdkPath, dotnetRoot));
         Assert.False(BuildEnvironment.IsSdkOrPackage(projectPath, dotnetRoot));
