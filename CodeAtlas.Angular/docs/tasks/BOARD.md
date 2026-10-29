@@ -22,7 +22,7 @@ Can start now (no blockers): 01. After 01 is done, 02 and 17 can start.
 | 14 | [search_symbols names mode and abstention](14-search-symbols-names-abstention.md) | 05, 12 | ready |
 | 15 | [Full refresh, publish only on change, retention](15-refresh-retention.md) | 04 | ready |
 | 16 | [Workspace and version gate, final error set](16-workspace-version-gate-errors.md) | 07 | ready |
-| 17 | [configure-ai and the shared credential resolver](17-configure-ai-credentials.md) | 01 | ready |
+| 17 | [configure-ai and the shared credential resolver](17-configure-ai-credentials.md) | 01 | done-awaiting-merge |
 | 18 | [describe with claims and evidence](18-describe-claims-evidence.md) | 05, 17 | ready |
 | 19 | [Descriptions survive refresh](19-descriptions-survive-refresh.md) | 15, 18 | ready |
 | 20 | [search_symbols assisted mode](20-search-symbols-assisted.md) | 14, 19 | ready |

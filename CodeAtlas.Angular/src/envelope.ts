@@ -217,6 +217,59 @@ export function indexStatusEmptyEnvelope(now: Date = new Date()): IndexSuccessEn
   };
 }
 
+export type ConfigureAiSuccessEnvelope = {
+  ai: "enabled";
+  connection: "tested";
+  provider: string;
+  model: string;
+  effort: string | null;
+  endpoint: string;
+  settings: string;
+  credentialEnvironmentVariable: string | null;
+  credentialStore: string | null;
+  credentialWarning: null;
+  message: string;
+  contractVersion: number;
+  command: "configure-ai";
+  success: true;
+  responseToolVersion: string;
+  warningCount: number;
+  freshness: null;
+  coverage: null;
+};
+
+/** configure-ai success. Freshness and coverage stay null; no project source was sent. */
+export function configureAiSuccessEnvelope(result: {
+  provider: string;
+  model: string;
+  effort: string | null;
+  endpoint: string;
+  settings: string;
+  credentialEnvironmentVariable: string | null;
+  credentialStore: string | null;
+}): ConfigureAiSuccessEnvelope {
+  return {
+    ai: "enabled",
+    connection: "tested",
+    provider: result.provider,
+    model: result.model,
+    effort: result.effort,
+    endpoint: result.endpoint,
+    settings: result.settings,
+    credentialEnvironmentVariable: result.credentialEnvironmentVariable,
+    credentialStore: result.credentialStore,
+    credentialWarning: null,
+    message: "Connection passed and options saved. No project source was sent.",
+    contractVersion,
+    command: "configure-ai",
+    success: true,
+    responseToolVersion: appVersion,
+    warningCount: 0,
+    freshness: null,
+    coverage: null,
+  };
+}
+
 /** Coverage of a loaded generation. `snapshotId` is that generation; the page itself stays empty. */
 export function indexedCoverageEnvelope(input: {
   generationId: string;
@@ -317,7 +370,12 @@ export function invalidArgumentsEnvelope(command: string | null): ErrorEnvelope 
 }
 
 export function formatEnvelope(
-  envelope: SuccessEnvelope | IndexSuccessEnvelope | FindSymbolEnvelope | ErrorEnvelope,
+  envelope:
+    | SuccessEnvelope
+    | IndexSuccessEnvelope
+    | FindSymbolEnvelope
+    | ErrorEnvelope
+    | ConfigureAiSuccessEnvelope,
 ): string {
   return `${JSON.stringify(envelope, null, 2)}\n`;
 }

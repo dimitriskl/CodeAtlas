@@ -10,7 +10,7 @@ export default tseslint.config(
   ...tseslint.configs.recommended,
   prettier,
   {
-    files: ["scripts/**/*.mjs"],
+    files: ["scripts/**/*.mjs", "tests/support/**/*.cjs"],
     languageOptions: {
       globals: {
         process: "readonly",
