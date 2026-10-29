@@ -7,7 +7,7 @@ Can start now (no blockers): 01. After 01 is done, 02 and 17 can start.
 | # | Task | Blocked by | Status |
 |---|---|---|---|
 | 01 | [Scaffold package, CI and MCP server skeleton](01-scaffold-package-ci-mcp-skeleton.md) | None | done |
-| 02 | [Index a minimal workspace and report index status](02-index-minimal-workspace-index-status.md) | 01 | done-awaiting-merge |
+| 02 | [Index a minimal workspace and report index status](02-index-minimal-workspace-index-status.md) | 01 | done |
 | 03 | [find_symbol for plain TypeScript](03-find-symbol-typescript.md) | 02 | ready |
 | 04 | [Freshness and stale refusal](04-freshness-stale-refusal.md) | 02 | rejected |
 | 05 | [Angular declarations](05-angular-declarations.md) | 03 | ready |
@@ -30,6 +30,11 @@ Can start now (no blockers): 01. After 01 is done, 02 and 17 can start.
 | 22 | [README and release packaging](22-readme-release-packaging.md) | 21 | ready |
 | 23 | [Benchmark fixture app and harness](23-benchmark-fixture-harness.md) | 11, 13, 20 | ready |
 | 24 | [RealWorld benchmark run and report](24-realworld-benchmark-run.md) | 22, 23 | ready |
+| 25 | [Symlink dedup](25-symlink-dedup.md) | 02 | ready |
+| 26 | [Storage-naming test oracle](26-naming-test-oracle.md) | 02 | ready |
+| 27 | [Drive-root and filesystem-root workspaces](27-drive-root-paths.md) | 02 | ready |
+| 28 | [Indexing progress and warnings](28-index-progress-warnings.md) | 02 | ready |
+| 29 | [Track a tsConfig outside the workspace](29-external-tsconfig-freshness.md) | 04 | ready |
 
 ## Dependency graph
 
@@ -98,4 +103,14 @@ graph TD
   T20 --> T23
   T22 --> T24
   T23 --> T24
+  T25["25 Symlink dedup"]
+  T26["26 Storage-naming test oracle"]
+  T27["27 Drive-root and filesystem-root workspaces"]
+  T28["28 Indexing progress and warnings"]
+  T29["29 Track a tsConfig outside the workspace"]
+  T02 --> T25
+  T02 --> T26
+  T02 --> T27
+  T02 --> T28
+  T04 --> T29
 ```
