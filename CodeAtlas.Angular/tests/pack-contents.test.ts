@@ -6,6 +6,8 @@ import { packageRoot } from "./support/run-cli.js";
 const publishedPaths = [
   "LICENSE",
   "README.md",
+  "dist/angular-kinds.d.ts",
+  "dist/angular-kinds.js",
   "dist/cli.d.ts",
   "dist/cli.js",
   "dist/coverage.d.ts",
