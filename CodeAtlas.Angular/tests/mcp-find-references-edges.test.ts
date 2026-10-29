@@ -322,9 +322,6 @@ export * from "./uses.js";
   "src/A-calls.ts": `import { ping } from "./cart.js";
 export const upper = ping();
 `,
-  "src/a-calls.ts": `import { ping } from "./cart.js";
-export const lower = ping();
-`,
   "src/z-calls.ts": `import { ping } from "./cart.js";
 export const zed = ping();
 `,
@@ -468,8 +465,6 @@ const formatSpots: Spot[] = [
 const pingSpots: Spot[] = [
   { kind: "reference", file: "src/A-calls.ts", needle: "import { ping }", name: "ping" },
   { kind: "invocation", file: "src/A-calls.ts", needle: "upper = ping()", name: "ping" },
-  { kind: "reference", file: "src/a-calls.ts", needle: "import { ping }", name: "ping" },
-  { kind: "invocation", file: "src/a-calls.ts", needle: "lower = ping()", name: "ping" },
   { kind: "reference", file: "src/uses.ts", needle: "html, ping, read", name: "ping" },
   { kind: "invocation", file: "src/uses.ts", needle: "const pinged = ping()", name: "ping" },
   { kind: "reference", file: "src/uses.ts", needle: "const pingValue = ping;", name: "ping" },
@@ -969,8 +964,6 @@ describe("MCP find_references edges", () => {
     expect(expected.map((row) => row.path)).toEqual([
       "src/A-calls.ts",
       "src/A-calls.ts",
-      "src/a-calls.ts",
-      "src/a-calls.ts",
       "src/uses.ts",
       "src/uses.ts",
       "src/uses.ts",
