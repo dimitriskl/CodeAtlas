@@ -8,7 +8,7 @@ Can start now (no blockers): 01. After 01 is done, 02 and 17 can start.
 |---|---|---|---|
 | 01 | [Scaffold package, CI and MCP server skeleton](01-scaffold-package-ci-mcp-skeleton.md) | None | done |
 | 02 | [Index a minimal workspace and report index status](02-index-minimal-workspace-index-status.md) | 01 | done |
-| 03 | [find_symbol for plain TypeScript](03-find-symbol-typescript.md) | 02 | in-test |
+| 03 | [find_symbol for plain TypeScript](03-find-symbol-typescript.md) | 02 | in-qa |
 | 04 | [Freshness and stale refusal](04-freshness-stale-refusal.md) | 02 | ready |
 | 05 | [Angular declarations](05-angular-declarations.md) | 03 | ready |
 | 06 | [Invocation references and find_references](06-invocation-references-find-references.md) | 03 | ready |
