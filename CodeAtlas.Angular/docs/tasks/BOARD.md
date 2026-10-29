@@ -11,7 +11,7 @@ Can start now (no blockers): 01. After 01 is done, 02 and 17 can start.
 | 03 | [find_symbol for plain TypeScript](03-find-symbol-typescript.md) | 02 | done-awaiting-merge |
 | 04 | [Freshness and stale refusal](04-freshness-stale-refusal.md) | 02 | done-awaiting-merge |
 | 05 | [Angular declarations](05-angular-declarations.md) | 03 | ready |
-| 06 | [Invocation references and find_references](06-invocation-references-find-references.md) | 03 | in-test |
+| 06 | [Invocation references and find_references](06-invocation-references-find-references.md) | 03 | in-qa |
 | 07 | [Template-usage references](07-template-usage-references.md) | 04, 05, 06 | ready |
 | 08 | [Template-call references](08-template-call-references.md) | 07 | ready |
 | 09 | [Injection references](09-injection-references.md) | 05, 06 | ready |
