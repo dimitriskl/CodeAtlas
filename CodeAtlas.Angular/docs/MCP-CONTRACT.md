@@ -63,7 +63,7 @@ A tracked input is stale-making or warning-only.
 Stale-making. A byte change, a file that can no longer be read, or a stale-making path that was not stored at publish adds the workspace-relative path to `changedFiles`. `state` becomes `stale` and `isStale` becomes true:
 
 - TypeScript sources, including specs: each non-declaration file in a project's build or test program that sits inside the workspace and is not under `node_modules`. An inline template is part of that file's bytes.
-- Templates: every `.html` file under a project's non-empty `sourceRoot`, and each architect target's `options.index` when that value is a path (or an object with `input`) to a file inside the workspace. Paths under `node_modules` are skipped. A template stays stale-making when it also sits inside an `options.assets` or `options.styles` input.
+- Templates: every `.html` file under a project's non-empty `sourceRoot`; each architect target's `options.index` when that value is a path (or an object with `input`) to a file inside the workspace; and each `templateUrl` string in a tracked TypeScript source. A `templateUrl` is resolved relative to that source file, the same way as `styleUrl`, and is tracked wherever it resolves inside the workspace, including outside `sourceRoot`. A `templateUrl` that resolves outside the workspace, or under `node_modules`, is not tracked. An `.html` file outside `sourceRoot` that no component references is not a template. Paths under `node_modules` are skipped. A template stays stale-making when it also sits inside an `options.assets` or `options.styles` input.
 - `angular.json`.
 - `package.json` and `package-lock.json`, when they exist.
 - Every workspace-root file whose name matches `tsconfig*.json`, each project's `architect.build.options.tsConfig`, each project's `architect.test.options.tsConfig` when that option is set, and each `extends` base of those configs when the base resolves to a file inside the workspace. A base outside the workspace, including a package name, is not a tracked input.
@@ -315,7 +315,7 @@ Tracked paths, and whether a change is stale-making or warning-only, are the Fre
 - each project's `architect.test.options.tsConfig`, when that option is set and the file is not already included (stale)
 - each in-workspace `extends` base of those configs (stale). A base in `node_modules` or otherwise outside the workspace is not tracked
 - each non-declaration TypeScript file in the build or test program that sits inside the workspace and is not under `node_modules` (stale)
-- `.html` templates under a non-empty `sourceRoot`, and `options.index` HTML (stale, including when the path is also inside an asset or style input)
+- `.html` templates under a non-empty `sourceRoot`, `options.index` HTML, and in-workspace `templateUrl` targets, including those outside `sourceRoot` (stale, including when the path is also inside an asset or style input). A `templateUrl` outside the workspace is not tracked. An unreferenced `.html` file outside `sourceRoot` is not a template
 - `options.styles`, `.css` / `.scss` / `.sass` / `.less` files under `sourceRoot`, and `styleUrl` / `styleUrls` targets (warning-only)
 - `options.assets` (warning-only for files that are not stale-making; `glob` is ignored and `input` is the path)
 

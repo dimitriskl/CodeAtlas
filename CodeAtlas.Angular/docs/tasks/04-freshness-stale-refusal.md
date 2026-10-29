@@ -18,7 +18,7 @@ User stories: 3, 4, 48. PRD: [Freshness inputs](../prd/0001-initial.md#freshness
 
 - [02 — Index a minimal workspace and report index status](02-index-minimal-workspace-index-status.md)
 
-Status: rejected
+Status: in-test
 
 ## Acceptance criteria
 
@@ -93,3 +93,4 @@ Status: rejected
   **Required changes**
 
   1. Track each in-workspace `templateUrl` string literal as a stale-making template. Resolve it relative to the source file, the same way `styleUrl` is resolved, including a path outside `sourceRoot`. A byte change, a delete, or a file that exists only after publish must put that workspace-relative path in `changedFiles`. `coverage` and `find_symbol` refuse with `stale_index` (message `The saved index is stale.`, `error.diagnostics` `[]`, freshness not null, no pagination). `index_status` reports the same path and does not refuse. A target outside the workspace stays untracked. Update the Templates bullet in `MCP-CONTRACT.md`. The three tests named above must pass. An unreferenced `.html` outside `sourceRoot` is not a template and must stay `fresh`.
+- 2026-10-29: Developer rework, attempt 3. In-workspace `templateUrl` targets are stale-making. They are resolved relative to the source file in the same walk that finds `styleUrl` and `styleUrls`, including a path outside `sourceRoot`. Targets under `node_modules` or outside the workspace stay untracked. A byte change, a delete, or a file that exists only after publish puts that workspace-relative path in `changedFiles`. `coverage` and `find_symbol` refuse with `stale_index`, message `The saved index is stale.`, `error.diagnostics` `[]`, freshness set, and no pagination. `index_status` reports that path and does not refuse. An unreferenced `.html` outside `sourceRoot` is not a template and stays `fresh`. The Templates bullet in `MCP-CONTRACT.md` records this. These tests pass: `refuses coverage after a templateUrl file outside sourceRoot changes`, `refuses find_symbol after a templateUrl file outside sourceRoot changes`, and `reports a changed templateUrl file from index_status`.
