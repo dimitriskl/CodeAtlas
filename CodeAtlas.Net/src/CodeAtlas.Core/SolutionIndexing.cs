@@ -143,25 +143,13 @@ public sealed partial class SolutionAnalysis
         var refresh = refreshed.Summary;
         refreshed = null;
         progress?.Report(new(IndexStage.CollectingTypes));
-        var types = new Dictionary<string, IndexedType>(StringComparer.Ordinal);
-        foreach (var type in symbols.OfType<INamedTypeSymbol>())
-        {
-            var location = type.Locations.FirstOrDefault(l => l.IsInSource);
-            var document = location?.SourceTree is { } tree ? analysis.solution.GetDocument(tree) : null;
-            if (location is null || document is null)
-                continue;
-            var project = analysis.Relative(document.Project.FilePath!);
-            var id = $"{project}::{type.GetDocumentationCommentId()}";
-            types[id] = new IndexedType(id, type.ToDisplayString(), type.TypeKind.ToString().ToLowerInvariant(), project, analysis.Position(location));
-        }
+        var indexedTypes = analysis.IndexedTypes(symbols);
         symbols = null;
 
         var indexedProjects = projects.Select(p => new IndexedProject(analysis.Relative(p.FilePath!), p.Name,
             p.ProjectReferences.Select(r => analysis.Relative(analysis.solution.GetProject(r.ProjectId)!.FilePath!)).Order(StringComparer.Ordinal).ToArray(),
             p.Documents.Select(d => d.FilePath).OfType<string>().Select(analysis.Relative).Distinct().Order(StringComparer.Ordinal).ToArray()))
             .OrderBy(p => p.Path, StringComparer.Ordinal).ToArray();
-        var indexedTypes = types.Values.OrderBy(t => t.Name, StringComparer.Ordinal).ThenBy(t => t.Id, StringComparer.Ordinal).ToArray();
-        types = null;
         var fingerprints = beforeIndexing.Files.Where(pair => pair.Value.Exists).ToDictionary(pair => pair.Key, pair => pair.Value.Sha256!, SnapshotInputModel.PathComparer);
 
         var spillPath = Path.Combine(Path.GetTempPath(), "codeatlas-spill-" + Guid.NewGuid().ToString("N") + ".db");

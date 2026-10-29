@@ -235,6 +235,78 @@ public sealed class SqliteFileUpdateTests
     }
 
     [Fact]
+    public async Task LiveSessionEditPublishesTypesForTheFile()
+    {
+        // Arrange
+        using var fixture = await SampleCopy.CreateAsync();
+        await IndexStore.PublishAsync(await SolutionAnalysis.CreateIndexAsync(fixture.Solution));
+        using var session = await LiveIndexSession.OpenAsync(fixture.Solution);
+        var edited = AddedType(await File.ReadAllTextAsync(fixture.Calculator));
+        using var editedFixture = await SampleCopy.CreateAsync();
+        await File.WriteAllTextAsync(editedFixture.Calculator, edited);
+        var expected = await IndexAsync(editedFixture.Solution, Path.Combine(editedFixture.Root, "expected.db"));
+
+        // Act
+        await session.ApplyAsync(fixture.Calculator, edited);
+
+        // Assert
+        var opened = await IndexStore.OpenSnapshotAsync(IndexStore.DefaultPath(fixture.Solution));
+        var found = SnapshotQueries.FindSymbols(opened, "Added", "type", new QueryRequest());
+        Assert.Equal(["Added"], found.Items.Select(symbol => symbol.Name).ToArray());
+        Assert.Equal(FileTypes(expected.Database), FileTypes(opened.IndexPath));
+    }
+
+    [Fact]
+    public async Task SecondEditPublishesRowsMatchingAFullRebuild()
+    {
+        // Arrange
+        using var fixture = await SampleCopy.CreateAsync();
+        await IndexStore.PublishAsync(await SolutionAnalysis.CreateIndexAsync(fixture.Solution));
+        using var session = await LiveIndexSession.OpenAsync(fixture.Solution);
+        var original = await File.ReadAllTextAsync(fixture.Calculator);
+        var once = EditedCalculator(original);
+        var twice = EditedAgain(once);
+        await session.ApplyAsync(fixture.Calculator, once);
+        using var editedFixture = await SampleCopy.CreateAsync();
+        await File.WriteAllTextAsync(editedFixture.Calculator, twice);
+        var expected = await IndexAsync(editedFixture.Solution, Path.Combine(editedFixture.Root, "expected.db"));
+
+        // Act
+        await session.ApplyAsync(fixture.Calculator, twice);
+
+        // Assert
+        var opened = await IndexStore.OpenSnapshotAsync(IndexStore.DefaultPath(fixture.Solution));
+        Assert.Equal(TreeHash(expected.Database), TreeHash(opened.IndexPath));
+        Assert.Equal(ReadRows(expected.Database).Methods, ReadRows(opened.IndexPath).Methods);
+        Assert.Equal(FileCatalog(expected.Database), FileCatalog(opened.IndexPath));
+    }
+
+    [Fact]
+    public async Task LiveSessionEditRefreshesOverviewCountsAndWarnings()
+    {
+        // Arrange
+        using var fixture = await SampleCopy.CreateAsync();
+        await IndexStore.PublishAsync(await SolutionAnalysis.CreateIndexAsync(fixture.Solution));
+        using var session = await LiveIndexSession.OpenAsync(fixture.Solution);
+        var edited = AddedType(await File.ReadAllTextAsync(fixture.Calculator));
+        using var editedFixture = await SampleCopy.CreateAsync();
+        await File.WriteAllTextAsync(editedFixture.Calculator, edited);
+        var expected = await IndexAsync(editedFixture.Solution, Path.Combine(editedFixture.Root, "expected.db"));
+        var expectedRows = new SqliteIndexReader(expected.Database).Use(reader => (Types: reader.Types().Length, Methods: reader.Methods(null).Length));
+
+        // Act
+        await session.ApplyAsync(fixture.Calculator, edited);
+
+        // Assert
+        var opened = await IndexStore.OpenSnapshotAsync(IndexStore.DefaultPath(fixture.Solution));
+        var overview = await File.ReadAllTextAsync(Path.Combine(opened.GenerationDirectory!, "overview.md"));
+        var warnings = await File.ReadAllTextAsync(opened.WarningsPath!);
+        Assert.Contains("`Sample.Added`", overview);
+        Assert.Contains($"source types: {expectedRows.Types}; methods: {expectedRows.Methods}.", overview);
+        Assert.Contains(opened.Index.IndexId, warnings);
+    }
+
+    [Fact]
     public async Task FailedPublicationLeavesTheCurrentGenerationUnchanged()
     {
         // Arrange
@@ -313,6 +385,23 @@ public sealed class SqliteFileUpdateTests
             }, SqliteIndexSchema.Json);
         });
     }
+
+    private static IndexedType[] FileTypes(string database) =>
+        new SqliteIndexReader(database).Use(session => session.Types().Where(type => type.Location.File == CalculatorFile).ToArray());
+
+    private static (string Content, string? Surface) TreeHash(string database)
+    {
+        var state = new SqliteIndexReader(database).Use(session => session.IncrementalState());
+        var tree = state!.Projects.SelectMany(project => project.Trees).Single(tree => tree.OriginPath == CalculatorFile);
+        return (tree.ContentHash, tree.SurfaceHash);
+    }
+
+    private static string AddedType(string source) => source + "\npublic sealed class Added {}\n";
+
+    private static string EditedAgain(string source) => source.Replace(
+        "public static int Extra() => Calculate(4);",
+        "public static int Extra() => Calculate(5);\n    public static int Again() => Calculate(6);",
+        StringComparison.Ordinal);
 
     private static string EditedCalculator(string source) => source.Replace(
         "public static int LocalCaller() => Calculate(1);",

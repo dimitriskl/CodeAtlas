@@ -36,17 +36,20 @@ internal sealed partial class SqliteIndexWriter
     }
 
     /// <summary>
-    /// Replaces one file's method and reference rows, then the symbol, fact, search and duplicate
-    /// rows, and records the applied text hash. One transaction: a failure leaves the copy unchanged.
+    /// Replaces one file's method, reference, type, symbol, fact, search and duplicate rows,
+    /// and records the applied text hash and incremental tree hash. One transaction: a failure leaves the copy unchanged.
     /// </summary>
     internal static void UpdateWorkingCopy(string database, string absolutePath, string relativeFile, string text,
         MethodInfo[] methods, IReadOnlyDictionary<string, SourceReference[]> references,
-        DocumentedSymbol[] symbols, StructuralCatalog catalog, DuplicateCatalog duplicates)
+        DocumentedSymbol[] symbols, StructuralCatalog catalog, DuplicateCatalog duplicates,
+        IndexedType[] types, string contentHash, string? surfaceHash)
     {
         RequireFileRows(relativeFile, methods, references);
         ArgumentNullException.ThrowIfNull(symbols);
         ArgumentNullException.ThrowIfNull(catalog);
         ArgumentNullException.ThrowIfNull(duplicates);
+        ArgumentNullException.ThrowIfNull(types);
+        ArgumentException.ThrowIfNullOrWhiteSpace(contentHash);
         SqliteAvailability.Require();
         using var connection = OpenWorkingCopy(database);
         Execute(connection, "PRAGMA journal_mode=DELETE;");
@@ -55,6 +58,8 @@ internal sealed partial class SqliteIndexWriter
         {
             ApplyFileRows(connection, transaction, relativeFile, methods, references);
             ReplaceCatalog(connection, transaction, symbols, catalog, duplicates);
+            WriteTypeRows(connection, transaction, types);
+            UpdateTreeHash(connection, transaction, relativeFile, contentHash, surfaceHash);
             RecordAppliedHash(connection, transaction, absolutePath, relativeFile, text);
             BeforeFileRowCommit?.Invoke();
             transaction.Commit();
@@ -75,6 +80,32 @@ internal sealed partial class SqliteIndexWriter
         SetGenerationId(connection, transaction, indexId);
         SetDuplicateGeneration(connection, transaction, indexId);
         transaction.Commit();
+    }
+
+    private static void WriteTypeRows(SqliteConnection connection, SqliteTransaction transaction, IndexedType[] types)
+    {
+        Execute("DELETE FROM types", connection, transaction);
+        var files = ReadFileIds(connection, transaction);
+        for (var i = 0; i < types.Length; i++)
+        {
+            var type = types[i];
+            Execute("INSERT INTO types VALUES($o,$id,$name,$kind,$project,$file,$line,$col)", connection, transaction,
+                ("$o", i), ("$id", type.Id), ("$name", type.Name), ("$kind", type.Kind), ("$project", type.Project),
+                ("$file", FileId(files, type.Location.File)), ("$line", type.Location.Line), ("$col", type.Location.Column));
+        }
+    }
+
+    private static void UpdateTreeHash(SqliteConnection connection, SqliteTransaction transaction,
+        string relativeFile, string contentHash, string? surfaceHash)
+    {
+        using var command = connection.CreateCommand();
+        command.Transaction = transaction;
+        command.CommandText = "UPDATE incremental_trees SET content_hash = $content, surface_hash = $surface WHERE origin_path = $path";
+        command.Parameters.AddWithValue("$content", contentHash);
+        command.Parameters.AddWithValue("$surface", Db(surfaceHash));
+        command.Parameters.AddWithValue("$path", relativeFile);
+        if (command.ExecuteNonQuery() == 0)
+            throw new IndexFormatException("invalid_index", "The working copy has no incremental tree for " + relativeFile + ".");
     }
 
     private static void ReplaceCatalog(SqliteConnection connection, SqliteTransaction transaction,

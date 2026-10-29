@@ -301,6 +301,7 @@ public static class IndexStore
         var indexId = Guid.NewGuid().ToString("N");
         var fullSolution = Path.GetFullPath(solution);
         var header = new SqliteIndexReader(workingCopy).ReadHeader(cancellationToken);
+        var described = PublishedDescription(workingCopy, header, indexId);
         var publishedDatabase = Path.Combine(Path.GetDirectoryName(manifestPath)!, "generations", indexId, SqliteIndexSchema.ArtifactName);
         var generation = await CommitGenerationAsync(fullSolution, indexId,
         [
@@ -310,8 +311,8 @@ public static class IndexStore
                 SqliteIndexWriter.PreparePublishedCopy(path, indexId);
                 return Task.CompletedTask;
             }),
-            CopiedArtifact(current, "overview.md"),
-            CopiedArtifact(current, "warnings.txt"),
+            TextArtifact("overview.md", Overview(described)),
+            TextArtifact("warnings.txt", WarningText(described)),
             CopiedArtifact(current, "timings.json")
         ], token => RequireFreshAsync(new SqliteIndexReader(publishedDatabase).ReadHeader(token), token), checkpoint, cancellationToken);
         return new(header with { IndexId = indexId }, generation.ManifestPath, generation.Directory, true)
@@ -340,6 +341,12 @@ public static class IndexStore
         {
             throw new IndexFormatException("snapshot_io_failed", "Snapshot publication failed. The previous committed snapshot remains active; check disk space and permissions and retry.", [exception.Message]);
         }
+    }
+
+    private static CodebaseIndex PublishedDescription(string workingCopy, CodebaseIndex header, string indexId)
+    {
+        var rows = new SqliteIndexReader(workingCopy).Use(session => (session.Projects(), session.Types(), session.Methods(null)));
+        return header with { IndexId = indexId, Projects = rows.Item1, Types = rows.Item2, Methods = rows.Item3 };
     }
 
     private static GenerationArtifact CopiedArtifact(ResolvedGeneration source, string name) => new(name, async (stream, token) =>
