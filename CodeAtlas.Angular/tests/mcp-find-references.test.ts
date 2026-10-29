@@ -123,6 +123,7 @@ const cartUses: ReferenceHit[] = [
   hit(cartClass, "reference", "src/shorthand.ts", 3, 28),
   hit(cartClass, "reference", "src/shorthand.ts", 8, 33),
   hit(cartClass, "reference", "src/shorthand.ts", 12, 30),
+  hit(cartClass, "reference", "src/shorthand.ts", 18, 37),
 ];
 
 function hit(
@@ -516,6 +517,30 @@ describe("MCP find_references", () => {
       ).toEqual([]);
       expect(
         references?.filter((hit) => hit.path === "src/shorthand.ts" && hit.line === 13),
+      ).toEqual([]);
+    } finally {
+      await connection.close();
+      await workspace.remove();
+    }
+  });
+
+  it("indexes a parenthesized assignment shorthand and does not record it as Cart.total", async () => {
+    // Arrange. `({ total }) = cart` wraps the literal. The local `total` is not `Cart.total`.
+    const workspace = await indexedReferencesWorkspace();
+    const connection = await connectInProcess();
+
+    try {
+      // Act
+      const result = await connection.client.callTool({
+        name: "find_references",
+        arguments: { workspace: workspace.path, id: cartTotal },
+      });
+
+      // Assert
+      expect(result.isError).toBeFalsy();
+      const references = parseToolText(result).result?.references;
+      expect(
+        references?.filter((hit) => hit.path === "src/shorthand.ts" && hit.line === 20),
       ).toEqual([]);
     } finally {
       await connection.close();

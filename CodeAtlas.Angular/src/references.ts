@@ -106,9 +106,6 @@ function isDestructuringAssignmentTarget(node: ts.Node): boolean {
     return true;
   }
   if (ts.isForOfStatement(parent) && parent.initializer === node) return true;
-  if (ts.isParenthesizedExpression(parent) && parent.expression === node) {
-    return isDestructuringAssignmentTarget(parent);
-  }
   if (ts.isPropertyAssignment(parent) && parent.initializer === node) {
     return isDestructuringAssignmentTarget(parent.parent);
   }

@@ -14,3 +14,8 @@ export function assign(cart: Cart): void {
   ({ total } = cart);
   void total;
 }
+
+export function parenthesized(cart: Cart): void {
+  let total = 0;
+  ({ total }) = cart;
+}
