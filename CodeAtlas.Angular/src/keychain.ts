@@ -1,6 +1,7 @@
 import { writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
+import { CommandError } from "./errors.js";
 
 /** OS keychain. Tests inject a fake; production uses the platform tool. */
 export interface Keychain {
@@ -22,11 +23,16 @@ export interface ProcessRunner {
   run(command: string, args: readonly string[], stdin: string | null): ProcessResult;
 }
 
-export class CredentialStoreError extends Error {
-  constructor(message: string) {
-    super(message);
-    this.name = "CredentialStoreError";
-  }
+function storeError(message: string): CommandError {
+  return new CommandError("ai_configuration_invalid", message, 1);
+}
+
+/** Absolute powershell.exe from %SystemRoot%. A bare name would be resolved from PATH. */
+export function windowsPowershellExecutable(env: NodeJS.ProcessEnv): string | null {
+  const root = env.SystemRoot ?? env.SYSTEMROOT;
+  if (typeof root !== "string" || root.length === 0) return null;
+  const executable = path.join(root, "System32", "WindowsPowerShell", "v1.0", "powershell.exe");
+  return path.isAbsolute(executable) ? executable : null;
 }
 
 const windowsCredentialScript = `
@@ -136,7 +142,7 @@ function windowsCredentialScriptPath(): string {
 
 function assertPlainProvider(provider: string): void {
   if (!/^[a-z0-9]+$/.test(provider)) {
-    throw new CredentialStoreError("The provider name cannot be stored in the keychain.");
+    throw storeError("The provider name cannot be stored in the keychain.");
   }
 }
 
@@ -163,7 +169,7 @@ class MacKeychain implements Keychain {
     );
     if (result.exitCode === 44) return null;
     if (result.exitCode !== 0) {
-      throw new CredentialStoreError(`macOS Keychain read failed (exit ${result.exitCode}).`);
+      throw storeError(`macOS Keychain read failed (exit ${result.exitCode}).`);
     }
     const value = trimTrailingNewlines(result.stdout);
     return value.length === 0 ? null : value;
@@ -172,14 +178,14 @@ class MacKeychain implements Keychain {
   write(provider: string, secret: string): void {
     assertPlainProvider(provider);
     if (cannotQuoteForMacKeychain(secret)) {
-      throw new CredentialStoreError(
+      throw storeError(
         "The key contains characters the macOS Keychain tool cannot accept on standard input.",
       );
     }
     const command = `add-generic-password -U -s "${this.service}" -a "${provider}" -l "CodeAtlas AI key (${provider})" -w "${secret}"\n`;
     const result = this.runner.run(this.tool, ["-i"], command);
     if (result.exitCode !== 0) {
-      throw new CredentialStoreError(`macOS Keychain write failed (exit ${result.exitCode}).`);
+      throw storeError(`macOS Keychain write failed (exit ${result.exitCode}).`);
     }
   }
 }
@@ -235,49 +241,50 @@ class LinuxKeychain implements Keychain {
       secret,
     );
     if (result.exitCode !== 0) {
-      throw new CredentialStoreError(
-        `Linux Secret Service write failed (exit ${result.exitCode}).`,
-      );
+      throw storeError(`Linux Secret Service write failed (exit ${result.exitCode}).`);
     }
   }
 }
 
 class WindowsKeychain implements Keychain {
   readonly name = "Windows Credential Manager";
-  private readonly tool = "powershell";
+  private readonly tool: string | null;
 
-  constructor(private readonly runner: ProcessRunner) {}
+  constructor(
+    private readonly runner: ProcessRunner,
+    env: NodeJS.ProcessEnv,
+  ) {
+    this.tool = windowsPowershellExecutable(env);
+  }
 
   isAvailable(): boolean {
-    return this.runner.exists(this.tool);
+    return this.tool !== null && this.runner.exists(this.tool);
   }
 
   read(provider: string): string | null {
-    if (!this.isAvailable()) return null;
-    const result = this.runner.run(this.tool, this.args("read", provider), null);
+    const tool = this.tool;
+    if (tool === null || !this.runner.exists(tool)) return null;
+    const result = this.runner.run(tool, this.args("read", provider), null);
     if (result.exitCode === 1168) return null;
     if (result.exitCode !== 0) {
-      throw new CredentialStoreError(
-        `Windows Credential Manager read failed (exit ${result.exitCode}).`,
-      );
+      throw storeError(`Windows Credential Manager read failed (exit ${result.exitCode}).`);
     }
     return result.stdout.length === 0 ? null : result.stdout;
   }
 
   write(provider: string, secret: string): void {
     assertPlainProvider(provider);
-    if (!this.isAvailable()) {
-      throw new CredentialStoreError("Windows Credential Manager is not available.");
+    const tool = this.tool;
+    if (tool === null || !this.runner.exists(tool)) {
+      throw storeError("Windows Credential Manager is not available.");
     }
     const bytes = Buffer.byteLength(secret, "utf8");
     if (bytes > 2560) {
-      throw new CredentialStoreError("The key is too long for Windows Credential Manager.");
+      throw storeError("The key is too long for Windows Credential Manager.");
     }
-    const result = this.runner.run(this.tool, this.args("write", provider), secret);
+    const result = this.runner.run(tool, this.args("write", provider), secret);
     if (result.exitCode !== 0) {
-      throw new CredentialStoreError(
-        `Windows Credential Manager write failed (exit ${result.exitCode}).`,
-      );
+      throw storeError(`Windows Credential Manager write failed (exit ${result.exitCode}).`);
     }
   }
 
@@ -308,7 +315,7 @@ class UnavailableKeychain implements Keychain {
   }
 
   write(): void {
-    throw new CredentialStoreError("No OS keychain is available.");
+    throw storeError("No OS keychain is available.");
   }
 }
 
@@ -319,6 +326,6 @@ export function createKeychain(deps: {
 }): Keychain {
   if (deps.platform === "darwin") return new MacKeychain(deps.runner);
   if (deps.platform === "linux") return new LinuxKeychain(deps.runner, deps.env);
-  if (deps.platform === "win32") return new WindowsKeychain(deps.runner);
+  if (deps.platform === "win32") return new WindowsKeychain(deps.runner, deps.env);
   return new UnavailableKeychain();
 }

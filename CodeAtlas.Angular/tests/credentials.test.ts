@@ -301,14 +301,18 @@ describe("keychain entry names", () => {
   it("stores a Windows Credential Manager secret on stdin at target CodeAtlas:ai:<provider>", () => {
     // Arrange
     const { calls, runner } = recordingRunner(() => ({ exitCode: 0, stdout: "", stderr: "" }));
-    const keychain = createKeychain({ platform: "win32", runner, env: {} });
+    const systemRoot = path.join(tmpdir(), "codeatlas-ps-root");
+    const env = { SystemRoot: systemRoot };
+    const keychain = createKeychain({ platform: "win32", runner, env });
 
     // Act
     keychain.write("azure", secret);
 
     // Assert
     const write = calls.find((call) => call.stdin !== null);
-    expect(write?.command).toBe("powershell");
+    expect(write?.command).toBe(
+      path.join(systemRoot, "System32", "WindowsPowerShell", "v1.0", "powershell.exe"),
+    );
     expect(write?.stdin).toBe(secret);
     expect(write?.args.slice(0, 5)).toEqual([
       "-NoProfile",
@@ -329,14 +333,18 @@ describe("keychain entry names", () => {
       stdout: secret,
       stderr: "",
     }));
-    const keychain = createKeychain({ platform: "win32", runner, env: {} });
+    const systemRoot = path.join(tmpdir(), "codeatlas-ps-root");
+    const env = { SystemRoot: systemRoot };
+    const keychain = createKeychain({ platform: "win32", runner, env });
 
     // Act
     const value = keychain.read("azure");
 
     // Assert
     expect(value).toBe(secret);
-    expect(calls[0]?.command).toBe("powershell");
+    expect(calls[0]?.command).toBe(
+      path.join(systemRoot, "System32", "WindowsPowerShell", "v1.0", "powershell.exe"),
+    );
     expect(calls[0]?.args.slice(0, 5)).toEqual([
       "-NoProfile",
       "-NonInteractive",

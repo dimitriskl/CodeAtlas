@@ -1,4 +1,4 @@
-import { spawnSync } from "node:child_process";
+import { spawn, spawnSync, type ChildProcess } from "node:child_process";
 import {
   chmodSync,
   existsSync,
@@ -7,17 +7,25 @@ import {
   readFileSync,
   writeFileSync,
 } from "node:fs";
+import { createServer } from "node:http";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { Readable, Writable } from "node:stream";
 import { describe, expect, it } from "vitest";
 import { runConfigureAi, type SecretInput } from "../src/configure-ai.js";
-import type { Keychain } from "../src/keychain.js";
-import { runCli } from "./support/run-cli.js";
+import { createKeychain, windowsPowershellExecutable, type Keychain } from "../src/keychain.js";
+import { createProcessRunner } from "../src/process-runner.js";
+import { compileCSharpExe } from "./support/compile-csharp.js";
+import { runCli, packageRoot } from "./support/run-cli.js";
+import { installFakeWindowsPowerShell } from "./support/windows-keychain-tool.js";
 
 const endpoint = "http://127.0.0.1:9/v1/chat/completions";
 const secret = "sk-synthetic-credential-0123456789";
 const prompt = "Enter the API key, or set CODEATLAS_AI_OPENAI_KEY (hidden; Esc cancels): ";
+const scriptProgram = existsSync("/usr/bin/script") ? "/usr/bin/script" : "script";
+const ptyHelp = spawnSync(scriptProgram, ["--help"], { encoding: "utf8" });
+const ptyAvailable =
+  ptyHelp.status === 0 && `${ptyHelp.stdout ?? ""}${ptyHelp.stderr ?? ""}`.includes("--echo");
 
 function isolatedEnv(root: string): NodeJS.ProcessEnv {
   const env: NodeJS.ProcessEnv = {};
@@ -33,6 +41,10 @@ function isolatedEnv(root: string): NodeJS.ProcessEnv {
   env.APPDATA = path.join(root, "appdata");
   env.HOME = path.join(root, "home");
   env.USERPROFILE = path.join(root, "home");
+  const systemRoot = path.join(root, "empty-winroot");
+  mkdirSync(systemRoot, { recursive: true });
+  env.SystemRoot = systemRoot;
+  env.SYSTEMROOT = systemRoot;
   return env;
 }
 
@@ -51,21 +63,11 @@ function installFakeKeychain(root: string, env: NodeJS.ProcessEnv): string {
   env.CODEATLAS_FAKE_KEYCHAIN_DIR = state;
   env.DBUS_SESSION_BUS_ADDRESS = "unix:path=/tmp/codeatlas-fake-bus";
   if (process.platform === "win32") {
-    writeFileSync(
-      path.join(bin, "powershell.js"),
-      [
-        "const fs = require('node:fs');",
-        "const path = require('node:path');",
-        "const dir = process.env.CODEATLAS_FAKE_KEYCHAIN_DIR;",
-        "fs.mkdirSync(dir, { recursive: true });",
-        "const args = process.argv.slice(2);",
-        "const operation = args.find((arg) => arg === 'read' || arg === 'write') ?? '';",
-        "if (operation === 'read') process.exit(1168);",
-        "fs.writeFileSync(path.join(dir, 'stdin'), fs.readFileSync(0));",
-        "fs.writeFileSync(path.join(dir, 'args'), args.join('\\n') + '\\n');",
-        "process.exit(0);",
-        "",
-      ].join("\n"),
+    const systemRoot = path.join(root, "winroot");
+    env.SystemRoot = systemRoot;
+    env.SYSTEMROOT = systemRoot;
+    installFakeWindowsPowerShell(
+      path.join(systemRoot, "System32", "WindowsPowerShell", "v1.0", "powershell.exe"),
     );
   } else {
     const tool = path.join(bin, "secret-tool");
@@ -86,8 +88,9 @@ function installFakeKeychain(root: string, env: NodeJS.ProcessEnv): string {
     );
     chmodSync(tool, 0o755);
   }
-  env.PATH = bin;
-  env.Path = bin;
+  const currentPath = env.PATH ?? "";
+  env.PATH = currentPath.length === 0 ? bin : `${bin}${path.delimiter}${currentPath}`;
+  env.Path = env.PATH;
   return state;
 }
 
@@ -195,29 +198,43 @@ describe("configure-ai key entry", () => {
     });
   });
 
-  it("saves settings and does not wait when no keychain and stdin stays open", async () => {
+  it("reads a slow pipe through EOF when no keychain is available", async () => {
     // Arrange
     const root = mkdtempSync(path.join(tmpdir(), "codeatlas-key-entry-"));
     const env = isolatedEnv(root);
     withoutKeychain(env, root);
-
-    // Act
-    const result = await runCli(["configure-ai", ...configureArgs], {
-      cwd: root,
-      env,
-      holdStdin: true,
-      timeoutMs: 2_000,
-    });
+    const provider = await startOkProvider();
+    const slowEndpoint = `http://127.0.0.1:${provider.port}/v1/chat/completions`;
+    let result: Awaited<ReturnType<typeof runCli>>;
+    try {
+      // Act
+      result = await runCli(
+        ["configure-ai", "--provider", "openai", "--model", "gpt-x", "--endpoint", slowEndpoint],
+        {
+          cwd: root,
+          env,
+          stdinWrites: [
+            { delayMs: 0, text: secret.slice(0, 8) },
+            { delayMs: 200, text: `${secret.slice(8)}\n`, end: true },
+          ],
+          timeoutMs: 5_000,
+        },
+      );
+    } finally {
+      await provider.close();
+    }
 
     // Assert
     expect(result.exitCode).toBe(1);
+    expect(provider.authorizations).toEqual([`Bearer ${secret}`]);
     expect(result.stderr).toContain("CODEATLAS_AI_OPENAI_KEY");
     expect(result.stderr).not.toContain("interactive terminal");
+    expect(result.stderr).not.toContain(secret);
     expect(result.stderr).not.toContain("Enter the API key");
     expect(
       JSON.parse(readFileSync(path.join(root, ".codeatlas", "appsettings.json"), "utf8")),
     ).toMatchObject({
-      ai: { provider: "openai", model: "gpt-x", endpoint },
+      ai: { provider: "openai", model: "gpt-x", endpoint: slowEndpoint },
     });
   });
 
@@ -348,33 +365,38 @@ describe("configure-ai key entry", () => {
   });
 
   it.skipIf(process.platform === "darwin")(
-    "fails immediately when a keychain exists and an open pipe has no key",
+    "reads a slow pipe through EOF and stores the whole key",
     async () => {
       // Arrange
       const root = mkdtempSync(path.join(tmpdir(), "codeatlas-key-entry-"));
       const env = isolatedEnv(root);
       const state = installFakeKeychain(root, env);
-
-      // Act
-      const result = await runCli(["configure-ai", ...configureArgs], {
-        cwd: root,
-        env,
-        holdStdin: true,
-        timeoutMs: 2_000,
-      });
+      const provider = await startOkProvider();
+      const slowEndpoint = `http://127.0.0.1:${provider.port}/v1/chat/completions`;
+      let result: Awaited<ReturnType<typeof runCli>>;
+      try {
+        // Act
+        result = await runCli(
+          ["configure-ai", "--provider", "openai", "--model", "gpt-x", "--endpoint", slowEndpoint],
+          {
+            cwd: root,
+            env,
+            stdinWrites: [
+              { delayMs: 0, text: secret.slice(0, 8) },
+              { delayMs: 200, text: `${secret.slice(8)}\n`, end: true },
+            ],
+            timeoutMs: 5_000,
+          },
+        );
+      } finally {
+        await provider.close();
+      }
 
       // Assert
-      expect(result.exitCode).toBe(1);
-      expect(result.stdout).toBe("");
-      expect(JSON.parse(result.stderr)).toMatchObject({
-        error: {
-          message:
-            "An API key is required. Run configure-ai in an interactive terminal or set CODEATLAS_AI_OPENAI_KEY.",
-        },
-      });
-      expect(result.stderr).not.toContain("Enter the API key");
-      expect(existsSync(path.join(root, ".codeatlas", "appsettings.json"))).toBe(false);
-      expect(existsSync(path.join(state, "stdin"))).toBe(false);
+      expect(result.exitCode).toBe(0);
+      expect(result.stdout).not.toContain(secret);
+      expect(readFileSync(path.join(state, "stdin"), "utf8")).toBe(secret);
+      expect(readFileSync(path.join(state, "args"), "utf8")).not.toContain(secret);
     },
   );
 
@@ -405,6 +427,207 @@ describe("configure-ai key entry", () => {
       expect(existsSync(path.join(root, ".codeatlas", "appsettings.json"))).toBe(false);
     },
   );
+
+  it("keeps stdin referenced while the hidden prompt is open", async () => {
+    // Arrange
+    const root = mkdtempSync(path.join(tmpdir(), "codeatlas-key-entry-"));
+    const env = isolatedEnv(root);
+    const tty = controllableTty();
+    const { stderr, text } = captureStderr();
+    const { keychain, writes } = recordingKeychain();
+    const { fetchImpl, authorizations } = providerFetch();
+
+    // Act
+    const pending = runConfigureAi([...configureArgs], {
+      cwd: root,
+      env,
+      platform: "linux",
+      stdin: tty.stdin,
+      stderr,
+      keychain,
+      fetchImpl,
+    });
+    const waiting = tty.refs() > 0 && tty.raw();
+    tty.send(`${secret}\r`);
+    const output = await pending;
+
+    // Assert
+    expect(waiting).toBe(true);
+    expect(text()).toBe(`${prompt}\n`);
+    expect(text()).not.toContain(secret);
+    expect(tty.raw()).toBe(false);
+    expect(tty.paused()).toBe(true);
+    expect(tty.unrefs()).toBeGreaterThan(1);
+    expect(output.success).toBe(true);
+    expect(writes).toEqual([secret]);
+    expect(authorizations).toEqual([`Bearer ${secret}`]);
+  });
+
+  it("cancels a TTY prompt on Ctrl+C without the interactive-terminal instruction", async () => {
+    // Arrange
+    const root = mkdtempSync(path.join(tmpdir(), "codeatlas-key-entry-"));
+    const env = isolatedEnv(root);
+    const tty = controllableTty();
+    const { stderr, text } = captureStderr();
+    const { keychain, writes } = recordingKeychain();
+
+    // Act
+    const pending = runConfigureAi([...configureArgs], {
+      cwd: root,
+      env,
+      platform: "linux",
+      stdin: tty.stdin,
+      stderr,
+      keychain,
+      fetchImpl: () => Promise.reject(new Error("connection was attempted")),
+    });
+    tty.send("\u0003");
+    const failure = await pending.then(
+      () => null,
+      (error: unknown) => error,
+    );
+
+    // Assert
+    expect((failure as Error).message).toBe("An API key is required. Set CODEATLAS_AI_OPENAI_KEY.");
+    expect((failure as Error).message).not.toContain("interactive terminal");
+    expect(writes).toEqual([]);
+    expect(text()).toBe(`${prompt}\n`);
+    expect(tty.raw()).toBe(false);
+    expect(tty.paused()).toBe(true);
+    expect(existsSync(path.join(root, ".codeatlas", "appsettings.json"))).toBe(false);
+  });
+
+  it("cancels a TTY prompt when stdin closes", async () => {
+    // Arrange
+    const root = mkdtempSync(path.join(tmpdir(), "codeatlas-key-entry-"));
+    const env = isolatedEnv(root);
+    const tty = controllableTty();
+    const { stderr, text } = captureStderr();
+    const { keychain, writes } = recordingKeychain();
+
+    // Act
+    const pending = runConfigureAi([...configureArgs], {
+      cwd: root,
+      env,
+      platform: "linux",
+      stdin: tty.stdin,
+      stderr,
+      keychain,
+      fetchImpl: () => Promise.reject(new Error("connection was attempted")),
+    });
+    tty.send(null);
+    const failure = await pending.then(
+      () => null,
+      (error: unknown) => error,
+    );
+
+    // Assert
+    expect((failure as Error).message).toBe("An API key is required. Set CODEATLAS_AI_OPENAI_KEY.");
+    expect((failure as Error).message).not.toContain("interactive terminal");
+    expect(writes).toEqual([]);
+    expect(text()).toBe(`${prompt}\n`);
+    expect(tty.raw()).toBe(false);
+    expect(tty.paused()).toBe(true);
+    expect(existsSync(path.join(root, ".codeatlas", "appsettings.json"))).toBe(false);
+  });
+
+  it.skipIf(process.platform === "darwin" || !ptyAvailable)(
+    "waits on a real terminal, accepts a hidden key, and finishes",
+    async () => {
+      // Arrange
+      const root = mkdtempSync(path.join(tmpdir(), "codeatlas-pty-"));
+      const env = isolatedEnv(root);
+      const state = installFakeKeychain(root, env);
+      const provider = await startOkProvider();
+      const ptyEndpoint = `http://127.0.0.1:${provider.port}/v1/chat/completions`;
+      const cli = path.join(packageRoot, "dist", "cli.js");
+      const command = [
+        shQuote(process.execPath),
+        shQuote(cli),
+        "configure-ai",
+        "--provider",
+        "openai",
+        "--model",
+        "gpt-x",
+        "--endpoint",
+        shQuote(ptyEndpoint),
+      ].join(" ");
+      const typescript = path.join(root, "typescript");
+      let output = "";
+      let result: { code: number | null; output: string };
+      try {
+        const child = spawn(
+          scriptProgram,
+          ["-q", "-e", "-f", "--echo", "never", "-c", command, typescript],
+          { cwd: root, env, stdio: ["pipe", "pipe", "pipe"] },
+        );
+        child.on("error", () => undefined);
+        child.stdout.on("data", (chunk: Buffer) => {
+          output += chunk.toString("utf8");
+        });
+        child.stderr.on("data", (chunk: Buffer) => {
+          output += chunk.toString("utf8");
+        });
+        const sawPrompt = await waitForText(() => output, "Enter the API key", 5_000);
+        await delay(300);
+        const stillWaiting = child.exitCode === null && !child.killed;
+        child.stdin.write(`${secret}\r`);
+        const code = await waitForClose(child, 10_000);
+        result = { code, output: `${output}\n${stillWaiting && sawPrompt ? "still-waiting" : ""}` };
+      } finally {
+        await provider.close();
+      }
+
+      // Assert
+      expect(result.output).toContain("still-waiting");
+      expect(result.code).toBe(0);
+      expect(result.output).not.toContain(secret);
+      expect(readFileSync(path.join(state, "stdin"), "utf8")).toBe(secret);
+    },
+  );
+
+  it("runs Windows Credential Manager at System32 powershell.exe and ignores a PATH powershell", () => {
+    // Arrange
+    const root = mkdtempSync(path.join(tmpdir(), "codeatlas-ps-"));
+    const env = isolatedEnv(root);
+    const systemRoot = path.join(root, "winroot");
+    const executable = windowsPowershellExecutable({ SystemRoot: systemRoot });
+    const systemMarker = path.join(root, "system-ps.txt");
+    const decoyMarker = path.join(root, "decoy-ps.txt");
+    const stdinFile = path.join(root, "ps-stdin.txt");
+    const decoyBin = path.join(root, "decoy-bin");
+    mkdirSync(decoyBin, { recursive: true });
+    installPowerShellSpy(executable ?? "", false);
+    installPowerShellSpy(path.join(decoyBin, "powershell"), true);
+    installPowerShellSpy(path.join(decoyBin, "powershell.exe"), true);
+    installPowerShellSpy(path.join(root, "powershell"), true);
+    installPowerShellSpy(path.join(root, "powershell.exe"), true);
+    env.SystemRoot = systemRoot;
+    env.SYSTEMROOT = systemRoot;
+    env.PATH = [decoyBin, "/usr/bin", "/bin"].join(";");
+    env.Path = env.PATH;
+    env.CODEATLAS_PS_MARKER = systemMarker;
+    env.CODEATLAS_DECOY_MARKER = decoyMarker;
+    env.CODEATLAS_PS_STDIN = stdinFile;
+    const keychain = createKeychain({
+      platform: "win32",
+      runner: createProcessRunner(env, "win32"),
+      env,
+    });
+
+    // Act
+    keychain.write("openai", secret);
+
+    // Assert
+    expect(executable).not.toBeNull();
+    expect(existsSync(decoyMarker)).toBe(false);
+    const recorded = readFileSync(systemMarker, "utf8");
+    expect(recorded).toContain(executable ?? "");
+    expect(recorded).toContain("CodeAtlas:ai:openai");
+    expect(recorded).toContain("-ExecutionPolicy");
+    expect(recorded).not.toContain(secret);
+    expect(readFileSync(stdinFile, "utf8")).toBe(secret);
+  });
 
   it("reads the Windows user-scope key with System32 reg.exe and ignores a workspace reg", async () => {
     // Arrange
@@ -451,6 +674,168 @@ describe("configure-ai key entry", () => {
   });
 });
 
+function controllableTty(): {
+  stdin: SecretInput;
+  refs: () => number;
+  unrefs: () => number;
+  raw: () => boolean;
+  paused: () => boolean;
+  send: (text: string | null) => void;
+} {
+  let refs = 0;
+  let unrefs = 0;
+  let rawMode = false;
+  let didPause = false;
+  const stream = new Readable({
+    read() {
+      // send() pushes the typed bytes.
+    },
+  });
+  const stdin = stream as SecretInput;
+  stdin.isTTY = true;
+  stdin.ref = () => {
+    refs += 1;
+  };
+  stdin.unref = () => {
+    unrefs += 1;
+  };
+  stdin.setRawMode = (mode: boolean) => {
+    rawMode = mode;
+  };
+  const pause = stream.pause.bind(stream);
+  stdin.pause = () => {
+    didPause = true;
+    return pause();
+  };
+  return {
+    stdin,
+    refs: () => refs,
+    unrefs: () => unrefs,
+    raw: () => rawMode,
+    paused: () => didPause,
+    send(text) {
+      stream.push(text);
+    },
+  };
+}
+
+function startOkProvider(): Promise<{
+  port: number;
+  authorizations: string[];
+  close: () => Promise<void>;
+}> {
+  const authorizations: string[] = [];
+  const server = createServer((request, response) => {
+    authorizations.push(request.headers.authorization ?? "");
+    request.on("data", () => undefined);
+    request.on("end", () => {
+      response.writeHead(200, { "content-type": "application/json" });
+      response.end(
+        JSON.stringify({
+          choices: [{ finish_reason: "stop", message: { content: '{"ok":true}' } }],
+        }),
+      );
+    });
+  });
+  return new Promise((resolve, reject) => {
+    server.once("error", reject);
+    server.listen(0, "127.0.0.1", () => {
+      const address = server.address();
+      if (address === null || typeof address === "string") {
+        reject(new Error("The fake provider did not bind to a port."));
+        return;
+      }
+      resolve({
+        port: address.port,
+        authorizations,
+        close: () =>
+          new Promise((done, fail) => {
+            server.close((error) => (error ? fail(error) : done()));
+          }),
+      });
+    });
+  });
+}
+
+function shQuote(value: string): string {
+  return `'${value.replace(/'/g, `'\\''`)}'`;
+}
+
+function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => {
+    setTimeout(resolve, ms);
+  });
+}
+
+async function waitForText(read: () => string, needle: string, ms: number): Promise<boolean> {
+  const started = Date.now();
+  while (Date.now() - started < ms) {
+    if (read().includes(needle)) return true;
+    await delay(20);
+  }
+  return false;
+}
+
+function waitForClose(child: ChildProcess, ms: number): Promise<number | null> {
+  if (child.exitCode !== null || child.signalCode !== null) return Promise.resolve(child.exitCode);
+  return new Promise((resolve) => {
+    const timer = setTimeout(() => {
+      child.kill();
+      resolve(null);
+    }, ms);
+    child.on("close", (code) => {
+      clearTimeout(timer);
+      resolve(code);
+    });
+  });
+}
+
+function installPowerShellSpy(file: string, decoy: boolean): void {
+  mkdirSync(path.dirname(file), { recursive: true });
+  if (process.platform === "win32") {
+    const body = decoy
+      ? 'File.WriteAllText(Environment.GetEnvironmentVariable("CODEATLAS_DECOY_MARKER"), "decoy"); return 99;'
+      : [
+          'var marker = Environment.GetEnvironmentVariable("CODEATLAS_PS_MARKER");',
+          'var stdinPath = Environment.GetEnvironmentVariable("CODEATLAS_PS_STDIN");',
+          'var recorded = Environment.GetCommandLineArgs()[0] + "\\n" + string.Join("\\n", args);',
+          "File.WriteAllText(marker, recorded);",
+          "using (var input = Console.OpenStandardInput())",
+          "using (var output = File.Create(stdinPath)) { input.CopyTo(output); }",
+          "return 0;",
+        ].join("\n");
+    compileCSharpExe(
+      file,
+      [
+        "using System;",
+        "using System.IO;",
+        "class FakePs {",
+        "  static int Main(string[] args) {",
+        body,
+        "  }",
+        "}",
+        "",
+      ].join("\n"),
+    );
+    return;
+  }
+  const script = decoy
+    ? "#!/bin/sh\nprintf '%s\\n' decoy > \"$CODEATLAS_DECOY_MARKER\"\nexit 99\n"
+    : [
+        "#!/bin/sh",
+        'printf "%s\\n" "$0" > "$CODEATLAS_PS_MARKER"',
+        'printf "%s\\n" "$@" >> "$CODEATLAS_PS_MARKER"',
+        ': > "$CODEATLAS_PS_STDIN"',
+        'while IFS= read -r line || [ -n "$line" ]; do',
+        '  printf "%s" "$line" >> "$CODEATLAS_PS_STDIN"',
+        "done",
+        "exit 0",
+        "",
+      ].join("\n");
+  writeFileSync(file, script);
+  chmodSync(file, 0o755);
+}
+
 function installReg(file: string, marker: string, decoy: boolean): void {
   mkdirSync(path.dirname(file), { recursive: true });
   if (process.platform === "win32" && file.endsWith(".exe")) {
@@ -478,8 +863,6 @@ function installReg(file: string, marker: string, decoy: boolean): void {
 }
 
 function compileWindowsReg(file: string, marker: string, decoy: boolean): void {
-  const dir = path.dirname(file);
-  const source = path.join(dir, `${path.basename(file)}.cs`);
   const markerVariable = decoy ? "CODEATLAS_DECOY_MARKER" : "CODEATLAS_REG_MARKER";
   const body = decoy
     ? `File.WriteAllText(Environment.GetEnvironmentVariable("${markerVariable}"), "decoy"); return 99;`
@@ -494,43 +877,22 @@ function compileWindowsReg(file: string, marker: string, decoy: boolean): void {
         `Console.WriteLine("    " + name + "    REG_SZ    user-scope-key");`,
         `return 0;`,
       ].join("\n");
-  writeFileSync(
-    source,
-    [
-      "using System;",
-      "using System.IO;",
-      "class FakeReg {",
-      "  static int Main(string[] args) {",
-      body,
-      "  }",
-      "}",
-      "",
-    ].join("\n"),
-  );
-  const roots = [process.env.SystemRoot, process.env.WINDIR, "C:\\Windows"].filter(
-    (value): value is string => typeof value === "string" && value.length > 0,
-  );
-  const compilers = roots.flatMap((root) => [
-    path.join(root, "Microsoft.NET", "Framework64", "v4.0.30319", "csc.exe"),
-    path.join(root, "Microsoft.NET", "Framework", "v4.0.30319", "csc.exe"),
-  ]);
-  for (const csc of compilers) {
-    if (!existsSync(csc)) continue;
-    const compiled = spawnSync(csc, ["/nologo", `/out:${file}`, source], { encoding: "utf8" });
-    if (compiled.status === 0) return;
+  try {
+    compileCSharpExe(
+      file,
+      [
+        "using System;",
+        "using System.IO;",
+        "class FakeReg {",
+        "  static int Main(string[] args) {",
+        body,
+        "  }",
+        "}",
+        "",
+      ].join("\n"),
+    );
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "compile failed";
+    throw new Error(`Could not compile ${file} (marker ${marker}): ${message}`);
   }
-  const powershell = spawnSync(
-    "powershell.exe",
-    [
-      "-NoProfile",
-      "-NonInteractive",
-      "-ExecutionPolicy",
-      "Bypass",
-      "-Command",
-      `Add-Type -OutputType ConsoleApplication -OutputAssembly '${file}' -TypeDefinition (Get-Content -Raw '${source}')`,
-    ],
-    { encoding: "utf8" },
-  );
-  if (powershell.status === 0 && existsSync(file)) return;
-  throw new Error(`Could not compile ${file} (marker ${marker}).`);
 }

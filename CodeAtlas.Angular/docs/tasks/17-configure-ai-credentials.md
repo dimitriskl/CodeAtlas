@@ -77,3 +77,10 @@ Status: in-test
   3. No keychain and no key (closed stdin, an open pipe, and a TTY): no prompt, exit 1 naming `CODEATLAS_AI_<PROVIDER>_KEY`, and `.codeatlas/appsettings.json` still records provider, model, and endpoint. A key that cannot be saved is not requested.
   4. Windows user scope runs `%SystemRoot%\System32\reg.exe`, not a `reg` on `PATH` or in the workspace. Credential Manager is invoked with process-scoped `-ExecutionPolicy Bypass` before `-File`. The secret stays on stdin.
   5. configure-ai success is `configureAiSuccessEnvelope` and configure-ai errors are `commandErrorEnvelope`, both in `envelope.ts`.
+- 2026-10-29 Developer, review of `cf56eb5`.
+  1. The hidden prompt calls `stdin.ref()` when it starts. Every exit restores cooked mode, pauses stdin, and unrefs it, so a real terminal no longer exits 13 while waiting for the key.
+  2. A pseudo-terminal test (`script -q -e -f --echo never -c`) checks that the built CLI waits for the prompt, accepts a typed key that is not echoed, and finishes. The test is skipped where `script` has no PTY. A seam test asserts the prompt references stdin while it is still waiting.
+  3. Ctrl+C and stdin closing during the prompt cancel like Esc.
+  4. Windows Credential Manager runs `%SystemRoot%\System32\WindowsPowerShell\v1.0\powershell.exe`, not `powershell` from PATH. A decoy on PATH is not executed.
+  5. A piped or file key is read until EOF, so a slow pipe is not cut off after 50 ms. An open terminal, or a closed stdin with no key, still fails immediately and does not wait.
+  6. `CredentialStoreError` is removed. Keychain failures use the shared `CommandError`.

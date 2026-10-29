@@ -13,7 +13,7 @@ import {
 import { configureAiSuccessEnvelope, type ConfigureAiSuccessEnvelope } from "./envelope.js";
 import { CommandError } from "./errors.js";
 import { defaultCredentialsPath, findCredential } from "./credentials.js";
-import { createKeychain, CredentialStoreError, type Keychain } from "./keychain.js";
+import { createKeychain, type Keychain } from "./keychain.js";
 import { createProcessRunner } from "./process-runner.js";
 
 const selectionFlags = ["--provider", "--model", "--effort", "--endpoint", "--settings"] as const;
@@ -203,8 +203,8 @@ function noKeychainMessage(variable: string): string {
 }
 
 /**
- * A missing key is prompted only when it can be saved.
- * Non-interactive input is taken only when it is already available, and never waited on.
+ * A missing key is prompted only when it can be saved and stdin is a terminal.
+ * A pipe or file is read through EOF. An open terminal is never waited on here.
  */
 async function resolveMissingKey(
   variable: string,
@@ -320,7 +320,7 @@ function saveKey(keychain: Keychain, provider: string, secret: string): string {
   try {
     keychain.write(provider, secret);
   } catch (error) {
-    if (error instanceof CredentialStoreError) {
+    if (error instanceof CommandError) {
       throw new CommandError(
         "ai_configuration_invalid",
         `Connection passed, but the key could not be saved: ${error.message} Settings were not replaced.`,
@@ -384,19 +384,16 @@ async function readPipedKey(stdin: SecretInput): Promise<string | null> {
       return null;
     }
   }
+  // Read a pipe through EOF. A short timer would cut a slow writer off mid-key.
+  // An already-closed empty pipe ends immediately, so a missing key does not wait.
   stdin.ref?.();
   stdin.setEncoding("utf8");
   return new Promise((resolve) => {
     let settled = false;
     let data = "";
-    const timer = setTimeout(() => {
-      take();
-      finish(data.length === 0 ? null : normalizeStreamedKey(data));
-    }, 50);
     const finish = (value: string | null) => {
       if (settled) return;
       settled = true;
-      clearTimeout(timer);
       stdin.off("readable", onReadable);
       stdin.off("end", onEnd);
       stdin.pause();
@@ -424,9 +421,8 @@ async function readPipedKey(stdin: SecretInput): Promise<string | null> {
     };
     stdin.on("readable", onReadable);
     stdin.on("end", onEnd);
-    // A closed pipe's bytes can arrive on a later turn. An inherited open pipe never ends,
-    // so the timer gives up instead of waiting for it.
-    take();
+    if (stdin.readableEnded === true) onEnd();
+    else take();
   });
 }
 
@@ -438,34 +434,52 @@ function normalizeStreamedKey(data: string): string | null {
   return text.length === 0 ? null : text;
 }
 
-/** .NET AiSetup.ReadSecret: prompt on stderr, no echo, Enter submits, Esc cancels, 8192-character cap. */
+/** .NET AiSetup.ReadSecret: prompt on stderr, no echo, Enter submits, Esc or Ctrl+C cancels. */
 function readSecret(
   variable: string,
   stdin: SecretInput,
   stderr: NodeJS.WritableStream,
 ): Promise<string | null> {
+  // runConfigureAi unrefs stdin so a closed pipe cannot hold the process open.
+  // The prompt must reference it again or Node exits before the key is typed.
+  stdin.ref?.();
   stderr.write(`Enter the API key, or set ${variable} (hidden; Esc cancels): `);
   stdin.setRawMode?.(true);
   return new Promise((resolve) => {
+    let settled = false;
     const chars: string[] = [];
     const cleanup = () => {
       stdin.off("data", onData);
-      stdin.setRawMode?.(false);
+      stdin.off("end", onCancel);
+      stdin.off("close", onCancel);
+      stdin.off("error", onCancel);
+      try {
+        stdin.setRawMode?.(false);
+      } catch {
+        // The terminal can already be gone when stdin closes.
+      }
       stdin.pause();
+      stdin.unref?.();
+    };
+    const finish = (value: string | null) => {
+      if (settled) return;
+      settled = true;
+      stderr.write("\n");
+      cleanup();
+      resolve(value);
+    };
+    const onCancel = () => {
+      finish(null);
     };
     const onData = (chunk: Buffer | string) => {
       const text = typeof chunk === "string" ? chunk : chunk.toString("utf8");
       for (const char of text) {
-        if (char === "\u001b") {
-          stderr.write("\n");
-          cleanup();
-          resolve(null);
+        if (char === "\u001b" || char === "\u0003") {
+          finish(null);
           return;
         }
         if (char === "\r" || char === "\n") {
-          stderr.write("\n");
-          cleanup();
-          resolve(chars.join(""));
+          finish(chars.join(""));
           return;
         }
         if (char === "\u007f" || char === "\b") {
@@ -478,6 +492,9 @@ function readSecret(
       }
     };
     stdin.on("data", onData);
+    stdin.on("end", onCancel);
+    stdin.on("close", onCancel);
+    stdin.on("error", onCancel);
     stdin.resume();
   });
 }

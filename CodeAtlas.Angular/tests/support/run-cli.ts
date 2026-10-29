@@ -18,6 +18,8 @@ export type RunCliOptions = {
   stdin?: string;
   /** Keep the stdin pipe open so a missing key must not wait for it. */
   holdStdin?: boolean;
+  /** Write stdin in pieces. The last piece that sets `end` closes the pipe. */
+  stdinWrites?: readonly { delayMs: number; text: string; end?: boolean }[];
   timeoutMs?: number;
 };
 
@@ -64,6 +66,18 @@ export function runCli(
     child.stdin.on("error", () => {
       // The process can exit before the pipe is read.
     });
+    if (options.stdinWrites !== undefined) {
+      for (const write of options.stdinWrites) {
+        const timer = setTimeout(() => {
+          if (write.end === true) child.stdin.end(write.text);
+          else child.stdin.write(write.text);
+        }, write.delayMs);
+        child.on("close", () => {
+          clearTimeout(timer);
+        });
+      }
+      return;
+    }
     if (options.holdStdin === true) return;
     if (options.stdin === undefined) child.stdin.end();
     else child.stdin.end(options.stdin);

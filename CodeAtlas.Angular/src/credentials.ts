@@ -1,9 +1,10 @@
 import { existsSync, readFileSync, statSync } from "node:fs";
 import path from "node:path";
-import { CredentialStoreError, type Keychain } from "./keychain.js";
+import { CommandError } from "./errors.js";
+import type { Keychain } from "./keychain.js";
 
 export type { Keychain, ProcessResult, ProcessRunner } from "./keychain.js";
-export { createKeychain, CredentialStoreError } from "./keychain.js";
+export { createKeychain } from "./keychain.js";
 
 export type EnvScope = "process" | "user";
 
@@ -76,7 +77,7 @@ export function findCredential(
       if (stored !== null && hasText(stored))
         return { value: stored, location: deps.keychain.name };
     } catch (error) {
-      if (!(error instanceof CredentialStoreError)) throw error;
+      if (!(error instanceof CommandError)) throw error;
     }
   }
   const stored = readCredentialsFile(deps.credentialsPath, provider);
@@ -108,7 +109,7 @@ function decodeStoredKey(stored: string): string {
   if (!stored.startsWith(base64Prefix)) return stored;
   const encoded = stored.slice(base64Prefix.length);
   if (!/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(encoded)) {
-    throw new CredentialStoreError("The credentials file is invalid.");
+    throw new CommandError("ai_configuration_invalid", "The credentials file is invalid.", 1);
   }
   return Buffer.from(encoded, "base64").toString("utf8");
 }

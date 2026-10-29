@@ -14,6 +14,7 @@ import path from "node:path";
 import { describe, expect, it } from "vitest";
 import { assertAiEndpoint } from "../src/configure-ai.js";
 import { runCli } from "./support/run-cli.js";
+import { installFakeWindowsPowerShell } from "./support/windows-keychain-tool.js";
 
 const secret = "sk-synthetic-credential-0123456789";
 
@@ -34,6 +35,10 @@ function isolatedEnv(root: string): NodeJS.ProcessEnv {
   env.APPDATA = path.join(root, "appdata");
   env.HOME = path.join(root, "home");
   env.USERPROFILE = path.join(root, "home");
+  const systemRoot = path.join(root, "empty-winroot");
+  mkdirSync(systemRoot, { recursive: true });
+  env.SystemRoot = systemRoot;
+  env.SYSTEMROOT = systemRoot;
   return env;
 }
 
@@ -243,30 +248,11 @@ function installFakeKeychain(root: string, env: NodeJS.ProcessEnv): string {
   env.CODEATLAS_FAKE_KEYCHAIN_DIR = state;
   env.DBUS_SESSION_BUS_ADDRESS = "unix:path=/tmp/codeatlas-fake-bus";
   if (process.platform === "win32") {
-    writeFileSync(
-      path.join(bin, "powershell.js"),
-      [
-        "const fs = require('node:fs');",
-        "const path = require('node:path');",
-        "const dir = process.env.CODEATLAS_FAKE_KEYCHAIN_DIR;",
-        "fs.mkdirSync(dir, { recursive: true });",
-        "const args = process.argv.slice(2);",
-        "const opIndex = args.findIndex((arg) => arg === 'read' || arg === 'write');",
-        "const operation = opIndex >= 0 ? args[opIndex] : '';",
-        "const target = opIndex >= 0 ? args[opIndex + 1] : '';",
-        "const provider = target.startsWith('CodeAtlas:ai:') ? target.slice('CodeAtlas:ai:'.length) : '';",
-        "if (operation === 'read') {",
-        "  const stored = path.join(dir, 'value-' + provider);",
-        "  if (fs.existsSync(stored)) { process.stdout.write(fs.readFileSync(stored)); process.exit(0); }",
-        "  process.exit(1168);",
-        "}",
-        "const stdin = fs.readFileSync(0);",
-        "fs.writeFileSync(path.join(dir, 'stdin'), stdin);",
-        "fs.writeFileSync(path.join(dir, 'args'), args.join('\\n') + '\\n');",
-        "if (operation === 'write') fs.writeFileSync(path.join(dir, 'value-' + provider), stdin);",
-        "process.exit(0);",
-        "",
-      ].join("\n"),
+    const systemRoot = path.join(root, "winroot");
+    env.SystemRoot = systemRoot;
+    env.SYSTEMROOT = systemRoot;
+    installFakeWindowsPowerShell(
+      path.join(systemRoot, "System32", "WindowsPowerShell", "v1.0", "powershell.exe"),
     );
   } else {
     const tool = path.join(bin, "secret-tool");
