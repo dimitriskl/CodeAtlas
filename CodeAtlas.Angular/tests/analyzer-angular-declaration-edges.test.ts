@@ -385,4 +385,172 @@ describe("Angular declaration edges", () => {
       { qualifiedName: "ShopModule", kind: "class" },
     ]);
   });
+
+  it("matches a qualified call by its last identifier regardless of the qualifier", () => {
+    // Arrange
+    const source = [
+      '@foo.Component({ selector: "app-panel", template: "" })',
+      "export class Panel {",
+      '  readonly title = this.input("");',
+      "  readonly sku = unrelated.input.required<string>();",
+      "  readonly saved = unrelated.output<void>();",
+      "  readonly quantity = unrelated.model(0);",
+      "}",
+      "",
+      "export const activate: x.CanActivateFn = () => true;",
+      "export class RouteGuard implements y.CanActivate {}",
+      "",
+    ].join("\n");
+
+    // Act
+    const indexed = namedKinds(indexText(source));
+
+    // Assert
+    expect(indexed).toEqual([
+      { qualifiedName: "Panel", kind: "component" },
+      { qualifiedName: "Panel.title", kind: "input" },
+      { qualifiedName: "Panel.sku", kind: "input" },
+      { qualifiedName: "Panel.saved", kind: "output" },
+      { qualifiedName: "Panel.quantity", kind: "input" },
+      { qualifiedName: "Panel.quantityChange", kind: "output" },
+      { qualifiedName: "activate", kind: "guard" },
+      { qualifiedName: "RouteGuard", kind: "guard" },
+    ]);
+  });
+
+  it("places the Change output of a.b.model.required() on the property name", () => {
+    // Arrange
+    const source = [
+      '@Component({ selector: "app-panel", template: "" })',
+      "export class Panel {",
+      "  readonly label = a.b.model.required<string>();",
+      "  static quantity = a.b.model.required<number>();",
+      "}",
+      "",
+    ].join("\n");
+    const labelAt = tokenPosition(source, "label");
+    const quantityAt = tokenPosition(source, "quantity");
+
+    // Act
+    const indexed = indexText(source);
+
+    // Assert
+    expect(indexed).toEqual([
+      expect.objectContaining({ qualifiedName: "Panel", kind: "component" }),
+      expect.objectContaining({
+        qualifiedName: "Panel.label",
+        kind: "input",
+        line: labelAt.line,
+        column: labelAt.column,
+        signatures: [],
+      }),
+      expect.objectContaining({
+        qualifiedName: "Panel.labelChange",
+        kind: "output",
+        line: labelAt.line,
+        column: labelAt.column,
+        signatures: [],
+      }),
+      expect.objectContaining({
+        qualifiedName: "Panel.<static>.quantity",
+        kind: "input",
+        line: quantityAt.line,
+        column: quantityAt.column,
+        signatures: [],
+      }),
+      expect.objectContaining({
+        qualifiedName: "Panel.<static>.quantityChange",
+        kind: "output",
+        line: quantityAt.line,
+        column: quantityAt.column,
+        signatures: [],
+      }),
+    ]);
+  });
+
+  it("does not treat a signal name that is not called as an input or output", () => {
+    // Arrange
+    const source = [
+      '@Component({ selector: "app-panel", template: "" })',
+      "export class Panel {",
+      "  readonly title = core.input;",
+      "  readonly sku = core.input.required;",
+      "  readonly saved = core.output;",
+      "  readonly quantity = core.model;",
+      "  readonly label = core.model.required;",
+      "}",
+      "",
+    ].join("\n");
+
+    // Act
+    const indexed = namedKinds(indexText(source));
+
+    // Assert
+    expect(indexed).toEqual([
+      { qualifiedName: "Panel", kind: "component" },
+      { qualifiedName: "Panel.title", kind: "property" },
+      { qualifiedName: "Panel.sku", kind: "property" },
+      { qualifiedName: "Panel.saved", kind: "property" },
+      { qualifiedName: "Panel.quantity", kind: "property" },
+      { qualifiedName: "Panel.label", kind: "property" },
+    ]);
+  });
+
+  it("does not treat a computed signal callee as an input or output", () => {
+    // Arrange
+    const source = [
+      '@Component({ selector: "app-panel", template: "" })',
+      "export class Panel {",
+      "  readonly title = core['input']('');",
+      "  readonly sku = core['input'].required<string>();",
+      "  readonly saved = core['output']<void>();",
+      "  readonly quantity = core['model'](0);",
+      "  readonly label = core['model'].required<string>();",
+      "  readonly via = core['input']['required']<string>();",
+      "}",
+      "",
+    ].join("\n");
+
+    // Act
+    const indexed = namedKinds(indexText(source));
+
+    // Assert
+    expect(indexed).toEqual([
+      { qualifiedName: "Panel", kind: "component" },
+      { qualifiedName: "Panel.title", kind: "property" },
+      { qualifiedName: "Panel.sku", kind: "property" },
+      { qualifiedName: "Panel.saved", kind: "property" },
+      { qualifiedName: "Panel.quantity", kind: "property" },
+      { qualifiedName: "Panel.label", kind: "property" },
+      { qualifiedName: "Panel.via", kind: "property" },
+    ]);
+  });
+
+  it("does not treat a signal call in a method body as an input or output", () => {
+    // Arrange
+    const source = [
+      '@Component({ selector: "app-panel", template: "" })',
+      "export class Panel {",
+      '  readonly title = input("");',
+      '  saved = "";',
+      "  work() {",
+      '    const sku = foo.input("");',
+      "    const quantity = foo.model(0);",
+      "    this.saved = output<void>();",
+      "  }",
+      "}",
+      "",
+    ].join("\n");
+
+    // Act
+    const indexed = namedKinds(indexText(source));
+
+    // Assert
+    expect(indexed).toEqual([
+      { qualifiedName: "Panel", kind: "component" },
+      { qualifiedName: "Panel.title", kind: "input" },
+      { qualifiedName: "Panel.saved", kind: "property" },
+      { qualifiedName: "Panel.work", kind: "method" },
+    ]);
+  });
 });
