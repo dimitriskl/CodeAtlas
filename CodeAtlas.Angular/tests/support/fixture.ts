@@ -19,6 +19,13 @@ export async function copySymbolsWorkspace(): Promise<{
   return copyWorkspace("symbols-workspace");
 }
 
+export async function copyDeclarationsWorkspace(): Promise<{
+  path: string;
+  remove: () => Promise<void>;
+}> {
+  return copyWorkspace("declarations-workspace");
+}
+
 async function copyWorkspace(name: string): Promise<{
   path: string;
   remove: () => Promise<void>;

@@ -10,6 +10,8 @@ const publishedPaths = [
   "dist/ai-provider.js",
   "dist/ai-settings.d.ts",
   "dist/ai-settings.js",
+  "dist/angular-kinds.d.ts",
+  "dist/angular-kinds.js",
   "dist/cli.d.ts",
   "dist/cli.js",
   "dist/configure-ai.d.ts",

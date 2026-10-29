@@ -11,7 +11,7 @@ Three numbers, kept separate so each can change on its own:
 | Number              | Constant          | Initial value | Meaning                                                                                                |
 | ------------------- | ----------------- | ------------- | ------------------------------------------------------------------------------------------------------ |
 | Contract version    | `contractVersion` | `1`           | Shape of this JSON envelope.                                                                           |
-| Schema version      | `schemaVersion`   | `2`           | Persisted index schema. `index` writes it into each generation.                                        |
+| Schema version      | `schemaVersion`   | `3`           | Persisted index schema. `index` writes it into each generation.                                        |
 | Application version | `appVersion`      | `0.00.01`     | This package. Format `x.xx.xx`. Printed by `codeatlas-ng --version` and sent as `responseToolVersion`. |
 
 `responseToolVersion` is the application version of the process that answered. It is not the contract version and not the schema version.
@@ -287,14 +287,14 @@ Paths stored in the generation are workspace-relative and use `/`. They do not s
 | --------------------------- | ------------------------------------------------ |
 | `manifestVersion`           | `1`                                              |
 | `generationId`              | The published generation.                        |
-| `schemaVersion`             | `2`                                              |
+| `schemaVersion`             | `3`                                              |
 | `workspace`                 | The workspace identity from the naming rules.    |
 | `artifacts.index.db.length` | Byte length of that generation's `index.db`.     |
 | `artifacts.index.db.sha256` | SHA-256 of those bytes, 64 lowercase hex digits. |
 
 Publication writes a new `generations/<generationId>/` directory and its `index.db`, then replaces `current.json` by renaming a temporary file in the same directory. The generation directory is not modified after the pointer names it. Indexing the same workspace again publishes a new generation id, leaves the previous `index.db` bytes unchanged, and keeps the same folder name.
 
-### Schema version 2
+### Schema version 3
 
 `index.db` is SQLite. This version stores:
 
@@ -345,7 +345,7 @@ Other `index` failures:
 | `index_busy`          | 1    | The writer lock is held, as above.                                                                                                                     |
 | `analysis_failed`     | 1    | The workspace could not be indexed, including a `tsConfig` that was named and is missing, or `angular.json` that is not JSON.                          |
 | `invalid_index`       | 1    | `current.json` or `index.db` is present but is not a valid generation of this schema. A missing `symbol_signatures` table is this error.               |
-| `unsupported_index`   | 1    | The generation's `schemaVersion` is not `2`. Message: `Unsupported index schema. Run codeatlas-ng index --workspace <path> to rebuild it.`             |
+| `unsupported_index`   | 1    | The generation's `schemaVersion` is not `3`. Message: `Unsupported index schema. Run codeatlas-ng index --workspace <path> to rebuild it.`             |
 
 `--workspace` defaults to the current directory. A relative path is resolved from there.
 
@@ -358,7 +358,7 @@ Other `index` failures:
 | Field             | Type   | Meaning                                                                  |
 | ----------------- | ------ | ------------------------------------------------------------------------ |
 | `generationId`    | string | The generation just published.                                           |
-| `schemaVersion`   | number | `2`, from the generation.                                                |
+| `schemaVersion`   | number | `3`, from the generation.                                                |
 | `contractVersion` | number | Contract version stored in the generation.                               |
 | `appVersion`      | string | Application version stored in the generation.                            |
 | `counts.projects` | number | Rows in `projects`.                                                      |
@@ -505,7 +505,7 @@ Named containers:
 
 An unnamed class or function declaration is not indexed. Members of an unnamed class are not indexed. A computed name that is not a private identifier is not indexed. Enum members are not indexed.
 
-The same qualified name in one file is one symbol. Overloads are that case, and so is declaration merging. Signatures are concatenated in source order. The kind is the earliest of `class`, `interface`, `enum`, `function`, `type-alias`, `method`, and `property` that any merged declaration has. Line and column point at the first declaration of that kind. For an overload set, that is the first signature's name. Both are 1-based.
+The same qualified name in one file is one symbol. Overloads are that case, and so is declaration merging. Signatures are concatenated in source order. The kind is the earliest of `component`, `directive`, `pipe`, `guard`, `interceptor`, `service`, `class`, `interface`, `enum`, `function`, `type-alias`, `method`, `input`, `output`, and `property` that any merged declaration has. Line and column point at the first declaration of that kind. For an overload set, that is the first signature's name. Both are 1-based.
 
 Plain TypeScript declarations that are indexed:
 
@@ -519,7 +519,31 @@ Plain TypeScript declarations that are indexed:
 | enum                                                          | `enum`       |
 | type alias                                                    | `type-alias` |
 
-A get and a set with the same qualified name are one property. Later tasks add Angular kinds in this same `kind` column. They do not change the id shape.
+A get and a set with the same qualified name are one symbol. The kind is `input` or `output` when either accessor has that decorator, and `property` otherwise. Angular kinds use this same `kind` column. They do not change the id shape. Route symbols are a later task.
+
+### Angular declarations
+
+Recognition uses the identifier as written. A qualified name such as `ng.Component` uses its last identifier. An import alias is not recognized. Names are not resolved to a module.
+
+A class uses the first matching kind: `component`, `directive`, `pipe`, `guard`, `interceptor`, `service`, then `class`. A property or accessor uses `input` or `output` instead of `property` when the table below matches. `@Input` or `@Output` on a property wins over a signal initializer on that same property. `@Injectable` on a guard or interceptor does not make it a service. A class that has a method named `canActivate` and does not list a guard interface in `implements` stays `class`. An `@NgModule` class stays `class`. `standalone: true` and `standalone: false` do not change the kind, so a standalone component and an NgModule-declared component are both `component`.
+
+| Source                                                                                                      | Kind                                                            |
+| ----------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------- |
+| `@Component` class                                                                                          | `component`                                                     |
+| `@Directive` class                                                                                          | `directive`                                                     |
+| `@Pipe` class                                                                                               | `pipe`                                                          |
+| class `implements` `CanActivate`, `CanActivateChild`, `CanDeactivate`, `CanMatch`, or `CanLoad`             | `guard`                                                         |
+| class `implements` `HttpInterceptor`                                                                        | `interceptor`                                                   |
+| `@Injectable` class                                                                                         | `service`                                                       |
+| variable whose type annotation is `CanActivateFn`, `CanActivateChildFn`, `CanDeactivateFn`, or `CanMatchFn` | `guard`                                                         |
+| variable whose type annotation is `HttpInterceptorFn`                                                       | `interceptor`                                                   |
+| `@Input` property or accessor, or an initializer call `input()` or `input.required()`                       | `input`                                                         |
+| `@Output` property or accessor, or an initializer call `output()`                                           | `output`                                                        |
+| initializer call `model()` or `model.required()`                                                            | `input` for the property, and `output` named `<property>Change` |
+
+`input.required()` is an `input`. `model.required()` is the same pair as `model()`. The PRD has no separate required kind. Signal `input()`, `output()`, and `model()` produce `input` and `output` symbols with the same member names as the decorator forms in the table, including the `<property>Change` output for `model()`.
+
+The `model()` output uses the property name's line and column. Its qualified name follows the property, including a `<static>` segment, with the last segment replaced by `<property>Change`. Other variables are not symbols. The arrow function or function expression assigned to a functional guard or interceptor is not itself a symbol and is not a container.
 
 A file can belong to more than one project. Each project that contains it gets its own symbols, with that project's name in the id. Within one project a file is indexed once. The build program is read first, then the test program (`architect.test.options.tsConfig`). A spec file excluded from the build program is still indexed when the test program includes it.
 
