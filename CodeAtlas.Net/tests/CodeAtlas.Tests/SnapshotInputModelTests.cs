@@ -423,11 +423,10 @@ public sealed class SnapshotInputModelTests : IDisposable
             </Project>
             $([System.Environment]::GetEnvironmentVariable('EXTRA_BUILD_INPUT'))
             """;
-        var root = Path.GetPathRoot(Path.GetTempPath())!;
-        var dotnetRoot = Path.Combine(root, "Program Files", "dotnet");
-        var outputPath = Path.Combine(root, "repo", "obj", "project.assets.json");
+        var dotnetRoot = Path.Combine(root.FullName, "Program Files", "dotnet");
+        var outputPath = Path.Combine(root.FullName, "repo", "obj", "project.assets.json");
         var sdkPath = Path.Combine(dotnetRoot, "sdk", "10.0.402", "Sdk.targets");
-        var projectPath = Path.Combine(root, "repo", "Directory.Build.props");
+        var projectPath = Path.Combine(root.FullName, "repo", "Directory.Build.props");
 
         // Act
         var selected = BuildEnvironment.Select(BuildEnvironment.ReferencesIn(xml),
