@@ -38,7 +38,7 @@ class VersionTests(unittest.TestCase):
     def make_fixture(self, root):
         (root / "docs").mkdir()
         (root / "Version.props").write_text("<Project><CodeAtlasVersion>0.00.99</CodeAtlasVersion></Project>", encoding="utf-8")
-        for relative in ["README.md", "docs/CodeAtlas-Project-Recap.md", "docs/VERSION.md"]:
+        for relative in ["README.md", "docs/VERSION.md"]:
             (root / relative).write_text("Version: **0.00.99**\n\n## History\n\n### 0.00.99\n\n- Earlier work.\n", encoding="utf-8")
 
     def test_update_synchronizes_files_and_preserves_history(self):
@@ -46,8 +46,10 @@ class VersionTests(unittest.TestCase):
             root = Path(directory)
             self.make_fixture(root)
             self.assertEqual(versioning.bump(root, "Add a feature."), "0.01.00")
+            self.assertEqual({"Version.props", "README.md", "docs/VERSION.md"},
+                             {p.relative_to(root).as_posix() for p in root.rglob("*") if p.is_file()})
             self.assertIn("<CodeAtlasVersion>0.01.00</CodeAtlasVersion>", (root / "Version.props").read_text())
-            for relative in ["README.md", "docs/CodeAtlas-Project-Recap.md", "docs/VERSION.md"]:
+            for relative in ["README.md", "docs/VERSION.md"]:
                 self.assertIn("Version: **0.01.00**", (root / relative).read_text())
             history = (root / "docs/VERSION.md").read_text()
             self.assertIn("### 0.01.00\n\n- Add a feature.", history)
@@ -69,7 +71,7 @@ class VersionTests(unittest.TestCase):
             self.make_fixture(root)
             self.assertEqual(versioning.bump(root, "Publish qualified initial release.", major_release=True), "1.00.00")
             self.assertIn("<CodeAtlasVersion>1.00.00</CodeAtlasVersion>", (root / "Version.props").read_text())
-            for relative in ["README.md", "docs/CodeAtlas-Project-Recap.md", "docs/VERSION.md"]:
+            for relative in ["README.md", "docs/VERSION.md"]:
                 self.assertIn("Version: **1.00.00**", (root / relative).read_text())
             history = (root / "docs/VERSION.md").read_text()
             self.assertIn("### 1.00.00\n\n- Publish qualified initial release.", history)

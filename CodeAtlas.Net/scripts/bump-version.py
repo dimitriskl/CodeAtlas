@@ -36,7 +36,7 @@ def bump(root, summary, *, major_release=False):
     updated = next_version(current, major_release=major_release)
     changes = {version_path: version_text.replace(f"<CodeAtlasVersion>{current}</CodeAtlasVersion>", f"<CodeAtlasVersion>{updated}</CodeAtlasVersion>")}
     marker = f"Version: **{current}**"
-    for relative in ["README.md", "docs/CodeAtlas-Project-Recap.md", "docs/VERSION.md"]:
+    for relative in ["README.md", "docs/VERSION.md"]:
         path = root / relative
         text = path.read_text(encoding="utf-8")
         if len(re.findall(r"^" + re.escape(marker) + r"$", text, re.MULTILINE)) != 1:
