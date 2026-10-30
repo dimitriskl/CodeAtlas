@@ -12,7 +12,7 @@ Match the C# in `src/` and `tests/`: file-scoped namespaces, four-space indentat
 
 `Directory.Build.props` enables nullable reference types, implicit usings, and locked package restore. The SDK sets `EnableNETAnalyzers` to true and `AnalysisLevel` to `latest`. `TreatWarningsAsErrors` is false. The SDK's default `WarningsAsErrors` is `NU1605` and `SYSLIB0011`. Any other warning leaves `dotnet build` successful.
 
-`.github/workflows/qualification.yml` runs `scripts/qualify-package.py` on Windows and Ubuntu: locked restore, Release build, serial .NET tests, Python tests, and package checks. A compiler error or a failed test fails the job. A warning does not.
+`.github/workflows/qualification.yml` runs `scripts/qualify-package.py` on Windows, Ubuntu and macOS, for pushes to `codex/production-roadmap` and for pull requests: locked restore, Release build, serial .NET tests, Python tests, and package checks. A compiler error or a failed test fails the job. A warning does not.
 
 ## Nullable reference types
 

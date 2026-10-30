@@ -260,10 +260,11 @@ internal sealed class GenerationStore(
         try { return new(path, FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None); }
         catch (IOException exception) when (
             (OperatingSystem.IsWindows() && (exception.HResult & 0xffff) is 32 or 33)
-            || (OperatingSystem.IsLinux() && exception.HResult == 11))
+            || (OperatingSystem.IsLinux() && exception.HResult == 11)
+            || (OperatingSystem.IsMacOS() && exception.HResult == 35))
         {
-            // Windows sharing/lock violations; Linux FileShare.None uses flock and
-            // exposes EWOULDBLOCK/EAGAIN as raw errno 11. Other I/O failures are not busy.
+            // Windows sharing/lock violations; Linux and macOS FileShare.None use flock and
+            // expose EWOULDBLOCK/EAGAIN as raw errno 11 (Linux) or 35 (macOS). Other I/O failures are not busy.
             throw new SnapshotStoreException("index_busy", "Another writer is publishing this solution. Retry later.", exception);
         }
     }

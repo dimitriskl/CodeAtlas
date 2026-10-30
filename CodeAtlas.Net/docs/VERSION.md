@@ -1,6 +1,6 @@
 # CodeAtlas version history
 
-Version: **0.00.57**
+Version: **0.00.58**
 
 Version history starts at `0.00.01`; earlier work did not have assigned version numbers.
 
@@ -20,7 +20,7 @@ For each subsequent completed change, run from the repository root:
 python3 scripts/bump-version.py --summary "Describe the completed change"
 ```
 
-The command updates `Version.props`, the current version in README.md and the project recap, and this document's current version and history. Then rebuild, test, and regenerate the index. Do not increment again merely because validation requires a correction to the same change.
+The command updates `Version.props`, the current version in README.md, and this document's current version and history. It does not need the gitignored project recap, so it works on a clean clone. Then rebuild, test, and regenerate the index. Do not increment again merely because validation requires a correction to the same change.
 
 After the user has explicitly authorized publication and release qualification is complete, `--major-release` selects the next `x.00.00` instead of the routine patch increment:
 
@@ -31,6 +31,10 @@ python scripts/bump-version.py --major-release --summary "Publish the qualified 
 This flag synchronizes the same files; it does not publish a package, create a tag, or waive release checks. Routine increments never change the major component automatically.
 
 ## History
+
+### 0.00.58
+
+- Make qualification pass on Windows, Linux and macOS for every pull request: OS-independent tests, a version bump that works on a clean clone, pull_request and macOS in the workflow, and index_busy for a held writer lock on macOS.
 
 ### 0.00.57
 

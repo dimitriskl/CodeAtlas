@@ -3,6 +3,7 @@ import copy
 import importlib.util
 import io
 import json
+import os
 from pathlib import Path
 import tempfile
 import unittest
@@ -279,11 +280,17 @@ class AgentBenchmarkAgentTests(unittest.TestCase):
         self.assertEqual("Use CodeAtlas", atlas[atlas.index("--append-system-prompt") + 1])
 
     def test_codeatlas_instruction_names_wrapper_manifest_and_refresh(self):
-        setup = {"wrapper": r"C:\bench\tools\codeatlas.py", "manifest": r"C:\bench\work\codeatlas\.codeatlas\current.json",
-                 "overview": r"C:\bench\overview.md", "solution": r"C:\bench\work\codeatlas\App.sln"}
+        # Arrange
+        root = Path("C:/bench")
+        setup = {"wrapper": (root / "tools" / "codeatlas.py").as_posix(),
+                 "manifest": (root / "work" / "codeatlas" / ".codeatlas" / "current.json").as_posix(),
+                 "overview": (root / "overview.md").as_posix(),
+                 "solution": (root / "work" / "codeatlas" / "App.sln").as_posix()}
 
+        # Act
         text = benchmark.mode_instruction("codeatlas", setup)
 
+        # Assert
         self.assertIn(benchmark.codeatlas_cli(setup), text)
         self.assertIn("C:/bench/tools/codeatlas.py", text)
         self.assertIn('find-references --index "C:/bench/work/codeatlas/.codeatlas/current.json"', text)
@@ -291,6 +298,21 @@ class AgentBenchmarkAgentTests(unittest.TestCase):
         self.assertIsNone(benchmark.mode_instruction("plain"))
         with self.assertRaises(ValueError):
             benchmark.mode_instruction("codeatlas", None)
+
+    @unittest.skipUnless(os.name == "nt", "backslash paths are separators only on Windows")
+    def test_codeatlas_instruction_turns_windows_backslash_paths_into_forward_slashes(self):
+        # Arrange
+        setup = {"wrapper": r"C:\bench\tools\codeatlas.py", "manifest": r"C:\bench\work\codeatlas\.codeatlas\current.json",
+                 "overview": r"C:\bench\overview.md", "solution": r"C:\bench\work\codeatlas\App.sln"}
+
+        # Act
+        text = benchmark.mode_instruction("codeatlas", setup)
+
+        # Assert
+        self.assertTrue(benchmark.codeatlas_cli(setup).endswith(" C:/bench/tools/codeatlas.py"))
+        self.assertIn(benchmark.codeatlas_cli(setup), text)
+        self.assertIn('find-references --index "C:/bench/work/codeatlas/.codeatlas/current.json"', text)
+        self.assertIn('refresh --solution "C:/bench/work/codeatlas/App.sln"', text)
 
     def test_prompt_contains_task_and_answer_rule(self):
         target = benchmark.load_target(benchmark.HERE / "target.json")
