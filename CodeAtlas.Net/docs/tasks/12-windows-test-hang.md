@@ -6,7 +6,9 @@ Make a hanging test fail fast with its name, and stop tests from waiting on a ch
 
 In run 41009854740 (task 01, windows-2025), `dotnet test` hit the 30-minute job timeout (`timeout=1800` in `scripts/qualify-package.py`). 476 tests finished, then nothing ran for about 15 minutes. The 12 test classes that would have run after `SqliteStoreTests` never reported a result. Those 82 tests take under a minute in a green run. Class order is randomized per run, so the console log cannot name the hanging test.
 
-It happened in 1 of the last 6 Windows runs (41007737088 through 41016219786). It happened again in run 41019929728 (attempt 1), and the re-run of the failed job passed.
+It happened in 1 of the last 6 Windows runs (41007737088 through 41016219786). It happened again in run 41019929728 (attempt 1), and the re-run of the failed job passed. Run 41018399468 was a third Windows `dotnet test` timeout.
+
+A different flake hit macOS in run 41025858906 attempt 1: 18 `SqliteStoreTests` failed with a Roslyn "database table is locked" error from the `SemanticSolution` fixture at `tests/CodeAtlas.Tests/SemanticTests.cs:25`. The re-run passed. It is not a hang; [task 13](13-macos-sqlite-table-locked.md) tracks it.
 
 The likely cause is a test that waits on a child process with no timeout, for example `await process.WaitForExitAsync()` in `tests/CodeAtlas.Tests/McpServerTests.cs:582`. The same pattern is in `McpServerTests`, `DuplicateMultiContextTests`, `GenericExplicitInterfaceTests`, `QueryContractTests`, `ReadOnlySnapshotQualificationTests`, `SqliteAvailabilityTests` and `WorkspaceTextTests`.
 
