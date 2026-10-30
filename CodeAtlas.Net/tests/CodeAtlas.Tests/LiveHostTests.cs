@@ -151,6 +151,32 @@ public sealed partial class SqliteFileUpdateTests
         Assert.NotEqual(expectedOnce.References, expectedTwice.References);
     }
 
+    [Theory]
+    [InlineData("live")]
+    [InlineData("live", "--solution")]
+    [InlineData("live", "--solution", " ")]
+    [InlineData("live", "--path", "Sample.slnx")]
+    [InlineData("query", "--solution", "Sample.slnx")]
+    [InlineData("live", "--solution", "Sample.slnx", "--extra")]
+    public async Task LiveWithoutExactlyOneSolutionArgumentExitsWithUsage(params string[] args)
+    {
+        // Arrange
+        using var input = new StringReader("{\"command\":\"find-symbol\",\"name\":\"Calculate\"}\n");
+        using var output = new StringWriter();
+        using var error = new StringWriter();
+
+        // Act
+        var exit = await LiveHost.RunAsync(args, input, output, error, CancellationToken.None);
+
+        // Assert
+        Assert.Equal(2, exit);
+        Assert.Equal("", output.ToString());
+        var response = JsonNode.Parse(error.ToString())!.AsObject();
+        Assert.False(response["success"]!.GetValue<bool>());
+        Assert.Equal("invalid_arguments", response["error"]!["code"]!.GetValue<string>());
+        Assert.Contains("codeatlas live --solution", response["error"]!["message"]!.GetValue<string>(), StringComparison.Ordinal);
+    }
+
     private static JsonObject Request(string command, params (string Name, string Value)[] fields)
     {
         var request = new JsonObject { ["command"] = command };
