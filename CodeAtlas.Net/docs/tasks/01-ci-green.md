@@ -20,7 +20,7 @@ User stories: 21, 24. PRD: [Testing Decisions](../prd/0001-net-release.md#testin
 
 None.
 
-Status: review (https://github.com/dimitriskl/CodeAtlas/pull/9) (Developer, branch `task/01-ci-green`)
+Status: changes-requested (https://github.com/dimitriskl/CodeAtlas/pull/9) (QA attempt 1, branch `task/01-ci-green`)
 
 ## Acceptance criteria
 
@@ -31,7 +31,7 @@ Status: review (https://github.com/dimitriskl/CodeAtlas/pull/9) (Developer, bran
 - [x] `macos-latest` is in the qualification matrix, for the build job and the install job. It runs per PR. Note in the workflow: it may move to release-only if the repository stays private.
 - [x] The workflow runs on pull requests, and the in-tree copy (`build/qualification.yml`) stays identical to the active workflow.
 - [x] The qualification workflow is green on all OSes for the PR head, with the full .NET and Python suites on a clean checkout.
-- [ ] No change to production behavior, CLI output, exit codes or schema. Not met as written: an approved macOS conformance fix (`index_busy` for a held writer lock); see the review log. No CLI output, exit code or schema change.
+- [ ] No change to production behavior, CLI output, exit codes or schema. Not met as written, by one owner-approved exception: on macOS a held writer lock now reports `index_busy` (errno 35 in `GenerationStore.AcquireWriterLock`), as QUERY-CONTRACT.md already promised; see the review log. No CLI output, exit code or schema change.
 
 ## Review log
 
@@ -79,3 +79,24 @@ Status: review (https://github.com/dimitriskl/CodeAtlas/pull/9) (Developer, bran
 - Tasks 10 and 11 and their BOARD.md rows: clear vertical slices with testable acceptance criteria, evidence cited, and both blocked by 01. Task 10 leaves the choice between realpath and refusal to the developer; record the choice in its review log.
 - Commits 3ef7a17..c944631: one change each, no trailers, names or tool mentions, and no version change (`Version.props` untouched). The only code changes are in tests.
 - Non-blocking note: run 41009854740 (852e1f3, docs only) failed on windows-2025 because `dotnet test` hit the 1800 s timeout in `qualify-package.py`. Green Windows build jobs take 18-21 min, so this looks like an intermittent hang, not a slow suite. It did not recur in 41010963881, 41012178934 or 41014162003. If it happens again, file a task to find the hanging test (for example with `--blame-hang-timeout`).
+
+### 2026-10-30 (QA)
+
+- 2026-10-30 QA REJECT, attempt 1. HEAD reviewed 0ebeac9.
+- Commands run:
+  - Clean clone (`git clone -c core.longpaths=true --branch task/01-ci-green` into a temp folder; the default clone fails checkout on Windows with "Filename too long" in `benchmarks/agent/results`). From `CodeAtlas.Net` with SDK 10.0.403: `dotnet restore CodeAtlas.slnx --locked-mode` (ok); `dotnet build CodeAtlas.slnx --no-restore` (0 warnings, 0 errors); `dotnet test CodeAtlas.slnx --no-build --no-restore -- xUnit.MaxParallelThreads=1` (558/558, 10 m 59 s); `python -m unittest discover -s tests/versioning -p 'test_*.py'` (98 OK). There is no recap in the clone, and `python scripts/bump-version.py --summary "qa probe"` printed 0.00.59, exit 0, with `git diff --stat` showing only `README.md`, `Version.props` and `docs/VERSION.md`. Discarded the changes, then deleted the clone.
+  - `cmp` of `.github/workflows/qualification.yml` and `build/qualification.yml`: identical (blob 4184f38).
+  - `gh pr checks 9` / `gh run watch 41016219786`: success on 0ebeac9, all 6 jobs (build and install on windows-2025, ubuntu-24.04, macos-latest; Windows build 19 m 28 s).
+  - `gh run view 41009854740 --log`, plus the `build-evidence-windows-2025` artifacts of 41009854740 and 41014162003 (flake analysis below).
+  - `git log` of 0ebeac9 back to the base: messages carry no names, tool mentions or trailers ("codex" appears only as the branch name). There is one bump commit, f570efc (0.00.57 to 0.00.58), and it touches only `Version.props`, `README.md` and `docs/VERSION.md`. No version field was hand-edited. ac2c9ea edits only the 0.00.58 history line, as the review accepted.
+- Criteria: every box except the production criterion is met, with the evidence above and in earlier entries. The production criterion stays unticked and now names the owner-approved errno 35 `index_busy` exception.
+- Blocking findings (CODING_STANDARDS.md "Tests", PRD Testing Decisions: Arrange/Act/Assert with one Act statement). Three C# tests changed by this task do not follow it:
+  1. `tests/CodeAtlas.Tests/VersionTests.cs:9-21` `BuiltVersionMatchesSourceAndDocumentation` (changed at line 19) has no `// Arrange`, `// Act` or `// Assert` sections. Fix: put the root lookup and the version read under Arrange, make one Act statement that reads the two documents, and put the asserts under Assert.
+  2. `tests/CodeAtlas.Tests/SnapshotInputModelTests.cs:346-351` `UnreferencedShellVariablesDoNotInvalidateOrDiscloseValues` (changed at line 340) has five Act statements: three `CheckAsync` calls with mutations between them. Fix: split it into facts that each make one `CheckAsync` call (unchanged shell is fresh; changed value is stale and not disclosed; removed variable is stale), and keep every current assertion.
+  3. `tests/CodeAtlas.Tests/SnapshotInputModelTests.cs:430-441` `ReferencedBuildVariablesAreKeptAndSdkOrShellVariablesAreNot` (changed at lines 425-441) has two Act statements (`selected`, `unset`), and its Assert calls `IsOutputPath`/`IsSdkOrPackage`. Fix: move the `unset` selection and the path classification into their own facts, each with one Act statement, and keep the same inputs and expected values.
+  These are test-only changes, so they need no new version bump.
+- Tests otherwise: `RelevantEnvironmentNamesAreUpperCasedOnlyOnWindows` and `SecondWriterReportsBusyWithoutChangingActivePointer` follow AAA with one Act. They assert observable results, and none is tautological or weakened. The bump test asserts the exact file set. The workflow guard compares bytes. The Windows backslash bench test runs on Windows.
+- Flake analysis (run 41009854740, windows-2025): `qualify-package.py` killed `dotnet test` at the 1800 s limit. `test.stdout.txt` holds 476 passes, with summed durations of 12.9 min. The last line is `SqliteStoreTests.RepeatedStoredSearchRanksOnce`. Every class that reported finished fully. The 82 missing tests are exactly 12 classes that never reported once: ExplanationWorkflowTests, QueryContractTests, SplitCatalogStorageTests, BodySurfaceTests, IndexTimingsTests, SqliteAvailabilityTests, ReadOnlySnapshotQualificationTests, McpServerTests, DuplicateMultiContextTests, WorkspaceTextTests, LanguageBoundaryTests and GenericExplicitInterfaceTests. In green run 41014162003 those 82 tests take under 1 min in total (558 pass; summed 14.5 min; job 19 min). So the suite sat idle for about 15 min inside the first test or class fixture of one of those classes: a hang, not slowness. Class order is randomized per run, so the console log cannot name the test. Likely candidates are the classes that wait on a child process or scripted stdin with no timeout (`await process.WaitForExitAsync()` in McpServerTests.cs:582/663, DuplicateMultiContextTests.cs:43, GenericExplicitInterfaceTests.cs:39, and the same pattern in QueryContractTests, ReadOnlySnapshotQualificationTests, SqliteAvailabilityTests and WorkspaceTextTests). It happened in 1 of the last 6 Windows runs (41007737088 through 41016219786). Recommendation: file a follow-up task. Add `--blame-hang-timeout 10m --blame-hang-dump-type mini` (or an xUnit long-running-test report) to the `qualify-package.py` test step so the next hang names its test, then bound the unbounded child-process waits. This does not block task 01.
+- Non-blocking notes:
+  1. A plain `git clone` on Windows fails checkout ("Filename too long" under `benchmarks/agent/results/...`) unless `core.longpaths` is set. CI is unaffected, but a contributor on Windows hits it. Consider noting it in README or shortening those result paths.
+  2. The Python tests changed in `test_bump_version.py` have no AAA comments. The rule is written for C#, so this is only a suggestion.
