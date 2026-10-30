@@ -2,11 +2,11 @@
 
 Source: [PRD 0001](../prd/0001-net-release.md). Each task is a vertical slice for one coding session. Domnus reviews each PR technically, then QA reviews it against CODING_STANDARDS.md.
 
-In review: 01. After 01 is done, 02 and 03 can start. After 03, 04 and 05 can run in parallel.
+Awaiting merge: 01. After 01 is done, 02 and 03 can start. After 03, 04 and 05 can run in parallel.
 
 | # | Task | Blocked by | Status |
 |---|---|---|---|
-| 01 | [CI green on Windows, Linux and macOS](01-ci-green.md) | None | review (https://github.com/dimitriskl/CodeAtlas/pull/9) |
+| 01 | [CI green on Windows, Linux and macOS](01-ci-green.md) | None | done-awaiting-merge (https://github.com/dimitriskl/CodeAtlas/pull/9) |
 | 02 | [Standards checks in the build](02-standards-checks.md) | 01 | ready |
 | 03 | [MCP server answers from a warm index](03-mcp-warm-index.md) | 01 | ready |
 | 04 | [MCP tool search_symbols](04-search-symbols.md) | 03 | ready |

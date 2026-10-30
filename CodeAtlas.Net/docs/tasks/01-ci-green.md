@@ -20,7 +20,7 @@ User stories: 21, 24. PRD: [Testing Decisions](../prd/0001-net-release.md#testin
 
 None.
 
-Status: review (https://github.com/dimitriskl/CodeAtlas/pull/9) (QA attempt 2, branch `task/01-ci-green`)
+Status: done-awaiting-merge (https://github.com/dimitriskl/CodeAtlas/pull/9) (branch `task/01-ci-green`)
 
 ## Acceptance criteria
 
@@ -111,3 +111,22 @@ Status: review (https://github.com/dimitriskl/CodeAtlas/pull/9) (QA attempt 2, b
 - Follow-up recorded as task 12 (Windows test hang), ready and blocked by 01.
 - Local (Windows): build 0 warnings, .NET 564/564 (558 plus 6 from the splits), Python 98 OK.
 - CI: run 41019929728 attempt 1 failed on windows-2025 because `dotnet test` hit the 1800 s timeout again (ubuntu and macOS build jobs passed). Re-ran the failed job once with `gh run rerun --failed`; attempt 2 is green on windows-2025, ubuntu-24.04 and macos-latest, build and install jobs: https://github.com/dimitriskl/CodeAtlas/actions/runs/41019929728
+
+### 2026-10-30 (QA)
+
+- 2026-10-30 QA APPROVE, attempt 2. HEAD reviewed 6be4d11.
+- Commands run (Windows, from `CodeAtlas.Net`, SDK 10.0.403): `dotnet restore CodeAtlas.slnx --locked-mode` (up to date); `dotnet build CodeAtlas.slnx --no-restore` (0 warnings, 0 errors); `dotnet test CodeAtlas.slnx --no-build --no-restore -- xUnit.MaxParallelThreads=1` (564/564, 10 m 48 s); `python -m unittest discover -s tests/versioning -p 'test_*.py'` (98 OK); `git show eb171bc`; `git diff origin/codex/production-roadmap...HEAD -- '*.cs'`; `git log` and `git diff --stat d8025dc..HEAD`; `gh pr checks 9`; `gh run view 41019929728 --attempt 2`; `gh run watch 41025858906`; `gh run download 41025858906`; `gh run rerun 41025858906 --failed`; `gh run view 41018399468 --log-failed`.
+- Attempt-1 findings fixed:
+  1. `VersionTests.cs:9-27` has Arrange, Act (one statement that reads `README.md` and `docs/VERSION.md`) and Assert. All three earlier checks remain: version format, `CodeAtlasVersion.Current`, and the version line in both documents.
+  2. The shell-variable test is now `SnapshotInputModelTests.cs:346` (fresh), `:362` (changed, stale, value not disclosed) and `:381` (removed, stale). Each has one `CheckAsync` under Act. All 8 old assertions are kept: the manifest's relevant names, fresh status, no `<environment>` in fresh, stale on change, `<environment>` on change, stale on removal, and the 2 disclosure checks over the same `changed` + `manifest` serialization. Shared setup lives in the `CaptureShellManifestAsync`/`QueryShell` helpers.
+  3. The build-variable test keeps the referenced selection (`:444`). The unset selection (`:466`), the `obj` output path (`:479`), the SDK path (`:492`) and the project path (`:505`) are their own facts. Each has one Act and only assertions under Assert, with the same inputs and expected values.
+- Mutation checks (reverted; `git status` clean apart from the pre-existing `.idea` and `.claude` entries): with `IsSdkOrPackage` ignoring the dotnet root, `FileUnderTheDotnetRootIsSdkOrPackage` failed. With the `<environment>` digest comparison in `SnapshotInputModel.CheckAsync` disabled, `ChangedReferencedVariableIsStaleAndItsValueIsNotDisclosed` and `RemovedReferencedVariableIsStale` failed. `UnreferencedShellVariablesDoNotInvalidate` and `ProjectFileIsNotSdkOrPackage` kept passing, as they should. The developer's 3 mutations cover `Select`, `IsOutputPath` and the missing-variable lookup.
+- AAA scan of every C# test changed in the PR (`VersionTests`, `SnapshotInputModelTests`, `GenerationStoreTests`): no remaining violation. The only production C# change is the approved errno 35 mapping in `GenerationStore.cs`.
+- Task 12 and its BOARD.md row are clear and actionable. They cite evidence, give two ordered steps (blame-hang dump, then bounded child-process waits) and have testable criteria. The cited `McpServerTests.cs:582` wait is correct.
+- Commit hygiene: eb171bc, 8575c74, 9845fb6 and 6be4d11 each make one change, with no names, tool mentions or trailers ("codex" appears only as a branch name). `Version.props` changed only in f570efc (0.00.58), the one bump.
+- Criteria: the open production criterion stays unticked as written, with its owner-approved errno 35 exception. Every other criterion was already ticked and is still met.
+- CI: run 41019929728 attempt 2 (8575c74, which includes eb171bc) succeeded on all 6 jobs. HEAD run 41025858906 (6be4d11, docs only): attempt 1 failed on macos-latest, and attempt 2 (`gh run rerun --failed`) succeeded on all 6 build and install jobs on windows-2025, ubuntu-24.04 and macos-latest.
+- Non-blocking notes:
+  1. New macOS flake, not the task-12 hang. In 41025858906 attempt 1, 18 of 564 tests failed, all `SqliteStoreTests`. The `SemanticSolution` class fixture (`SemanticTests.cs:25`, `SolutionAnalysis.CreateIndexAsync`) threw Roslyn `SqlException: database table is locked: DocumentData7` from `SQLitePersistentStorage` during reference finding (`ScopedReferences.cs:53`). The same code passed macOS in every earlier run. A likely cause is several class fixtures indexing the same `Semantic.slnx` in one process while sharing Roslyn's persistent storage. If a single index run can hit the same lock, real `index` commands could fail too. File a follow-up task: reproduce, then disable or isolate Roslyn persistent storage per analysis, or share one fixture.
+  2. Task 12 frequency: run 41018399468 (d8025dc) also hit the 1800 s Windows `dotnet test` timeout. That makes 3 hangs (41009854740, 41018399468, 41019929728 attempt 1) in the 9 Windows runs from 41007737088 to 41025858906. Add it to task 12's evidence.
+  3. `VersionTests.cs:15` keeps the `Assert.NotNull(root)` guard under Arrange. It is a fixture precondition, not the checked behavior. `?? throw` would keep Arrange free of asserts.
