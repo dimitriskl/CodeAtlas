@@ -1,0 +1,37 @@
+{
+  "version": 1,
+  "projects": {
+    "shop": {
+      "projectType": "application",
+      "root": "",
+      "sourceRoot": "src",
+      "architect": {
+        "build": {
+          "builder": "@angular-devkit/build-angular:application",
+          "options": {
+            "tsConfig": "tsconfig.app.json"
+          }
+        },
+        "test": {
+          "builder": "@angular-devkit/build-angular:karma",
+          "options": {
+            "tsConfig": "tsconfig.spec.json"
+          }
+        }
+      }
+    },
+    "catalog": {
+      "projectType": "application",
+      "root": "projects/catalog",
+      "sourceRoot": "projects/catalog/src",
+      "architect": {
+        "build": {
+          "builder": "@angular-devkit/build-angular:application",
+          "options": {
+            "tsConfig": "projects/catalog/tsconfig.app.json"
+          }
+        }
+      }
+    }
+  }
+}
