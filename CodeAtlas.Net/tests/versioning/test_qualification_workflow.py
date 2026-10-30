@@ -11,10 +11,10 @@ class QualificationWorkflowTests(unittest.TestCase):
     @unittest.skipUnless(ACTIVE.is_file(), "the active workflow exists only in a full repository checkout")
     def test_in_tree_template_matches_the_active_workflow(self):
         # Arrange
-        active = ACTIVE.read_text(encoding="utf-8")
+        active = ACTIVE.read_bytes()
 
         # Act
-        template = TEMPLATE.read_text(encoding="utf-8")
+        template = TEMPLATE.read_bytes()
 
         # Assert
         self.assertEqual(active, template)
