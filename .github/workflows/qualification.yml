@@ -8,6 +8,10 @@ on:
     paths:
       - 'CodeAtlas.Net/**'
       - '.github/workflows/qualification.yml'
+  pull_request:
+    paths:
+      - 'CodeAtlas.Net/**'
+      - '.github/workflows/qualification.yml'
 permissions:
   contents: read
 jobs:
@@ -15,7 +19,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [windows-2025, ubuntu-24.04]
+        # macos-latest runs per PR. It may move to release-only if the repository stays private.
+        os: [windows-2025, ubuntu-24.04, macos-latest]
     runs-on: ${{ matrix.os }}
     defaults:
       run:
@@ -49,9 +54,10 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [windows-2025, ubuntu-24.04]
+        # macos-latest runs per PR. It may move to release-only if the repository stays private.
+        os: [windows-2025, ubuntu-24.04, macos-latest]
     runs-on: ${{ matrix.os }}
-    # Intentionally no checkout: both hosts consume the SAME Windows-built package.
+    # Intentionally no checkout: every host consumes the SAME Windows-built package.
     steps:
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
         with:
