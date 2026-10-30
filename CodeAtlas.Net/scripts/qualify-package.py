@@ -73,7 +73,7 @@ def main():
     # dump lands under test-results/<run id>/ well before the 1800 s step timeout.
     # The CRAP gate reads coverage from this same run (no second test run), as Cobertura under
     # test-results/<run id>/. The writer-process step above collects none, so only this run's file is read.
-    coverage = ["--collect", "Code Coverage;Format=cobertura"] if args.crap_gate else []
+    coverage = ["--settings", root / "build/coverage.runsettings"] if args.crap_gate else []
     run("test", ["dotnet", "test", "CodeAtlas.slnx", "-c", "Release", "--no-build",
                  "--no-restore", "--blame-hang-timeout", "5m", "--blame-hang-dump-type", "mini", *coverage,
                  "--logger", "trx", "--logger", "console;verbosity=normal",
