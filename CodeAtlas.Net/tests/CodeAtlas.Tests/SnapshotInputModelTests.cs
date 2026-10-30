@@ -363,18 +363,17 @@ public sealed class SnapshotInputModelTests : IDisposable
     }
 
     [Fact]
-    public async Task RelevantEnvironmentNamesAreUpperCasedOnWindows()
+    public async Task RelevantEnvironmentNamesAreUpperCasedOnlyOnWindows()
     {
-        if (!OperatingSystem.IsWindows()) return;
-
         // Arrange
         var environment = new Dictionary<string, string> { ["BUILD_FLAVOR"] = "Debug" };
+        var expected = OperatingSystem.IsWindows() ? "BUILD_FLAVOR" : "build_flavor";
 
         // Act
         var manifest = await SnapshotInputModel.CaptureAsync([], [], [], environment, CompleteEvidence, relevantEnvironment: ["build_flavor"]);
 
         // Assert
-        Assert.Equal(["BUILD_FLAVOR"], manifest.RelevantEnvironment!);
+        Assert.Equal([expected], manifest.RelevantEnvironment!);
     }
 
     [Fact]
