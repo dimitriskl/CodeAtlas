@@ -576,11 +576,8 @@ public sealed class McpIndexCommandTests
         File.Copy(Path.Combine(repository, "Version.props"), Path.Combine(root, "Version.props"));
         var start = new ProcessStartInfo("dotnet") { WorkingDirectory = root, RedirectStandardOutput = true, RedirectStandardError = true };
         foreach (var argument in new[] { "restore", "Sample.slnx", "--locked-mode" }) start.ArgumentList.Add(argument);
-        using var process = Process.Start(start)!;
-        var output = process.StandardOutput.ReadToEndAsync();
-        var error = process.StandardError.ReadToEndAsync();
-        await process.WaitForExitAsync();
-        Assert.True(process.ExitCode == 0, await output + await error);
+        var process = await ChildProcess.RunAsync(start);
+        Assert.True(process.ExitCode == 0, process.Output + process.Error);
         return root;
     }
 }
@@ -657,13 +654,8 @@ static class McpLines
         var start = new ProcessStartInfo("dotnet") { RedirectStandardOutput = true, RedirectStandardError = true };
         start.ArgumentList.Add(cli);
         foreach (var argument in arguments) start.ArgumentList.Add(argument);
-        using var process = Process.Start(start)!;
-        var output = process.StandardOutput.ReadToEndAsync();
-        var error = process.StandardError.ReadToEndAsync();
-        await process.WaitForExitAsync();
-        var stdout = await output;
-        var stderr = await error;
-        return new(process.ExitCode, JsonNode.Parse(process.ExitCode == 0 ? stdout : stderr)!.AsObject());
+        var process = await ChildProcess.RunAsync(start);
+        return new(process.ExitCode, JsonNode.Parse(process.ExitCode == 0 ? process.Output : process.Error)!.AsObject());
     }
 
     internal static string Repository()

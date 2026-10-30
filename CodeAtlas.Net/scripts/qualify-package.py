@@ -67,8 +67,11 @@ def main():
                  "FullyQualifiedName~PublicationChildProcessTests|FullyQualifiedName~AbruptWriterProcessTerminationLeavesAnEntireCommittedGeneration|FullyQualifiedName~ActualProcessTerminationWithARefreshPayloadHasOnlyOldOrNewOutcomes|FullyQualifiedName~SecondWriterReportsBusy|FullyQualifiedName~WriterLockPathObstruction",
                  "--logger", "trx", "--logger", "console;verbosity=normal",
                  "--results-directory", output / "test-results", "--", "xUnit.MaxParallelThreads=1"])
+    # A test idle for 5 minutes is dumped and aborted, so the console names it and the
+    # dump lands under test-results/<run id>/ well before the 1800 s step timeout.
     run("test", ["dotnet", "test", "CodeAtlas.slnx", "-c", "Release", "--no-build",
-                 "--no-restore", "--logger", "trx", "--logger", "console;verbosity=normal",
+                 "--no-restore", "--blame-hang-timeout", "5m", "--blame-hang-dump-type", "mini",
+                 "--logger", "trx", "--logger", "console;verbosity=normal",
                  "--results-directory", output / "test-results", "--", "xUnit.MaxParallelThreads=1"])
     run("versioning", [sys.executable, "-m", "unittest", "discover", "-s",
                        "tests/versioning", "-p", "test_*.py"])

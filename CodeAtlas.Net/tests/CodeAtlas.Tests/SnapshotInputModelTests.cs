@@ -207,11 +207,8 @@ public sealed class SnapshotInputModelTests : IDisposable
             { WorkingDirectory = projectDirectory.FullName, RedirectStandardOutput = true, RedirectStandardError = true };
         start.ArgumentList.Add("restore");
         start.ArgumentList.Add(solution);
-        using var process = Process.Start(start)!;
-        var output = process.StandardOutput.ReadToEndAsync();
-        var errors = process.StandardError.ReadToEndAsync();
-        await process.WaitForExitAsync();
-        Assert.True(process.ExitCode == 0, await output + await errors);
+        var process = await ChildProcess.RunAsync(start);
+        Assert.True(process.ExitCode == 0, process.Output + process.Error);
 
         // Act
         var index = await SolutionAnalysis.CreateIndexAsync(solution);
@@ -263,11 +260,8 @@ public sealed class SnapshotInputModelTests : IDisposable
             { WorkingDirectory = root.FullName, RedirectStandardOutput = true, RedirectStandardError = true };
         start.ArgumentList.Add("restore");
         start.ArgumentList.Add(solution);
-        using var process = Process.Start(start)!;
-        var output = process.StandardOutput.ReadToEndAsync();
-        var errors = process.StandardError.ReadToEndAsync();
-        await process.WaitForExitAsync();
-        Assert.True(process.ExitCode == 0, await output + await errors);
+        var process = await ChildProcess.RunAsync(start);
+        Assert.True(process.ExitCode == 0, process.Output + process.Error);
 
         // Act
         var index = await SolutionAnalysis.CreateIndexAsync(solution);
@@ -303,11 +297,8 @@ public sealed class SnapshotInputModelTests : IDisposable
             { WorkingDirectory = projectDirectory.FullName, RedirectStandardOutput = true, RedirectStandardError = true };
         start.ArgumentList.Add("restore");
         start.ArgumentList.Add(solution);
-        using var process = Process.Start(start)!;
-        var output = process.StandardOutput.ReadToEndAsync();
-        var errors = process.StandardError.ReadToEndAsync();
-        await process.WaitForExitAsync();
-        Assert.True(process.ExitCode == 0, await output + await errors);
+        var process = await ChildProcess.RunAsync(start);
+        Assert.True(process.ExitCode == 0, process.Output + process.Error);
         var previous = await SolutionAnalysis.CreateIndexAsync(solution);
         Assert.Contains(previous.Methods, method => method.Name == "Before");
         await IndexStore.SaveAsync(previous);
@@ -535,13 +526,8 @@ public sealed class SnapshotInputModelTests : IDisposable
             { WorkingDirectory = projectDirectory.FullName, RedirectStandardOutput = true, RedirectStandardError = true };
         start.ArgumentList.Add("restore");
         start.ArgumentList.Add(solution);
-        using (var process = Process.Start(start)!)
-        {
-            var output = process.StandardOutput.ReadToEndAsync();
-            var errors = process.StandardError.ReadToEndAsync();
-            await process.WaitForExitAsync();
-            Assert.True(process.ExitCode == 0, await output + await errors);
-        }
+        var process = await ChildProcess.RunAsync(start);
+        Assert.True(process.ExitCode == 0, process.Output + process.Error);
         string[] names = ["PWD", "OLDPWD", "CODEX_TOOL_CALL_ID", "CODEATLAS_FIXTURE_FLAVOR"];
         var original = names.Select(Environment.GetEnvironmentVariable).ToArray();
         try

@@ -23,11 +23,8 @@ public sealed class QueryContractTests(IndexedSolution fixture) : IClassFixture<
         start.ArgumentList.Add(cli);
         foreach (var argument in arguments)
             start.ArgumentList.Add(argument);
-        using var process = Process.Start(start)!;
-        var output = process.StandardOutput.ReadToEndAsync();
-        var error = process.StandardError.ReadToEndAsync();
-        await process.WaitForExitAsync();
-        return new CliResult(process.ExitCode, await output, await error);
+        var process = await ChildProcess.RunAsync(start);
+        return new CliResult(process.ExitCode, process.Output, process.Error);
     }
 
     private static void AssertEnvelope(CliResult result, string command, bool success)

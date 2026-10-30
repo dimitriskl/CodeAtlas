@@ -265,7 +265,7 @@ class ComparisonTests(unittest.TestCase):
             for candidate, expected_code in cases:
                 after.write_text(json.dumps(candidate), encoding="utf-8")
                 result = subprocess.run([sys.executable, str(root / "scripts/compare-indexes.py"), str(before), str(after)],
-                                        capture_output=True, text=True)
+                                        capture_output=True, text=True, timeout=120)
                 with self.subTest(candidate=candidate):
                     self.assertEqual(expected_code, result.returncode, result.stderr)
                     self.assertNotIn("Traceback", result.stderr)

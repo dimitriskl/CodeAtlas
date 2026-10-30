@@ -48,6 +48,8 @@ jobs:
             CodeAtlas.Net/.codeatlas/qualification/*.txt
             CodeAtlas.Net/.codeatlas/qualification/*.json
             CodeAtlas.Net/.codeatlas/qualification/test-results/*.trx
+            CodeAtlas.Net/.codeatlas/qualification/test-results/*/Sequence_*.xml
+            CodeAtlas.Net/.codeatlas/qualification/test-results/*/*.dmp
           retention-days: 14
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:

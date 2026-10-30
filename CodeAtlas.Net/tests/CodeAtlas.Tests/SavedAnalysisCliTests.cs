@@ -183,10 +183,7 @@ public sealed class SavedAnalysisCliTests(IndexedSolution fixture) : IClassFixtu
         var start = new ProcessStartInfo("dotnet") { RedirectStandardOutput = true, RedirectStandardError = true, CreateNoWindow = true };
         start.ArgumentList.Add(cli);
         foreach (var argument in arguments) start.ArgumentList.Add(argument);
-        using var process = Process.Start(start)!;
-        var stdout = process.StandardOutput.ReadToEndAsync();
-        var stderr = process.StandardError.ReadToEndAsync();
-        await process.WaitForExitAsync();
-        return new(process.ExitCode, await stdout, await stderr);
+        var process = await ChildProcess.RunAsync(start);
+        return new(process.ExitCode, process.Output, process.Error);
     }
 }

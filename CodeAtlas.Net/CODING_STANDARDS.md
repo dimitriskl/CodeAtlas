@@ -30,6 +30,8 @@ In a test method, put setup under `// Arrange`, the invocation as the only state
 
 Add a behavior test and run it so it fails before editing production code. Assert results a caller can observe: returned data, exit codes, and saved files. `CodeAtlas.Cli` exposes internals to `CodeAtlas.Tests` with `InternalsVisibleTo`, and existing tests call internal types. No tool requires the new test to fail in CI before the production edit.
 
+A test that runs a child process to its end uses `ChildProcess.RunAsync` (`tests/CodeAtlas.Tests/ChildProcess.cs`). The helper waits at most 3 minutes by default, below the 5-minute blame-hang timeout of `qualify-package.py`. On timeout it kills the process tree and fails with the command and the output captured so far. The writer-kill tests that use `PublicationChildProcess` bound their own waits.
+
 Python checks:
 
 ```bash

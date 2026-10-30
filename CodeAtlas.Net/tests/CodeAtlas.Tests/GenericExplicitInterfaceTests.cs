@@ -33,11 +33,8 @@ public sealed class GenericExplicitInterfaceTests
             var start = new ProcessStartInfo("dotnet") { WorkingDirectory = directory.FullName, RedirectStandardOutput = true, RedirectStandardError = true };
             start.ArgumentList.Add("restore");
             start.ArgumentList.Add(solution);
-            using var process = Process.Start(start)!;
-            var stdout = process.StandardOutput.ReadToEndAsync();
-            var stderr = process.StandardError.ReadToEndAsync();
-            await process.WaitForExitAsync();
-            Assert.True(process.ExitCode == 0, await stdout + await stderr);
+            var process = await ChildProcess.RunAsync(start);
+            Assert.True(process.ExitCode == 0, process.Output + process.Error);
             const string explicitId = "Generic.csproj::M:Sample.Logger`1.Sample#ILogger{TCategory}#BeginGroup(System.String)";
 
             // Act
