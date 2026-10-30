@@ -229,6 +229,8 @@ public sealed class GenerationStoreTests : IDisposable
         var nativeFailure = Assert.IsType<IOException>(busy.InnerException);
         if (OperatingSystem.IsLinux())
             Assert.Equal(11, nativeFailure.HResult);
+        else if (OperatingSystem.IsMacOS())
+            Assert.Equal(35, nativeFailure.HResult);
         else if (OperatingSystem.IsWindows())
             Assert.Contains(nativeFailure.HResult & 0xffff, new[] { 32, 33 });
         Assert.Equal(oldId, (await GenerationStore.ResolveAsync(previous.ManifestPath)).Manifest.IndexId);
