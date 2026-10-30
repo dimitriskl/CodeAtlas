@@ -171,10 +171,7 @@ public sealed class ReadOnlySnapshotQualificationTests(IndexedSolution fixture) 
         start.ArgumentList.Add(cli);
         foreach (var argument in arguments)
             start.ArgumentList.Add(argument);
-        using var process = Process.Start(start)!;
-        var stdout = process.StandardOutput.ReadToEndAsync();
-        var stderr = process.StandardError.ReadToEndAsync();
-        await process.WaitForExitAsync();
-        return (process.ExitCode, await stdout, await stderr);
+        var process = await ChildProcess.RunAsync(start);
+        return (process.ExitCode, process.Output, process.Error);
     }
 }

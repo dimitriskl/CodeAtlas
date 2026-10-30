@@ -49,11 +49,8 @@ public sealed class IndexedSolution : IAsyncLifetime
         start.ArgumentList.Add("restore");
         start.ArgumentList.Add("Sample.slnx");
         start.ArgumentList.Add("--locked-mode");
-        using var process = Process.Start(start)!;
-        var output = process.StandardOutput.ReadToEndAsync();
-        var error = process.StandardError.ReadToEndAsync();
-        await process.WaitForExitAsync();
-        Assert.True(process.ExitCode == 0, await output + await error);
+        var process = await ChildProcess.RunAsync(start);
+        Assert.True(process.ExitCode == 0, process.Output + process.Error);
         Index = await SolutionAnalysis.CreateIndexAsync(Path.Combine(Root, "Sample.slnx"));
         await IndexStore.SaveAsync(Index);
     }

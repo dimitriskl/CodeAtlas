@@ -191,11 +191,8 @@ public sealed class DescribeCliTests(ExplanationCliContractFixture fixture)
             start.ArgumentList.Add("--settings");
             start.ArgumentList.Add(Path.Combine(Path.GetTempPath(), "codeatlas-unconfigured-" + Guid.NewGuid().ToString("N") + ".json"));
         }
-        using var process = Process.Start(start)!;
-        var stdout = process.StandardOutput.ReadToEndAsync();
-        var stderr = process.StandardError.ReadToEndAsync();
-        await process.WaitForExitAsync();
-        return new(process.ExitCode, await stdout, await stderr);
+        var process = await ChildProcess.RunAsync(start);
+        return new(process.ExitCode, process.Output, process.Error);
     }
 
     private sealed record Result(int Exit, string Output, string Error)

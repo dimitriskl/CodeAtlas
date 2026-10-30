@@ -518,11 +518,8 @@ public sealed class SqliteStoreTests(SemanticSolution semantic, DocumentationCli
         start.ArgumentList.Add(cli);
         foreach (var argument in arguments) start.ArgumentList.Add(argument);
         foreach (var (name, value) in environment) start.Environment[name] = value;
-        using var process = Process.Start(start)!;
-        var output = process.StandardOutput.ReadToEndAsync();
-        var error = process.StandardError.ReadToEndAsync();
-        await process.WaitForExitAsync();
-        return new(process.ExitCode, await output, await error);
+        var process = await ChildProcess.RunAsync(start);
+        return new(process.ExitCode, process.Output, process.Error);
     }
 }
 

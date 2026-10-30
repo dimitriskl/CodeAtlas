@@ -436,18 +436,12 @@ public sealed class StartMenuTests : IDisposable
         start.ArgumentList.Add(cli);
 
         // Act
-        using var process = Process.Start(start)!;
-        process.StandardInput.Close();
-        var output = process.StandardOutput.ReadToEndAsync();
-        var error = process.StandardError.ReadToEndAsync();
-        var exited = process.WaitForExit(60_000);
-        if (!exited) process.Kill(entireProcessTree: true);
+        var process = await ChildProcess.RunAsync(start, TimeSpan.FromSeconds(60));
 
         // Assert
-        Assert.True(exited);
         Assert.Equal(2, process.ExitCode);
-        Assert.DoesNotContain("Choice:", await output);
-        Assert.Contains("\"error\"", await error);
+        Assert.DoesNotContain("Choice:", process.Output);
+        Assert.Contains("\"error\"", process.Error);
     }
 
     private Task<int> RunAsync(FakeMenuConsole console, CancellationToken token = default, SqliteStatus? sqlite = null)

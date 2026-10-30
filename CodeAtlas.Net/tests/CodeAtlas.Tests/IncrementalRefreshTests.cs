@@ -33,11 +33,8 @@ internal sealed class PhysicalRefreshFixture
             File.Copy(Path.Combine(repository.FullName, name), Path.Combine(root, name));
         var start = new ProcessStartInfo("dotnet") { WorkingDirectory = root, RedirectStandardOutput = true, RedirectStandardError = true };
         foreach (var argument in new[] { "restore", "Sample.slnx", "--locked-mode" }) start.ArgumentList.Add(argument);
-        using var process = Process.Start(start)!;
-        var output = process.StandardOutput.ReadToEndAsync();
-        var error = process.StandardError.ReadToEndAsync();
-        await process.WaitForExitAsync();
-        if (process.ExitCode != 0) throw new InvalidOperationException(await output + await error);
+        var process = await ChildProcess.RunAsync(start);
+        if (process.ExitCode != 0) throw new InvalidOperationException(process.Output + process.Error);
         fixture.Baseline = await SolutionAnalysis.CreateIndexAsync(fixture.Solution);
         await IndexStore.SaveAsync(fixture.Baseline);
         return fixture;

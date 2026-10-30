@@ -17,11 +17,8 @@ public sealed class SemanticSolution : IAsyncLifetime
         Root = Path.Combine(repository!.FullName, "tests", "SemanticFixtures");
         var start = new ProcessStartInfo("dotnet") { WorkingDirectory = Root, RedirectStandardOutput = true, RedirectStandardError = true };
         foreach (var argument in new[] { "restore", "Semantic.slnx", "--locked-mode" }) start.ArgumentList.Add(argument);
-        using var process = Process.Start(start)!;
-        var output = process.StandardOutput.ReadToEndAsync();
-        var error = process.StandardError.ReadToEndAsync();
-        await process.WaitForExitAsync();
-        Assert.True(process.ExitCode == 0, await output + await error);
+        var process = await ChildProcess.RunAsync(start);
+        Assert.True(process.ExitCode == 0, process.Output + process.Error);
         Index = await SolutionAnalysis.CreateIndexAsync(Path.Combine(Root, "Semantic.slnx"));
         Analysis = await SolutionAnalysis.LoadAsync(Index.Solution);
     }

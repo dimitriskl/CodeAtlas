@@ -38,11 +38,9 @@ public sealed class DuplicateMultiContextTests
             await File.WriteAllTextAsync(Path.Combine(directory.FullName,"Example.cs"),targetSource);
             var start=new ProcessStartInfo("dotnet") {WorkingDirectory=directory.FullName,RedirectStandardOutput=true,RedirectStandardError=true};
             start.ArgumentList.Add("restore");start.ArgumentList.Add(solution);
-            using var process=Process.Start(start)!;
-            var stdout=process.StandardOutput.ReadToEndAsync();var stderr=process.StandardError.ReadToEndAsync();
-            await process.WaitForExitAsync();
+            var process=await ChildProcess.RunAsync(start);
             var restoreExitCode=process.ExitCode;
-            var restoreOutput=await stdout+await stderr;
+            var restoreOutput=process.Output+process.Error;
 
             // Act
             var index=await SolutionAnalysis.CreateIndexAsync(solution);

@@ -63,13 +63,8 @@ public sealed class RefreshCliTests
         var start = new ProcessStartInfo("dotnet") { RedirectStandardOutput = true, RedirectStandardError = true };
         start.ArgumentList.Add(cli);
         foreach (var argument in arguments) start.ArgumentList.Add(argument);
-        using var process = Process.Start(start)!;
-        var stdout = process.StandardOutput.ReadToEndAsync();
-        var stderr = process.StandardError.ReadToEndAsync();
-        await process.WaitForExitAsync();
-        var output = await stdout;
-        var error = await stderr;
+        var process = await ChildProcess.RunAsync(start);
         // Error progress is disabled for queries; the final error JSON occupies stderr.
-        return new(process.ExitCode, JsonNode.Parse(process.ExitCode == 0 ? output : error)!.AsObject());
+        return new(process.ExitCode, JsonNode.Parse(process.ExitCode == 0 ? process.Output : process.Error)!.AsObject());
     }
 }

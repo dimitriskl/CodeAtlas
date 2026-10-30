@@ -379,11 +379,8 @@ public sealed class IncrementalCoverageTests(ITestOutputHelper output)
             if (prepare is not null) await prepare(root);
             var start = new ProcessStartInfo("dotnet") { WorkingDirectory = root, RedirectStandardOutput = true, RedirectStandardError = true };
             foreach (var argument in new[] { "restore", "Sample.slnx", "--locked-mode" }) start.ArgumentList.Add(argument);
-            using var process = Process.Start(start)!;
-            var output = process.StandardOutput.ReadToEndAsync();
-            var error = process.StandardError.ReadToEndAsync();
-            await process.WaitForExitAsync();
-            if (process.ExitCode != 0) throw new InvalidOperationException(await output + await error);
+            var process = await ChildProcess.RunAsync(start);
+            if (process.ExitCode != 0) throw new InvalidOperationException(process.Output + process.Error);
             var fixture = new CoverageFixture(root) { Baseline = await SolutionAnalysis.CreateIndexAsync(Path.Combine(root, "Sample.slnx")) };
             await IndexStore.SaveAsync(fixture.Baseline);
             return fixture;
