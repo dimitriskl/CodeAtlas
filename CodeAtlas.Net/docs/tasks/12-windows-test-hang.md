@@ -23,7 +23,7 @@ User stories: 21, 24. PRD: [Testing Decisions](../prd/0001-net-release.md#testin
 
 - [01 — CI green](01-ci-green.md)
 
-Status: done-awaiting-merge (https://github.com/dimitriskl/CodeAtlas/pull/11)
+Status: done (https://github.com/dimitriskl/CodeAtlas/pull/11)
 
 ## Acceptance criteria
 
