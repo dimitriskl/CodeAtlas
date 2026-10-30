@@ -20,17 +20,27 @@ User stories: 21, 24. PRD: [Testing Decisions](../prd/0001-net-release.md#testin
 
 None.
 
-Status: in-progress (https://github.com/dimitriskl/CodeAtlas/pull/9) (Developer, branch `task/01-ci-green`)
+Status: review (https://github.com/dimitriskl/CodeAtlas/pull/9) (Developer, branch `task/01-ci-green`)
 
 ## Acceptance criteria
 
-- [ ] `VersionTests` no longer requires `docs/CodeAtlas-Project-Recap.md`. It still checks `README.md` and `docs/VERSION.md`.
-- [ ] The version bump script updates only `README.md` and `docs/VERSION.md` and works on a clean clone. Its test and the VERSION.md rules text say the same.
-- [ ] The SnapshotInputModelTests environment-name casing test and the `obj` path test pass on Linux and Windows (and macOS).
-- [ ] The Python `C:/bench` instruction test passes on Linux and Windows (and macOS).
-- [ ] `macos-latest` is in the qualification matrix, for the build job and the install job. It runs per PR. Note in the workflow: it may move to release-only if the repository stays private.
-- [ ] The workflow runs on pull requests, and the in-tree copy (`build/qualification.yml`) stays identical to the active workflow.
-- [ ] The qualification workflow is green on all OSes for the PR head, with the full .NET and Python suites on a clean checkout.
-- [ ] No change to production behavior, CLI output, exit codes or schema.
+- [x] `VersionTests` no longer requires `docs/CodeAtlas-Project-Recap.md`. It still checks `README.md` and `docs/VERSION.md`.
+- [x] The version bump script updates only `README.md` and `docs/VERSION.md` and works on a clean clone. Its test and the VERSION.md rules text say the same.
+- [x] The SnapshotInputModelTests environment-name casing test and the `obj` path test pass on Linux and Windows (and macOS).
+- [x] The Python `C:/bench` instruction test passes on Linux and Windows (and macOS).
+- [x] `macos-latest` is in the qualification matrix, for the build job and the install job. It runs per PR. Note in the workflow: it may move to release-only if the repository stays private.
+- [x] The workflow runs on pull requests, and the in-tree copy (`build/qualification.yml`) stays identical to the active workflow.
+- [x] The qualification workflow is green on all OSes for the PR head, with the full .NET and Python suites on a clean checkout.
+- [ ] No change to production behavior, CLI output, exit codes or schema. Not met as written: an approved macOS conformance fix (`index_busy` for a held writer lock); see the review log. No CLI output, exit code or schema change.
 
 ## Review log
+
+### 2026-10-30 (Developer)
+
+- Merged `origin/codex/production-roadmap` into the branch (no history rewrite) and reviewed the 8 earlier test commits. The Windows casing test returned early elsewhere, so it asserted nothing on Linux or macOS; it now runs on every OS and expects upper-cased names only on Windows.
+- `scripts/bump-version.py` updates only `Version.props`, `README.md` and `docs/VERSION.md`; its test fixture has no recap and checks that no other file is written (the test failed before the script edit). VERSION.md, CODING_STANDARDS.md and PACKAGING.md are updated.
+- Workflow: `pull_request` trigger, `macos-latest` in the build and install matrices with the release-only note, and a macOS-only step that sets `TMPDIR` to the runner temp folder, because `/var/folders` is a symlink alias outside the qualified path model. `build/qualification.yml` is byte-identical, guarded by `tests/versioning/test_qualification_workflow.py`.
+- Production fix approved by the repository owner: on macOS a held writer lock surfaced as a raw `IOException` instead of the `index_busy` that QUERY-CONTRACT.md promises. `GenerationStore.AcquireWriterLock` now maps errno 35 on macOS. The mapping is OS-gated, so no test can fail on Windows; the existing writer tests failed on macos-latest in run 41003506186 and pass now. The busy test pins errno 35 on macOS.
+- One version bump: 0.00.58.
+- Local (Windows): `dotnet restore CodeAtlas.slnx --locked-mode`, `dotnet build CodeAtlas.slnx --no-restore` (0 warnings), `dotnet test CodeAtlas.slnx --no-build --no-restore -- xUnit.MaxParallelThreads=1` (558/558), `python -m unittest discover -s tests/versioning -p 'test_*.py'` (97 OK). After the macOS fix, the GenerationStore and publication tests ran locally (34/34); the full suites ran in CI on the PR head.
+- CI green on windows-2025, ubuntu-24.04 and macos-latest, build and install jobs: https://github.com/dimitriskl/CodeAtlas/actions/runs/41007737088 (macOS: 558/558 .NET, 97 Python).
