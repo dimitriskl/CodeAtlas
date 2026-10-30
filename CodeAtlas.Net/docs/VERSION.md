@@ -34,7 +34,7 @@ This flag synchronizes the same files; it does not publish a package, create a t
 
 ### 0.00.58
 
-- Make qualification pass on Windows, Linux and macOS for every pull request: OS-independent tests, a version bump that works on a clean clone, and pull_request and macOS in the workflow.
+- Make qualification pass on Windows, Linux and macOS for every pull request: OS-independent tests, a version bump that works on a clean clone, pull_request and macOS in the workflow, and index_busy for a held writer lock on macOS.
 
 ### 0.00.57
 
