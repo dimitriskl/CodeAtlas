@@ -20,7 +20,7 @@ User stories: 21, 24. PRD: [Testing Decisions](../prd/0001-net-release.md#testin
 
 None.
 
-Status: changes-requested (https://github.com/dimitriskl/CodeAtlas/pull/9) (QA attempt 1, branch `task/01-ci-green`)
+Status: review (https://github.com/dimitriskl/CodeAtlas/pull/9) (QA attempt 2, branch `task/01-ci-green`)
 
 ## Acceptance criteria
 
@@ -100,3 +100,14 @@ Status: changes-requested (https://github.com/dimitriskl/CodeAtlas/pull/9) (QA a
 - Non-blocking notes:
   1. A plain `git clone` on Windows fails checkout ("Filename too long" under `benchmarks/agent/results/...`) unless `core.longpaths` is set. CI is unaffected, but a contributor on Windows hits it. Consider noting it in README or shortening those result paths.
   2. The Python tests changed in `test_bump_version.py` have no AAA comments. The rule is written for C#, so this is only a suggestion.
+
+### 2026-10-30 (Developer)
+
+- 2026-10-30 Developer: addressed QA attempt 1. Test code only; no production change and no new version bump.
+- Blocking 1: `VersionTests.BuiltVersionMatchesSourceAndDocumentation` has Arrange/Act/Assert sections; the one Act statement reads `README.md` and `docs/VERSION.md`.
+- Blocking 2: `UnreferencedShellVariablesDoNotInvalidateOrDiscloseValues` is split into `UnreferencedShellVariablesDoNotInvalidate` (fresh), `ChangedReferencedVariableIsStaleAndItsValueIsNotDisclosed` and `RemovedReferencedVariableIsStale`, each with one `CheckAsync` call. Every earlier assertion is kept.
+- Blocking 3: `ReferencedBuildVariablesAreKeptAndSdkOrShellVariablesAreNot` keeps only the referenced selection. The unset selection (`UnsetReferencedVariableIsKeptAndADefinedPropertyIsNot`) and the path checks (`FileUnderObjIsAnOutputPath`, `FileUnderTheDotnetRootIsSdkOrPackage`, `ProjectFileIsNotSdkOrPackage`) are their own facts with the same inputs and expected values.
+- Mutation spot-checks, reverted: dropping the undefined-name rule in `BuildEnvironment.Select` failed the referenced and unset facts; dropping `obj` from `IsOutputPath` failed `FileUnderObjIsAnOutputPath`; returning a value for a missing variable in `SnapshotInputModel` failed `RemovedReferencedVariableIsStale`.
+- Follow-up recorded as task 12 (Windows test hang), ready and blocked by 01.
+- Local (Windows): build 0 warnings, .NET 564/564 (558 plus 6 from the splits), Python 98 OK.
+- CI: run 41019929728 attempt 1 failed on windows-2025 because `dotnet test` hit the 1800 s timeout again (ubuntu and macOS build jobs passed). Re-ran the failed job once with `gh run rerun --failed`; attempt 2 is green on windows-2025, ubuntu-24.04 and macos-latest, build and install jobs: https://github.com/dimitriskl/CodeAtlas/actions/runs/41019929728
