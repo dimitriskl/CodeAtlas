@@ -177,6 +177,27 @@ public sealed partial class SqliteFileUpdateTests
         Assert.Contains("codeatlas live --solution", response["error"]!["message"]!.GetValue<string>(), StringComparison.Ordinal);
     }
 
+    [Fact]
+    public async Task LiveForASolutionWithoutAnIndexExitsWithAnalysisFailure()
+    {
+        // Arrange
+        var solution = Path.Combine(Path.GetTempPath(), "codeatlas-live-" + Guid.NewGuid().ToString("N"), "Missing.slnx");
+        using var input = new StringReader("");
+        using var output = new StringWriter();
+        using var error = new StringWriter();
+
+        // Act
+        var exit = await LiveHost.RunAsync(["live", "--solution", solution], input, output, error, CancellationToken.None);
+
+        // Assert
+        Assert.Equal(1, exit);
+        Assert.Equal("", output.ToString());
+        var response = JsonNode.Parse(error.ToString())!.AsObject();
+        Assert.False(response["success"]!.GetValue<bool>());
+        Assert.Equal("analysis_failed", response["error"]!["code"]!.GetValue<string>());
+        Assert.Contains("current.json", response["error"]!["message"]!.GetValue<string>(), StringComparison.Ordinal);
+    }
+
     private static JsonObject Request(string command, params (string Name, string Value)[] fields)
     {
         var request = new JsonObject { ["command"] = command };
