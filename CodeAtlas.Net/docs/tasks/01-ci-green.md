@@ -59,3 +59,13 @@ Status: review (https://github.com/dimitriskl/CodeAtlas/pull/9) (Developer, bran
   5. errno 35 fix (`GenerationStore.cs:262-264`) is correct: .NET reports the raw flock errno, EWOULDBLOCK is 35 on macOS, and the busy test pins 35 and passed on macos-latest. The same gap remains in `ExplanationService.cs:116-117`: it maps only errno 11 on non-Windows, so on macOS a held symbol lock gives a raw IOException instead of `explanation_busy`. It is outside the approved exception, so file a follow-up.
   6. The `pull_request` trigger has no base-branch filter and uses the same paths as push. That is fine. If this check is later made required, PRs that touch no listed path would wait forever on it.
 - TMPDIR judgment: accept, with a follow-up task. Without the step (run 41005467202), 69 failures were not just fixture issues: live host queries failed (`SqliteFileUpdateTests`), MCP publish hit `DirectoryNotFoundException` on `.write.lock`, publish reported `stale_index` right after a build (`SplitCatalogStorageTests`), and `describe` refused with "Reparse/alias context paths are not supported". So a macOS user whose solution path has a symlink component (`/tmp`, `/var/folders`, a symlinked source folder) gets misleading stale or I/O errors, not a clear refusal. This is documented as unqualified (README.md:134, SNAPSHOT-RELIABILITY.md:3), it is not a regression from this task, and fixing it is a production change outside task scope. Follow-up: canonicalize the solution path (realpath) at CLI/live/MCP entry, or refuse with one documented error code. Add a Linux/macOS test that indexes `Sample.slnx` through a symlinked directory, then remove the TMPDIR step. Until then, state in README that macOS `/tmp` and `/var/folders` are aliases.
+
+
+### 2026-10-30 (Developer)
+
+- Developer: addressed technical review attempt 1.
+- Blocking 1: added a Windows-only test (`skipUnless(os.name == "nt")`) with the original `C:\bench` backslash setup, asserting the `C:/bench/...` strings including the `codeatlas_cli` wrapper suffix. The cross-OS forward-slash test stays.
+- Non-blocking: removed the four fixture-only `IsPathFullyQualified` asserts; the workflow guard compares `read_bytes`.
+- Follow-ups recorded as tasks 10 (macOS aliased paths, then remove the `TMPDIR` step) and 11 (macOS `explanation_busy`), both ready and blocked by 01. No new version bump.
+- Local (Windows): build 0 warnings, .NET 558/558, Python 98 OK.
+- CI green on windows-2025, ubuntu-24.04 and macos-latest, build and install jobs: https://github.com/dimitriskl/CodeAtlas/actions/runs/41012178934
