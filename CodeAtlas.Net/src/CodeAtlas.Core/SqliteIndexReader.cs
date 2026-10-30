@@ -317,12 +317,44 @@ internal sealed class SqliteIndexReader(string path)
             while (reader.Read())
             {
                 cancellationToken.ThrowIfCancellationRequested();
-                result.Add(new(reader.GetString(1), reader.GetString(2), reader.GetString(3),
-                    reader.IsDBNull(4) ? null : reader.GetString(4), reader.GetString(5), reader.GetString(6),
-                    reader.GetString(7), reader.IsDBNull(8) ? null : reader.GetString(8), Position(reader, 9),
-                    Json<SourcePosition[]>(reader.GetString(12)), Json<DeveloperDocumentation>(reader.GetString(13))));
+                result.Add(ReadSymbol(reader));
             }
             return result.ToArray();
+        }
+
+        private DocumentedSymbol ReadSymbol(SqliteDataReader reader) =>
+            new(reader.GetString(1), reader.GetString(2), reader.GetString(3),
+                reader.IsDBNull(4) ? null : reader.GetString(4), reader.GetString(5), reader.GetString(6),
+                reader.GetString(7), reader.IsDBNull(8) ? null : reader.GetString(8), Position(reader, 9),
+                Json<SourcePosition[]>(reader.GetString(12)), Json<DeveloperDocumentation>(reader.GetString(13)));
+
+        /// <summary>Symbols for these ordinals. A missing ordinal is absent from the dictionary.</summary>
+        public Dictionary<long, DocumentedSymbol> SymbolsForOrdinals(IReadOnlyList<long> ordinals)
+        {
+            var result = new Dictionary<long, DocumentedSymbol>(ordinals.Count);
+            ReadChunks(SymbolColumns + " WHERE s.ordinal IN (", ")", ordinals, reader =>
+            {
+                while (reader.Read()) result[reader.GetInt64(0)] = ReadSymbol(reader);
+            });
+            return result;
+        }
+
+        /// <summary>Adds each id, or null when the symbol row is missing. Duplicate ids are an invalid index.</summary>
+        public void RememberSymbols(IReadOnlyList<string> ids, Dictionary<string, DocumentedSymbol?> into)
+        {
+            var found = new HashSet<string>(StringComparer.Ordinal);
+            ReadChunks(SymbolColumns + " WHERE s.id IN (", ")", ids, reader =>
+            {
+                while (reader.Read())
+                {
+                    var symbol = ReadSymbol(reader);
+                    if (!found.Add(symbol.Id))
+                        throw new IndexFormatException("invalid_index", "Duplicate symbol IDs in the index database. Rebuild the index.");
+                    into[symbol.Id] = symbol;
+                }
+            });
+            foreach (var id in ids)
+                if (!into.ContainsKey(id)) into[id] = null;
         }
 
         private const string FactColumns = "SELECT owner_id, kind, target_name, target_signature, target_declaration_id, "
@@ -335,6 +367,23 @@ internal sealed class SqliteIndexReader(string path)
         {
             using var reader = Reader("facts-owner", FactColumns + " WHERE owner_id = $p0 ORDER BY ordinal", ownerId);
             return ReadFacts(reader, CancellationToken.None);
+        }
+
+        /// <summary>Facts for each owner, in stored ordinal order. Owners with no facts map to an empty array.</summary>
+        public Dictionary<string, StructuralFact[]> FactsForOwners(IReadOnlyList<string> ownerIds)
+        {
+            var lists = new Dictionary<string, List<StructuralFact>>(ownerIds.Count, StringComparer.Ordinal);
+            foreach (var id in ownerIds)
+                if (!lists.ContainsKey(id)) lists[id] = [];
+            ReadChunks(FactColumns + " WHERE owner_id IN (", ") ORDER BY ordinal", ownerIds, reader =>
+            {
+                while (reader.Read())
+                {
+                    var fact = ReadFact(reader);
+                    if (lists.TryGetValue(fact.OwnerId, out var owned)) owned.Add(fact);
+                }
+            });
+            return lists.ToDictionary(pair => pair.Key, pair => pair.Value.ToArray(), StringComparer.Ordinal);
         }
 
         /// <summary>Resolved invocations of one source method among the first <paramref name="scanLimit"/> stored facts.</summary>
@@ -363,13 +412,37 @@ internal sealed class SqliteIndexReader(string path)
             while (reader.Read())
             {
                 cancellationToken.ThrowIfCancellationRequested();
-                var target = new FactTarget(reader.GetString(2), reader.GetString(3), Text(reader, 4), Text(reader, 5),
-                    Text(reader, 6), reader.GetString(7));
-                var range = new DocumentationRange(Position(reader, 9), Position(reader, 12));
-                result.Add(new(reader.GetString(0), reader.GetString(1), target,
-                    new StructuralEvidence(reader.GetString(8), range, reader.GetString(15))));
+                result.Add(ReadFact(reader));
             }
             return result.ToArray();
+        }
+
+        private StructuralFact ReadFact(SqliteDataReader reader)
+        {
+            var target = new FactTarget(reader.GetString(2), reader.GetString(3), Text(reader, 4), Text(reader, 5),
+                Text(reader, 6), reader.GetString(7));
+            var range = new DocumentationRange(Position(reader, 9), Position(reader, 12));
+            return new(reader.GetString(0), reader.GetString(1), target,
+                new StructuralEvidence(reader.GetString(8), range, reader.GetString(15)));
+        }
+
+        private void ReadChunks<T>(string before, string after, IReadOnlyList<T> keys, Action<SqliteDataReader> read)
+        {
+            const int chunkSize = 400;
+            for (var start = 0; start < keys.Count; start += chunkSize)
+            {
+                var count = Math.Min(chunkSize, keys.Count - start);
+                using var command = connection.CreateCommand();
+                var placeholders = new string[count];
+                for (var i = 0; i < count; i++)
+                {
+                    placeholders[i] = "$k" + i;
+                    command.Parameters.AddWithValue(placeholders[i], keys[start + i]!);
+                }
+                command.CommandText = before + string.Join(",", placeholders) + after;
+                using var reader = command.ExecuteReader();
+                read(reader);
+            }
         }
 
         public DuplicateCatalog? Duplicates(CancellationToken cancellationToken)
@@ -458,6 +531,23 @@ internal sealed class SqliteIndexReader(string path)
             using var reader = Reader("search-lengths", "SELECT family, total, count FROM search_field_lengths WHERE kind = $p0", kind);
             while (reader.Read()) result[reader.GetString(0)] = (reader.GetInt64(1), reader.GetInt32(2));
             return result;
+        }
+
+        /// <summary>Search postings of symbols located in one file, in symbol, token, then name-field order.</summary>
+        public (string SymbolId, string Token, bool NameField)[] SearchPostingsForFile(string relativeFile)
+        {
+            var result = new List<(string, string, bool)>();
+            using var reader = Reader("search-postings-file", """
+                SELECT s.id, t.token, p.name_field
+                FROM search_postings p
+                JOIN search_tokens t ON t.id = p.token_id
+                JOIN symbols s ON s.ordinal = p.symbol_ordinal
+                JOIN files f ON f.id = s.file_id
+                WHERE f.path = $p0
+                ORDER BY s.id, t.token, p.name_field
+                """, relativeFile);
+            while (reader.Read()) result.Add((reader.GetString(0), reader.GetString(1), reader.GetInt64(2) != 0));
+            return result.ToArray();
         }
 
         /// <summary>Symbol ordinals whose stored fields contain the token, restricted to kind and name fields.</summary>

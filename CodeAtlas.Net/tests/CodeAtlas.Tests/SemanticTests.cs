@@ -136,6 +136,32 @@ public sealed class SemanticTests(SemanticSolution fixture) : IClassFixture<Sema
         AssertSourceTokens(references, "Work");
     }
 
+    [Fact]
+    public void InheritedInterfaceImplementationKeepsTheSharedReferenceSet()
+    {
+        // Arrange
+        var alpha = fixture.Index.Methods.Single(method => method.Id.EndsWith("IAlpha.GetStream", StringComparison.Ordinal));
+        var beta = fixture.Index.Methods.Single(method => method.Id.EndsWith("IBeta.GetStream", StringComparison.Ordinal));
+        var runner = fixture.Index.Methods.Single(method => method.Id.EndsWith("BetaRunner.GetStream", StringComparison.Ordinal));
+        var gamma = fixture.Index.Methods.Single(method => method.Id.EndsWith("IGamma.GetStream", StringComparison.Ordinal));
+        var gammaRunner = fixture.Index.Methods.Single(method => method.Id.EndsWith("GammaRunner.GetStream", StringComparison.Ordinal));
+
+        // Act
+        var alphaReferences = fixture.Index.References[alpha.Id];
+        var betaReferences = fixture.Index.References[beta.Id];
+        var runnerReferences = fixture.Index.References[runner.Id];
+        var gammaReferences = fixture.Index.References[gamma.Id];
+        var gammaRunnerReferences = fixture.Index.References[gammaRunner.Id];
+
+        // Assert
+        Assert.Equal(betaReferences, alphaReferences);
+        Assert.Equal(runnerReferences, alphaReferences);
+        Assert.Equal([9, 10, 11, 12, 13], alphaReferences.Select(reference => reference.Location.Line));
+        Assert.Equal(gammaReferences, gammaRunnerReferences);
+        Assert.Equal([14, 15], gammaReferences.Select(reference => reference.Location.Line));
+        Assert.DoesNotContain(alphaReferences, reference => reference.DefinitionId == gamma.Id);
+    }
+
     private void AssertSourceTokens(IEnumerable<SourceReference> references, string token)
     {
         foreach (var reference in references)

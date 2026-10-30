@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using Microsoft.Build.Locator;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
@@ -30,6 +31,12 @@ public sealed partial class SolutionAnalysis : IDisposable
     private string[] evaluatedImports = [];
     private string[] relevantEnvironment = [];
     private static string? selectedMSBuildPath;
+    private static readonly ConcurrentDictionary<string, int> solutionLoads = new(StringComparer.Ordinal);
+
+    internal static int SolutionLoads(string path) =>
+        solutionLoads.TryGetValue(Path.GetFullPath(path), out var count) ? count : 0;
+
+    internal static void ResetSolutionLoads(string path) => solutionLoads[Path.GetFullPath(path)] = 0;
 
     private SolutionAnalysis(MSBuildWorkspace workspace, Solution solution, string path, IReadOnlyList<string> warnings)
     {
@@ -52,6 +59,7 @@ public sealed partial class SolutionAnalysis : IDisposable
         path = Path.GetFullPath(path);
         if (!File.Exists(path))
             throw new AnalysisException($"Solution does not exist: {path}");
+        solutionLoads.AddOrUpdate(path, 1, static (_, count) => count + 1);
 
         lock (SnapshotEnvironment.Gate)
         {
@@ -82,6 +90,10 @@ public sealed partial class SolutionAnalysis : IDisposable
                 progress.Report(new(IndexStage.LoadingProjects, Detail: Path.GetFileName(p.FilePath))));
             var solution = await workspace.OpenSolutionAsync(path, buildDiagnostics.Logger, progress: loading, cancellationToken: cancellationToken);
             buildDiagnostics.Read(cancellationToken);
+            var skipped = new List<string>();
+            var collapsed = SourcePaths.Collapse(solution, Path.GetDirectoryName(path)!, skipped);
+            solution = !discoveryOnly && !ReferenceEquals(collapsed, solution)
+                ? SourcePaths.Adopt(workspace, collapsed) : collapsed;
             var failures = workspace.Diagnostics.Where(d => d.Kind == WorkspaceDiagnosticKind.Failure
                     && !buildDiagnostics.IsWarning(d.Message))
                 .Select(d => d.Message).Concat(buildDiagnostics.Errors).Distinct().ToList();
@@ -112,7 +124,8 @@ public sealed partial class SolutionAnalysis : IDisposable
                 throw new AnalysisException("Solution analysis is incomplete. Restore dependencies and resolve the reported errors.", failures);
 
             var warnings = workspace.Diagnostics.Where(d => d.Kind == WorkspaceDiagnosticKind.Warning
-                    || buildDiagnostics.IsWarning(d.Message)).Select(d => d.Message).Distinct().ToArray();
+                    || buildDiagnostics.IsWarning(d.Message)).Select(d => d.Message).Distinct()
+                .Concat(skipped.Distinct(StringComparer.Ordinal).Order(StringComparer.Ordinal)).ToArray();
             return new SolutionAnalysis(workspace, solution, path, warnings);
         }
         catch
@@ -162,7 +175,7 @@ public sealed partial class SolutionAnalysis : IDisposable
 
     private static IMethodSymbol Canonical(IMethodSymbol symbol) => symbol.OriginalDefinition.PartialDefinitionPart ?? symbol.OriginalDefinition;
     private string Id(Project project, IMethodSymbol symbol) => $"{Relative(project.FilePath!)}::{symbol.GetDocumentationCommentId()}";
-    private string Relative(string path) => Path.GetRelativePath(directory, path).Replace('\\', '/');
+    private string Relative(string path) => SourcePaths.Relative(directory, path);
     private SourcePosition Position(Location location)
     {
         var span = location.GetLineSpan();

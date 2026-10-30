@@ -1,6 +1,6 @@
 # CodeAtlas version history
 
-Version: **0.00.40**
+Version: **0.00.56**
 
 Version history starts at `0.00.01`; earlier work did not have assigned version numbers.
 
@@ -31,6 +31,70 @@ python scripts/bump-version.py --major-release --summary "Publish the qualified 
 This flag synchronizes the same files; it does not publish a package, create a tag, or waive release checks. Routine increments never change the major component automatically.
 
 ## History
+
+### 0.00.56
+
+- Check installed search and the MCP handshake on the sample package.
+
+### 0.00.55
+
+- Keep inherited interface calls when a cascade group has no locations.
+
+### 0.00.54
+
+- Answer warm live-host queries on a large solution within 300 ms.
+
+### 0.00.53
+
+- Publish a generation from the stdio JSON-RPC server.
+
+### 0.00.52
+
+- Report index status and coverage from the stdio JSON-RPC server.
+
+### 0.00.51
+
+- Answer find_symbol from a stdio JSON-RPC server.
+
+### 0.00.50
+
+- Index each source file once at its real path
+
+### 0.00.49
+
+- Skip the full freshness hash for a query of a live session's own edit
+
+### 0.00.48
+
+- Serve edit, find-symbol, search and find-references from one loaded session
+
+### 0.00.47
+
+- Publish type rows, tree hashes, and overview counts for an edited file
+
+### 0.00.46
+
+- Publish symbol, fact, search and duplicate rows for an edited file
+
+### 0.00.45
+
+- Record the applied text hash and answer find-references from a loaded session
+
+### 0.00.44
+
+- Publish a working copy as the next immutable generation
+
+### 0.00.43
+
+- Update one file in a private working copy from in-memory text
+
+### 0.00.42
+
+- Produce one file's method and reference rows from in-memory analysis
+
+### 0.00.41
+
+- Replace one file's method and reference rows in a private working copy of the index
 
 ### 0.00.40
 

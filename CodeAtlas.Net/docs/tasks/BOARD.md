@@ -1,0 +1,17 @@
+# CodeAtlas .NET task board
+
+Source: [PRD 0001](../prd/0001-net-release.md). Each task is a vertical slice for one coding session. Domnus reviews each PR technically, then QA reviews it against CODING_STANDARDS.md.
+
+In progress: 01. After 01 is done, 02 and 03 can start. After 03, 04 and 05 can run in parallel.
+
+| # | Task | Blocked by | Status |
+|---|---|---|---|
+| 01 | [CI green on Windows, Linux and macOS](01-ci-green.md) | None | in-progress (https://github.com/dimitriskl/CodeAtlas/pull/9) |
+| 02 | [Standards checks in the build](02-standards-checks.md) | 01 | ready |
+| 03 | [MCP server answers from a warm index](03-mcp-warm-index.md) | 01 | ready |
+| 04 | [MCP tool search_symbols](04-search-symbols.md) | 03 | ready |
+| 05 | [MCP tool find_references](05-find-references.md) | 03 | ready |
+| 06 | [Docs agree with the release](06-docs-agree.md) | 04, 05 | ready |
+| 07 | [Benchmark: real MCP mode and success-only statistics](07-benchmark-mcp-mode.md) | 05 | ready |
+| 08 | [Demo and tagged GitHub release](08-demo-release.md) | 06 | ready |
+| 09 | [Benchmark gate](09-benchmark-gate.md) | 07, 08 | ready |

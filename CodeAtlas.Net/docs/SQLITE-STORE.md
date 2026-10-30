@@ -25,7 +25,7 @@ One database per generation. Rows that describe source carry a `file_id`, so ste
 | Table | Rows | Key / indexes |
 | --- | --- | --- |
 | `meta` | Identity (`indexId`, `solution`), schema and tool version, creation time, warnings, input roots, refresh summary, documentation and structural coverage, input manifest without its file list, incremental and duplicate headers (JSON) | `key` |
-| `files` | Solution-relative path, content SHA-256 from the input manifest | `id`, unique `path` |
+| `files` | Real file's solution-relative path, content SHA-256 from the input manifest | `id`, unique `path` |
 | `projects` | Path, name, dependencies, files | `ordinal` |
 | `types`, `methods` | Records with file and position | `id`, `name`, `containing_type`, `project`, `file_id` |
 | `reference_keys`, `source_references` | References grouped by method key | `method_id`; `(key_ordinal, ordinal)`; `file_id` |
@@ -67,6 +67,18 @@ Why not hash or check the whole database on every query? Both cost time in propo
 
 On Windows, `File.Replace` can make the pointer name briefly unavailable to a reader that opens it at that instant. Readers now retry that short window (sharing violation, delete-pending, or an absent name for up to two retries). A concurrent-reader test publishes 8 generations while readers query.
 
+A live update does not write that generation. It copies `index.db` and calls `ReplaceFileRows` on the private copy: one transaction deletes that file's `methods` and `source_references` rows, drops `reference_keys` for methods removed from the file, and inserts the supplied rows. The file content hash, input manifest, symbol and fact rows, and generation header stay as copied until the copy is published as a new generation.
+
+Those rows come from the loaded workspace after `ApplyDocumentText`, via `FileRowsAsync`. It uses the same method and reference builders as a full index and returns only that file's methods plus references located in that file. It does not write the database, update the file hash, manifest or generation header, or start a watcher.
+
+`UpdateWorkingCopyAsync` is that sequence for one file: apply the text in memory, build the rows, then replace them on the private copy. The same transaction records the SHA-256 of that applied text as the file's tracked hash, replaces type, symbol, fact, search and duplicate rows using the same builders as a full index, and sets that file's incremental content and surface hashes with the same digest the full index uses. Search totals, the duplicate vocabulary and the type table are solution-wide, so those tables are rewritten from that build. A path that is not an open document throws `AnalysisException` and does not write. The call does not publish a generation or start a watcher.
+
+`PublishWorkingCopyAsync` publishes that private copy through the same generation transaction as a full index: a new directory, hashes of `index.db` and the previous generation's reports, then one replacement of `current.json`. The published database keeps the copy's method and reference rows and the tracked hashes already recorded for the text those rows were built from. It does not reread disk into those hashes. The existing freshness check compares them with disk and refuses the commit when they differ, so an unsaved edit does not become the current generation. Its generation id is changed so the header matches the new manifest, including the duplicate scan's copy of that id. Symbol, fact, search and duplicate rows are those already written into the copy. `overview.md` and `warnings.txt` are written from those rows with the new generation id. `timings.json` stays the previous generation's stage timings, because those durations are not derived from source text. The previous generation file is not modified. A failure before the pointer commit leaves the current generation unchanged. No watcher is started.
+
+`LiveIndexSession` keeps that solution loaded. One edit calls `UpdateWorkingCopyAsync` and `PublishWorkingCopyAsync`. Find-references, find-symbol and search read the new current generation. The edited file's type, symbol, fact, search and duplicate rows, and its incremental tree hash, match a full rebuild of that text. A later edit in the same session publishes from the updated hash.
+
+`codeatlas live --solution <path>` is that session as a process. It loads the solution once, then reads one JSON request per stdin line (`edit` with `path` and `text`, `find-symbol`, `search`, `find-references`) and writes one JSON response per line with the existing CLI envelope. It does not start a file watcher. A query of the generation that session just published compares each tracked file's length and last-write time with the stamp taken when the generation was published, and hashes only files whose stamp changed. Other commands still hash every input. A file that appears outside the tracked set, or an environment change, is not detected until a full check. Source paths in that generation are real paths, so an edit made through a symlink updates the same rows. A symlink to a file outside the solution is not indexed; the warning report names it.
+
 ## Legacy JSON
 
 - Generations written before 0.00.35 (manifest version 1, `index.json` and `catalog.json`) are still read through the previous full-load path, with its whole-file SHA-256 checks.
@@ -89,6 +101,8 @@ The test is complete normalized analysis plus complete query responses, on the s
 | Jellyfin 10.11.9 (40 projects, 6,527 methods, 17,283 symbols, 80,533 facts) | equivalent | 160 / 160 |
 
 The query responses compare the 0.00.34 CLI reading the JSON export with the new CLI reading SQLite, on the same generation. They cover `find-symbol` (methods and `--kind all`), `find-references` (including the busiest methods and a continuation page), `get-documentation`, `search-symbols` (assisted and names), `find-callers --depth 3`, `get-facts`, `find-duplicates`, `coverage` and `index-status`. Only documented volatile fields are removed: `freshness.checkedAtUtc`, and `warningsFile`, `warningMessage` and `coverageMessage`, which name the answering generation's directory.
+
+Rerun on Linux against the 0.00.55 build. The original harness is not in the repository, so the same 160-query mix was derived from the generation: `index-status`, `coverage`, `find-duplicates`, 40 method-name `find-symbol` queries, 20 `find-symbol --kind all`, `find-references` for the 30 busiest methods (including `IDirectStreamProvider.GetStream`), one continuation page of the busiest method, 20 `get-documentation`, 15 assisted searches, 15 name searches, 10 `find-callers --depth 3`, and 6 `get-facts`. Each query was run with the current CLI on the SQLite generation and again on that generation's JSON export. Before the reference correction the responses were 160 / 160, and `IDirectStreamProvider.GetStream` answered 1. After rebuilding Jellyfin 10.11.9 they were 160 / 160, and that answer was 4. Of 6,527 reference keys, only that key changed.
 
 ## Measurements (Jellyfin)
 
@@ -126,8 +140,24 @@ Notes:
 
 Harness scripts were kept outside the repository (`C:\temp\codeatlas-sqlite`). `measure.py` samples the process peak working set. `queries.py` runs the five queries. `compare_queries.py` derives queries from an export and compares two CLIs, and `fixtures.sh` handles the small corpora. Those runs used one fixed environment. An index built before the referenced-variable digest is still stale from a shell whose `PWD` or `OLDPWD` differs. An index built after that change is not: only environment variables referenced by the solution's own project files are hashed. See [Snapshot reliability](SNAPSHOT-RELIABILITY.md).
 
+## Live host on Jellyfin
+
+Jellyfin 10.11.9 (`e83a7e62`), the solution pinned by `benchmarks/agent/target.json`, measured on Linux with `benchmarks/agent/measure-live-host.py`. Each query ran in one `codeatlas live --solution` process. The figure excludes one warmup. Median is the middle of 20 rounds. p95 is nearest rank (`ceil(0.95 × 20)`). `find-symbol` uses `HandleRequest` (77 methods). `search` uses assisted `authenticate user password`. `find-references` uses `ApplicationHost.Dispose` (780 references). The edit appends a comment to `MediaBrowser.Model/Globalization/CultureDto.cs` through the host, then publishes the original text again so the files on disk still match.
+
+Before this change, a query of the loaded generation hashed every tracked input. Two samples: find-symbol 453 ms and 245 ms, search 880 ms and 746 ms, find-references of one `HandleRequest` 318 ms and 234 ms. Cold load was 24.9 s. After the host's own edit, find-symbol was about 20 ms, and five searches were 406–569 ms (median 474 ms). Publishing that one-file edit took 83–99 s.
+
+After the change, opening the host checks freshness once and then compares file stamps. Warm rounds:
+
+| Query | Loaded median / p95 | After the edit median / p95 |
+| --- | --- | --- |
+| find-symbol | 37.2 / 63.1 ms | 18.8 / 19.6 ms |
+| search | 68.1 / 103.8 ms | 44.2 / 89.8 ms |
+| find-references | 41.5 / 44.5 ms | 17.6 / 32.7 ms |
+
+Cold load was 26.2 s, including that one freshness check. The excluded search warmup was 400.1 ms on the loaded generation and 267.8 ms after the edit; repeats of the same search reuse the ranked page. Publishing the edit took 91.7 s. That publish is not part of the 300 ms query budget. Every warm median and p95 in the table is under 300 ms.
+
 ## Open items
 
 - Not verified on Linux or macOS: the bundled native library, the system-library fallback and the printed instructions were exercised on Windows only. Unavailability was tested through injected failures.
-- The 0.00.39 same-checkout Jellyfin export matches the 0.00.34 export for projects, types, methods, symbols, the structural catalog, duplicates, warnings, documentation coverage and schema. Of 6,527 reference keys, one differs: `IDirectStreamProvider.GetStream` has 1 reference in the new index and 4 in the 0.00.34 export. The three extra export entries are `ILiveStream.GetStream` call sites. Those call sites are present under `ILiveStream.GetStream` in both indexes, and that key matches. A live `find-references` for `IDirectStreamProvider.GetStream` with the 0.00.34 CLI and the 0.00.39 CLI both return the one direct call. The 160-query suite was not rerun. Documentation models are still held until that stage finishes. The live process and the edit-to-query latency target are still open.
+- The 0.00.39 same-checkout Jellyfin export matches the 0.00.34 export for projects, types, methods, symbols, the structural catalog, duplicates, warnings, documentation coverage and schema. Of 6,527 reference keys, one differed: `IDirectStreamProvider.GetStream` had 1 reference in that index and 4 in the 0.00.34 export. The three extra entries are `ILiveStream.GetStream` call sites, which were already stored under `ILiveStream.GetStream`. A subclass of `LiveStream` implements `IDirectStreamProvider` with the inherited `GetStream`, and that cascade group had no locations, so the interface key missed those calls. Rebuilding Jellyfin 10.11.9 stores 4 references on that key and leaves the other 6,526 keys unchanged. The 160-query rerun is under [Equality](#equality). Documentation models are still held. The live process serves edit, find-symbol, search and find-references from one loaded session. On Jellyfin, the warm medians and p95 values for those queries are under the 300 ms target. Cold load and the publish that follows an edit are outside that budget. See [Live host on Jellyfin](#live-host-on-jellyfin).
 - The large private 30-project solution from the PRD was not re-measured. These numbers are for Jellyfin.

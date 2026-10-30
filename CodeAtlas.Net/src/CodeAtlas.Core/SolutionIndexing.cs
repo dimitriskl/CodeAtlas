@@ -114,6 +114,12 @@ public sealed partial class SolutionAnalysis
         }
     }
 
+    private async Task<(ISymbol[] Symbols, MethodInfo[] Methods)> SourceDeclarationsAsync(CancellationToken cancellationToken)
+    {
+        var symbols = (await SymbolFinder.FindSourceDeclarationsAsync(solution, _ => true, SymbolFilter.TypeAndMember, cancellationToken)).ToArray();
+        return (symbols, DescribeMethods(symbols).ToArray());
+    }
+
     /// <summary>
     /// Analyses the loaded solution and writes each section to a temporary database.
     /// Reference rows are written and dropped before documentation, facts and duplicates.
@@ -128,8 +134,7 @@ public sealed partial class SolutionAnalysis
         var analysis = this;
         var projects = solution.Projects.ToArray();
         progress?.Report(new(IndexStage.DiscoveringSymbols));
-        var symbols = (await SymbolFinder.FindSourceDeclarationsAsync(analysis.solution, _ => true, SymbolFilter.TypeAndMember, cancellationToken)).ToArray();
-        var methods = analysis.DescribeMethods(symbols).ToArray();
+        var (symbols, methods) = await analysis.SourceDeclarationsAsync(cancellationToken);
         var indexId = Guid.NewGuid().ToString("N");
         var incrementalCapture = await analysis.CaptureIncrementalStateAsync(indexId, beforeIndexing, cancellationToken);
         var refreshed = await analysis.CollectRefreshReferencesAsync(previousIndex, incrementalCapture,
@@ -138,25 +143,13 @@ public sealed partial class SolutionAnalysis
         var refresh = refreshed.Summary;
         refreshed = null;
         progress?.Report(new(IndexStage.CollectingTypes));
-        var types = new Dictionary<string, IndexedType>(StringComparer.Ordinal);
-        foreach (var type in symbols.OfType<INamedTypeSymbol>())
-        {
-            var location = type.Locations.FirstOrDefault(l => l.IsInSource);
-            var document = location?.SourceTree is { } tree ? analysis.solution.GetDocument(tree) : null;
-            if (location is null || document is null)
-                continue;
-            var project = analysis.Relative(document.Project.FilePath!);
-            var id = $"{project}::{type.GetDocumentationCommentId()}";
-            types[id] = new IndexedType(id, type.ToDisplayString(), type.TypeKind.ToString().ToLowerInvariant(), project, analysis.Position(location));
-        }
+        var indexedTypes = analysis.IndexedTypes(symbols);
         symbols = null;
 
         var indexedProjects = projects.Select(p => new IndexedProject(analysis.Relative(p.FilePath!), p.Name,
             p.ProjectReferences.Select(r => analysis.Relative(analysis.solution.GetProject(r.ProjectId)!.FilePath!)).Order(StringComparer.Ordinal).ToArray(),
             p.Documents.Select(d => d.FilePath).OfType<string>().Select(analysis.Relative).Distinct().Order(StringComparer.Ordinal).ToArray()))
             .OrderBy(p => p.Path, StringComparer.Ordinal).ToArray();
-        var indexedTypes = types.Values.OrderBy(t => t.Name, StringComparer.Ordinal).ThenBy(t => t.Id, StringComparer.Ordinal).ToArray();
-        types = null;
         var fingerprints = beforeIndexing.Files.Where(pair => pair.Value.Exists).ToDictionary(pair => pair.Key, pair => pair.Value.Sha256!, SnapshotInputModel.PathComparer);
 
         var spillPath = Path.Combine(Path.GetTempPath(), "codeatlas-spill-" + Guid.NewGuid().ToString("N") + ".db");
@@ -237,7 +230,7 @@ public sealed partial class SolutionAnalysis
             .Append(Path.GetDirectoryName(path)!).Distinct(SnapshotInputModel.PathComparer).Order(SnapshotInputModel.PathComparer).ToArray();
         var inputs = projects.SelectMany(project => project.Documents.Cast<TextDocument>()
                 .Concat(project.AdditionalDocuments).Concat(project.AnalyzerConfigDocuments))
-            .Select(document => document.FilePath).OfType<string>()
+            .Select(document => document.FilePath).OfType<string>().Select(SourcePaths.Real)
             .Concat(projects.Select(project => project.FilePath!))
             .Concat(roots.SelectMany(InputTracker.ConfigurationPaths))
             .Concat(projects.Select(project => Path.Combine(Path.GetDirectoryName(project.FilePath!)!, "obj", "project.assets.json")))

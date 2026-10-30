@@ -69,6 +69,9 @@ public static class PurposeSearch
         if (outsideLanguage || queryTokens.Any(token => token is "angular" or "typescript"))
             return Abstain(request, snapshotId, catalogCoverage, mode, queryTokens, "abstained-outside-supported-language", 0,
                 "Only C# source is indexed. Angular and TypeScript are not these symbols.");
+        var cacheKey = StoredCacheKey(corpus, query, mode, kind, request, snapshotId, language, acceptedExplanations);
+        if (cacheKey is { } key && TryGetStoredSearch(key, out var cached)) return cached;
+        if (corpus is SqliteSearchCorpus) StoredRankingPasses++;
         // Calculate IDF over the whole selected-kind corpus, independently of page/filter.
         // Exact project/type filters cannot change a symbol's relevance score in this generation.
         var selection = corpus.Select(queryTokens, mode, kind, acceptedExplanations, cancellationToken);
@@ -140,7 +143,7 @@ public static class PurposeSearch
         var items = ordered.Skip(request.Offset).Take(request.Limit).ToArray();
         var end = (long)request.Offset + items.Length;
         var more = end < ordered.Length;
-        return new(new(items, new(request.Offset, request.Limit, items.Length, ordered.Length, more,
+        var result = new SearchResult(new(items, new(request.Offset, request.Limit, items.Length, ordered.Length, more,
                 more && snapshotId is not null ? checked((int)end) : null, snapshotId, snapshotId is not null)),
             RankingVersion, mode, "C#", catalogCoverage, queryTokens,
             queryTokens.Where(t => documentFrequency[t] == 0).ToArray(),
@@ -151,8 +154,41 @@ public static class PurposeSearch
              "Linked interface declarations remain in the complete result set; ordinary candidates are shown first when their matching implementations are available.",
              "English suffix normalization is lexical only; no translation, synonym expansion, negation reasoning, runtime effects or cross-language analysis.",
              "Empty matches do not establish absence outside the supported loaded C# snapshot."]);
+        if (cacheKey is { } ranked) RememberStoredSearch(ranked, result);
+        return result;
     }
 
+    private readonly record struct StoredSearchKey(string Database, string? Snapshot, string Query, string Mode, string Kind,
+        string Language, string? Project, string? Type, int Offset, int Limit);
+
+    private const int StoredSearchLimit = 32;
+    private static readonly Dictionary<StoredSearchKey, SearchResult> storedSearches = new();
+    private static readonly object storedSearchGate = new();
+
+    private static StoredSearchKey? StoredCacheKey(ISearchCorpus corpus, string query, string mode, string kind,
+        QueryRequest request, string? snapshotId, string language,
+        IReadOnlyDictionary<string, Explanations.AcceptedExplanation>? accepted)
+    {
+        if (corpus is not SqliteSearchCorpus stored || accepted is { Count: > 0 }) return null;
+        return new(stored.DatabasePath, snapshotId, query, mode, kind, language,
+            request.Project, request.Type, request.Offset, request.Limit);
+    }
+
+    private static bool TryGetStoredSearch(StoredSearchKey key, out SearchResult result)
+    {
+        lock (storedSearchGate) return storedSearches.TryGetValue(key, out result!);
+    }
+
+    private static void RememberStoredSearch(StoredSearchKey key, SearchResult result)
+    {
+        lock (storedSearchGate)
+        {
+            if (storedSearches.Count >= StoredSearchLimit && !storedSearches.ContainsKey(key)) storedSearches.Clear();
+            storedSearches[key] = result;
+        }
+    }
+
+    internal static int StoredRankingPasses;
     internal const int NameFieldCount = 3;
     internal static readonly string[] KindSelections = ["method", "type", "property", "field", "all"];
 
@@ -190,7 +226,17 @@ public static class PurposeSearch
 
     internal static string[] QueryTokens(string query) => SearchTokens(query);
 
-    internal static HashSet<string> TokenSet(string text) => SearchTokens(text).ToHashSet(StringComparer.Ordinal);
+    private const int TokenSetLimit = 100_000;
+    private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, HashSet<string>> tokenSets = new(StringComparer.Ordinal);
+
+    /// <summary>Distinct search tokens for one text. The set is shared and must not be modified.</summary>
+    internal static HashSet<string> TokenSet(string text)
+    {
+        if (tokenSets.TryGetValue(text, out var tokens)) return tokens;
+        tokens = SearchTokens(text).ToHashSet(StringComparer.Ordinal);
+        if (tokenSets.Count < TokenSetLimit) tokenSets.TryAdd(text, tokens);
+        return tokens;
+    }
 
     internal static IEnumerable<SearchField> Fields(DocumentedSymbol symbol,
         Func<string, DocumentedSymbol?> byId, Func<string, IEnumerable<StructuralFact>> byOwner, string mode,
@@ -342,7 +388,7 @@ public static class PurposeSearch
         DocumentationRange location, string? factKind = null, DocumentationEvidence? documentation = null,
         StructuralEvidence? relationship = null, string? lengthFamily = null,
         AiDescriptionEvidence? aiDescription = null) =>
-        new(name, weight, SearchTokens(text).ToHashSet(StringComparer.Ordinal), source, location, factKind,
+        new(name, weight, TokenSet(text), source, location, factKind,
             documentation, relationship, lengthFamily ?? name, text, aiDescription);
 
     internal sealed record SearchField(string Name, double Weight, HashSet<string> Tokens,

@@ -6,7 +6,7 @@ public static class PurposeSnapshotQueries
 {
     public static async Task<SearchResult> SearchAsync(LoadedSnapshot snapshot, string query,
         string mode, string kind, QueryRequest request, string language = "csharp",
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default, bool verifyFreshness = true)
     {
         PurposeSearch.Validate(query, mode, kind, language);
         request.ValidateOptions(supportsType: true, indexed: true);
@@ -19,8 +19,8 @@ public static class PurposeSnapshotQueries
         if (mode == "assisted" && snapshot.VerifiedGeneration && snapshot.Index.InputManifest is not null
             && snapshot.Index.DocumentationCoverage?.Version == DocumentationCoverage.Current.Version)
             accepted = await Explanations.ExplanationSnapshotAdapter.ForSearch(snapshot)
-                .GetSearchableAsync(cancellationToken);
-        else
+                .GetSearchableAsync(cancellationToken, verifyFreshness);
+        else if (verifyFreshness)
             await IndexStore.RequireFreshAsync(snapshot.Index, cancellationToken);
         var viewToken = snapshot.Index.IndexId;
         if (accepted is { Count: > 0 })

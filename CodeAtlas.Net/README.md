@@ -1,6 +1,6 @@
 # CodeAtlas .NET
 
-Version: **0.00.40**
+Version: **0.00.56**
 
 See [version history](docs/VERSION.md) for what is implemented and the versioning rules. `Version.props` is the build's version source. Run `dotnet run --project src/CodeAtlas.Cli --no-build -- --version` to check the built CLI.
 
@@ -92,6 +92,21 @@ Queries return at most 100 results by default; `--limit` accepts 1 through 1000.
 `find-symbol` supports exact `--project <relative-project-path>` and `--type <declaring-type>` filters. Add `--kind type`, `--kind property`, `--kind field`, or `--kind all` to search those source symbols; the default remains methods and keeps the method record shape. `get-documentation --symbol <id>` returns the authored XML, resolved sections, and provenance. Missing documentation stays missing. `find-references --project` filters the referencing project. References still apply only to ordinary and explicit-interface source methods. Responses use JSON `contractVersion: 1` with snapshot identity, freshness, and coverage metadata; see the [query contract](docs/QUERY-CONTRACT.md) for filters, pagination, compatibility, and error codes. Optional `--profile` reports query phases; [query performance](docs/QUERY-PERFORMANCE.md) records the measurements, budgets, and cold-filesystem limitation.
 
 The original live queries remain available: replace `--index <index.json>` with `--solution <solution.slnx>` to analyze current source directly.
+
+`live --solution <path.sln>` keeps that solution loaded and reads one JSON object from each stdin line. It writes one JSON object per line to stdout, using the same response envelope as the other commands. A malformed line or an unknown path is an error object (`success: false`) and the process keeps reading. No file watcher is started.
+
+`mcp --solution <path.sln>` reads MCP JSON-RPC messages, one JSON object per stdin line, and writes one JSON object per line. It exposes `find_symbol`, `index_status`, `coverage`, and `index` for that solution. `index` builds and publishes a generation through the same path as `codeatlas index`. `index_status` reports a stale generation. `coverage` refuses one. Omitting `workspace` from `coverage` reads no index. Omitting `workspace` from `index` publishes the session solution when the current directory is that solution. A failed tool call returns `isError: true` with the query envelope in the text content, and the process keeps reading.
+
+```json
+{"command":"edit","path":"Library/Calculator.cs","text":"full file text"}
+{"command":"find-symbol","name":"Calculate"}
+{"command":"search","query":"calculate total"}
+{"command":"find-references","symbol":"Library/Library.csproj::M:Sample.Calculator.Calculate(System.Int32)"}
+```
+
+`edit` takes `path` and `text` and publishes a new generation. `find-symbol` takes `name` and optional `kind` (`method` by default). `search` takes `query` and optional `mode` and `kind` (defaults `assisted` and `method`, the same as `search-symbols`). `find-references` takes `symbol`. Each answer is read from the current generation. After `edit`, a later query compares each tracked file's length and last-write time with the stamp taken at publication and hashes only files whose stamp changed. A content change outside the process is `stale_index`. Publishing the generation still hashes every input.
+
+Each source file is indexed once, at its real path relative to the solution. A symlink to a file already in the solution does not add a second file or symbol. A symlink to a file outside the solution is skipped and listed in the warning report. An edit through either path updates that one file.
 
 ## Freshness and agent workflow
 

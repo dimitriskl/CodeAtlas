@@ -98,9 +98,12 @@ internal static class SqliteIndexSchema
 /// Writes one complete generation database in bounded transactions. The file is private to the
 /// writer until the generation manifest commits; it is never modified after <see cref="Complete"/>.
 /// </summary>
-internal sealed class SqliteIndexWriter : IDisposable
+internal sealed partial class SqliteIndexWriter : IDisposable
 {
     private const int BatchRows = 20_000;
+    private const string InsertMethodSql = "INSERT INTO methods VALUES($o,$id,$name,$sig,$project,$type,$file,$line,$col)";
+    private const string InsertReferenceKeySql = "INSERT INTO reference_keys VALUES($o,$id)";
+    private const string InsertSourceReferenceSql = "INSERT INTO source_references VALUES($k,$o,$def,$project,$kind,$file,$line,$col)";
     private readonly SqliteConnection connection;
     private readonly Dictionary<string, long> fileIds = new(StringComparer.Ordinal);
     private readonly Dictionary<string, string> contentHashes = new(StringComparer.Ordinal);
@@ -178,7 +181,7 @@ internal sealed class SqliteIndexWriter : IDisposable
         var solutionDirectory = Path.GetDirectoryName(solution)!;
         foreach (var (path, fingerprint) in manifest.Files)
             if (fingerprint.Exists && fingerprint.Sha256 is { } hash && Path.IsPathFullyQualified(path))
-                contentHashes.TryAdd(Path.GetRelativePath(solutionDirectory, path).Replace('\\', '/'), hash);
+                contentHashes.TryAdd(SourcePaths.Relative(solutionDirectory, path), hash);
     }
 
     public void WriteHeader(CodebaseIndex index)
@@ -238,29 +241,28 @@ internal sealed class SqliteIndexWriter : IDisposable
 
     public void WriteMethods(MethodInfo[] methods)
     {
-        var command = Command("methods", "INSERT INTO methods VALUES($o,$id,$name,$sig,$project,$type,$file,$line,$col)");
+        var command = Command("methods", InsertMethodSql);
         for (var i = 0; i < methods.Length; i++)
         {
-            var method = methods[i];
-            Run(command, i, method.Id, method.Name, method.Signature, method.Project, method.ContainingType,
-                FileId(method.Location.File), method.Location.Line, method.Location.Column);
+            InsertMethod(command, i, methods[i], FileId(methods[i].Location.File));
+            NoteWritten();
         }
     }
 
     public void WriteReferences(IEnumerable<KeyValuePair<string, SourceReference[]>> references, CancellationToken cancellationToken)
     {
-        var keys = Command("reference_keys", "INSERT INTO reference_keys VALUES($o,$id)");
-        var rows = Command("source_references", "INSERT INTO source_references VALUES($k,$o,$def,$project,$kind,$file,$line,$col)");
+        var keys = Command("reference_keys", InsertReferenceKeySql);
+        var rows = Command("source_references", InsertSourceReferenceSql);
         var key = 0;
         foreach (var (methodId, items) in references)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            Run(keys, key, methodId);
+            InsertReferenceKey(keys, key, methodId);
+            NoteWritten();
             for (var i = 0; i < items.Length; i++)
             {
-                var reference = items[i];
-                Run(rows, key, i, reference.DefinitionId, reference.Project, reference.Kind,
-                    FileId(reference.Location.File), reference.Location.Line, reference.Location.Column);
+                InsertSourceReference(rows, key, i, items[i], FileId(items[i].Location.File));
+                NoteWritten();
             }
             key++;
         }
@@ -442,27 +444,52 @@ internal sealed class SqliteIndexWriter : IDisposable
     private SqliteCommand Command(string name, string text)
     {
         if (commands.TryGetValue(name, out var command)) return command;
-        command = connection.CreateCommand();
+        command = Prepare(connection, transaction, text);
+        commands.Add(name, command);
+        return command;
+    }
+
+    private static SqliteCommand Prepare(SqliteConnection connection, SqliteTransaction? transaction, string text)
+    {
+        var command = connection.CreateCommand();
         command.CommandText = text;
         command.Transaction = transaction;
         // Values are bound positionally, in placeholder order.
         foreach (var match in System.Text.RegularExpressions.Regex.Matches(text, @"\$[a-z]+").Cast<System.Text.RegularExpressions.Match>())
             command.Parameters.Add(new SqliteParameter { ParameterName = match.Value });
         command.Prepare();
-        commands.Add(name, command);
         return command;
     }
 
-    private void Run(SqliteCommand command, params object?[] values)
+    private static void InsertMethod(SqliteCommand command, long ordinal, MethodInfo method, long fileId) =>
+        Bind(command, ordinal, method.Id, method.Name, method.Signature, method.Project, method.ContainingType,
+            fileId, method.Location.Line, method.Location.Column);
+
+    private static void InsertReferenceKey(SqliteCommand command, long ordinal, string methodId) =>
+        Bind(command, ordinal, methodId);
+
+    private static void InsertSourceReference(SqliteCommand command, long keyOrdinal, long ordinal, SourceReference reference, long fileId) =>
+        Bind(command, keyOrdinal, ordinal, reference.DefinitionId, reference.Project, reference.Kind,
+            fileId, reference.Location.Line, reference.Location.Column);
+
+    private static void Bind(SqliteCommand command, params object?[] values)
     {
         for (var i = 0; i < values.Length; i++)
             command.Parameters[i].Value = values[i] ?? DBNull.Value;
         command.ExecuteNonQuery();
-        if (++pending >= BatchRows)
-        {
-            Commit();
-            Begin();
-        }
+    }
+
+    private void Run(SqliteCommand command, params object?[] values)
+    {
+        Bind(command, values);
+        NoteWritten();
+    }
+
+    private void NoteWritten()
+    {
+        if (++pending < BatchRows) return;
+        Commit();
+        Begin();
     }
 
     private void Begin()

@@ -256,27 +256,78 @@ public static class IndexStore
         Validate(index, requireCatalogs: true);
         if (index.Duplicates is { } duplicates && duplicates.Version != DuplicateCatalog.CurrentVersion)
             throw new IndexFormatException("invalid_index", "Publication requires the current duplicate catalog. Rebuild the analysis instead of republishing legacy candidates.");
+        // Validation also runs at the commit boundary; this early check gives a stale rebuild a precise error.
+        await RequireFreshAsync(index, cancellationToken);
+        SqliteAvailability.Require();
+        // Callers publish after their semantic workspace is disposed. Reclaim it now so the store
+        // write runs beside the analysis results only, not beside the unreachable Roslyn graph.
+        GC.Collect(GC.MaxGeneration, GCCollectionMode.Forced, blocking: true, compacting: true);
+        var generation = await CommitGenerationAsync(index.Solution, index.IndexId,
+        [
+            new(SqliteIndexSchema.ArtifactName, null, (path, token) =>
+            {
+                SqliteIndexWriter.Write(path, index, token);
+                return Task.CompletedTask;
+            }),
+            TextArtifact("overview.md", Overview(index)),
+            TextArtifact("warnings.txt", WarningText(index)),
+            new("timings.json", writeTimings ?? ((stream, token) => JsonSerializer.SerializeAsync(stream,
+                new { index.IndexId, index.Solution, index.ToolVersion, scope = "Library publication; no stage measurements available." }, JsonOptions, token)))
+        ], token => RequireFreshAsync(index, token), null, cancellationToken);
+        return new(index, generation.ManifestPath, generation.Directory, true) { ArtifactName = SqliteIndexSchema.ArtifactName };
+    }
+
+    /// <summary>
+    /// Publishes a private working copy as the next immutable generation. The database keeps that copy's
+    /// rows. Its generation id matches the new manifest, and tracked file hashes are set to the bytes on disk.
+    /// </summary>
+    public static Task<LoadedSnapshot> PublishWorkingCopyAsync(string solution, string workingCopy,
+        CancellationToken cancellationToken = default) =>
+        PublishWorkingCopyCoreAsync(solution, workingCopy, null, cancellationToken);
+
+    internal static Task<LoadedSnapshot> PublishWorkingCopyAsync(string solution, string workingCopy,
+        Func<PublishCheckpoint, CancellationToken, Task> checkpoint, CancellationToken cancellationToken = default) =>
+        PublishWorkingCopyCoreAsync(solution, workingCopy, checkpoint, cancellationToken);
+
+    private static async Task<LoadedSnapshot> PublishWorkingCopyCoreAsync(string solution, string workingCopy,
+        Func<PublishCheckpoint, CancellationToken, Task>? checkpoint, CancellationToken cancellationToken)
+    {
+        var manifestPath = DefaultPath(solution);
+        if (!File.Exists(manifestPath))
+            throw new IndexFormatException("invalid_index", "There is no published generation to replace.");
+        var current = await GenerationStore.ResolveAsync(manifestPath, cancellationToken, verifyCatalog: false);
+        if (current.Manifest.ManifestVersion != GenerationStore.StoreManifestVersion)
+            throw new IndexFormatException("unsupported_index", "Only a SQLite generation can be replaced from a working copy.");
+        var indexId = Guid.NewGuid().ToString("N");
+        var fullSolution = Path.GetFullPath(solution);
+        var header = new SqliteIndexReader(workingCopy).ReadHeader(cancellationToken);
+        var described = PublishedDescription(workingCopy, header, indexId);
+        var publishedDatabase = Path.Combine(Path.GetDirectoryName(manifestPath)!, "generations", indexId, SqliteIndexSchema.ArtifactName);
+        var generation = await CommitGenerationAsync(fullSolution, indexId,
+        [
+            new(SqliteIndexSchema.ArtifactName, null, (path, _) =>
+            {
+                File.Copy(workingCopy, path);
+                SqliteIndexWriter.PreparePublishedCopy(path, indexId);
+                return Task.CompletedTask;
+            }),
+            TextArtifact("overview.md", Overview(described)),
+            TextArtifact("warnings.txt", WarningText(described)),
+            CopiedArtifact(current, "timings.json")
+        ], token => RequireFreshAsync(new SqliteIndexReader(publishedDatabase).ReadHeader(token), token), checkpoint, cancellationToken);
+        return new(header with { IndexId = indexId }, generation.ManifestPath, generation.Directory, true)
+        {
+            ArtifactName = SqliteIndexSchema.ArtifactName
+        };
+    }
+
+    private static async Task<ResolvedGeneration> CommitGenerationAsync(string solution, string indexId,
+        IReadOnlyList<GenerationArtifact> artifacts, Func<CancellationToken, Task> validateInputs,
+        Func<PublishCheckpoint, CancellationToken, Task>? checkpoint, CancellationToken cancellationToken)
+    {
         try
         {
-            // Validation also runs at the commit boundary; this early check gives a stale rebuild a precise error.
-            await RequireFreshAsync(index, cancellationToken);
-            SqliteAvailability.Require();
-            // Callers publish after their semantic workspace is disposed. Reclaim it now so the store
-            // write runs beside the analysis results only, not beside the unreachable Roslyn graph.
-            GC.Collect(GC.MaxGeneration, GCCollectionMode.Forced, blocking: true, compacting: true);
-            var generation = await new GenerationStore().PublishAsync(index.Solution, index.IndexId,
-            [
-                new(SqliteIndexSchema.ArtifactName, null, (path, token) =>
-                {
-                    SqliteIndexWriter.Write(path, index, token);
-                    return Task.CompletedTask;
-                }),
-                TextArtifact("overview.md", Overview(index)),
-                TextArtifact("warnings.txt", WarningText(index)),
-                new("timings.json", writeTimings ?? ((stream, token) => JsonSerializer.SerializeAsync(stream,
-                    new { index.IndexId, index.Solution, index.ToolVersion, scope = "Library publication; no stage measurements available." }, JsonOptions, token)))
-            ], token => RequireFreshAsync(index, token), cancellationToken);
-            return new(index, generation.ManifestPath, generation.Directory, true) { ArtifactName = SqliteIndexSchema.ArtifactName };
+            return await new GenerationStore(checkpoint).PublishAsync(solution, indexId, artifacts, validateInputs, cancellationToken);
         }
         catch (SnapshotStoreException exception)
         {
@@ -291,6 +342,19 @@ public static class IndexStore
             throw new IndexFormatException("snapshot_io_failed", "Snapshot publication failed. The previous committed snapshot remains active; check disk space and permissions and retry.", [exception.Message]);
         }
     }
+
+    private static CodebaseIndex PublishedDescription(string workingCopy, CodebaseIndex header, string indexId)
+    {
+        var rows = new SqliteIndexReader(workingCopy).Use(session => (session.Projects(), session.Types(), session.Methods(null)));
+        return header with { IndexId = indexId, Projects = rows.Item1, Types = rows.Item2, Methods = rows.Item3 };
+    }
+
+    private static GenerationArtifact CopiedArtifact(ResolvedGeneration source, string name) => new(name, async (stream, token) =>
+    {
+        await using var input = new FileStream(source.ArtifactPath(name), FileMode.Open, FileAccess.Read, FileShare.Read,
+            64 * 1024, FileOptions.Asynchronous | FileOptions.SequentialScan);
+        await input.CopyToAsync(stream, token);
+    });
 
     /// <summary>
     /// Writes a complete legacy (manifest version 1) generation: index.json and catalog.json exactly as
