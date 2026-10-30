@@ -20,7 +20,7 @@ For each subsequent completed change, run from the repository root:
 python3 scripts/bump-version.py --summary "Describe the completed change"
 ```
 
-The command updates `Version.props`, the current version in README.md and the project recap, and this document's current version and history. Then rebuild, test, and regenerate the index. Do not increment again merely because validation requires a correction to the same change.
+The command updates `Version.props`, the current version in README.md, and this document's current version and history. It does not need the gitignored project recap, so it works on a clean clone. Then rebuild, test, and regenerate the index. Do not increment again merely because validation requires a correction to the same change.
 
 After the user has explicitly authorized publication and release qualification is complete, `--major-release` selects the next `x.00.00` instead of the routine patch increment:
 
