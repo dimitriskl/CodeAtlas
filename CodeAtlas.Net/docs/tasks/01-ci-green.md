@@ -69,3 +69,13 @@ Status: review (https://github.com/dimitriskl/CodeAtlas/pull/9) (Developer, bran
 - Follow-ups recorded as tasks 10 (macOS aliased paths, then remove the `TMPDIR` step) and 11 (macOS `explanation_busy`), both ready and blocked by 01. No new version bump.
 - Local (Windows): build 0 warnings, .NET 558/558, Python 98 OK.
 - CI green on windows-2025, ubuntu-24.04 and macos-latest, build and install jobs: https://github.com/dimitriskl/CodeAtlas/actions/runs/41012178934
+
+### 2026-10-30 (Technical review)
+
+- 2026-10-30 Technical review APPROVE, attempt 2. HEAD reviewed c944631.
+- Commands run (Windows, from `CodeAtlas.Net`): `dotnet restore CodeAtlas.slnx --locked-mode` (ok); `dotnet build CodeAtlas.slnx --no-restore` (0 warnings, 0 errors); `dotnet test CodeAtlas.slnx --no-build --no-restore -- xUnit.MaxParallelThreads=1` (558/558); `python -m unittest discover -s tests/versioning -p 'test_*.py'` (98 OK; the new Windows backslash test ran, not skipped); `cmp` of the two workflow files (identical); `gh pr checks 9` and `gh run watch 41014162003 --exit-status` (success on c944631, all 6 build and install jobs on windows-2025, ubuntu-24.04 and macos-latest); `gh run view 41012178934` (success on dacfdb5, all 6 jobs).
+- Attempt-1 blocking finding fixed: `tests/versioning/test_agent_benchmark.py:302-315` feeds the `r"C:\bench\..."` setup on Windows and asserts the `C:/bench/...` instruction strings and the `codeatlas_cli` suffix. A mutation that drops the conversion in `quote` makes it fail, so it checks the real conversion.
+- Non-blocking cleanups done: the four fixture-only `IsPathFullyQualified` asserts are gone from `SnapshotInputModelTests.cs`, and the three `BuildEnvironment` asserts remain; `test_qualification_workflow.py` compares `read_bytes`.
+- Tasks 10 and 11 and their BOARD.md rows: clear vertical slices with testable acceptance criteria, evidence cited, and both blocked by 01. Task 10 leaves the choice between realpath and refusal to the developer; record the choice in its review log.
+- Commits 3ef7a17..c944631: one change each, no trailers, names or tool mentions, and no version change (`Version.props` untouched). The only code changes are in tests.
+- Non-blocking note: run 41009854740 (852e1f3, docs only) failed on windows-2025 because `dotnet test` hit the 1800 s timeout in `qualify-package.py`. Green Windows build jobs take 18-21 min, so this looks like an intermittent hang, not a slow suite. It did not recur in 41010963881, 41012178934 or 41014162003. If it happens again, file a task to find the hanging test (for example with `--blame-hang-timeout`).
