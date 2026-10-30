@@ -15,10 +15,10 @@ internal static class ChildProcess
 
     internal sealed record Result(int ExitCode, string Output, string Error);
 
-    /// <summary>Starts the child with redirected output and waits for it to exit and close both streams.
-    /// On timeout it kills the process tree of a running child and throws <see cref="ChildProcessTimeoutException"/>
-    /// with the command, what happened to the child and the output captured so far. A redirected standard input
-    /// is closed at once, so the child reads end of input.</summary>
+    /// <summary>Starts the child with redirected output, waits for it to exit, then waits a short grace for both
+    /// streams to close. On timeout it kills the process tree and throws <see cref="ChildProcessTimeoutException"/>
+    /// with the command, the kill outcome and the output captured so far. A redirected standard input is closed at
+    /// once, so the child reads end of input.</summary>
     public static async Task<Result> RunAsync(ProcessStartInfo start, TimeSpan? timeout = null)
     {
         start.RedirectStandardOutput = true;
@@ -33,22 +33,19 @@ internal static class ChildProcess
         try
         {
             await process.WaitForExitAsync(cancellation.Token);
-            // A grandchild that inherited the pipes can keep them open after the child exits.
-            await streams.WaitAsync(cancellation.Token);
         }
         catch (OperationCanceledException) when (cancellation.IsCancellationRequested)
         {
-            // An exited child means a descendant holds the pipes; nothing is killed, so there is nothing to drain.
-            var childExited = process.HasExited;
-            var outcome = childExited
-                ? $"process {process.Id} exited with code {process.ExitCode}, but its output pipes stayed open"
-                : Kill(process);
-            if (!childExited) await Task.WhenAny(streams, Task.Delay(OutputGrace));
+            var outcome = Kill(process);
+            await Task.WhenAny(streams, Task.Delay(OutputGrace));
             throw new ChildProcessTimeoutException(
                 $"{Describe(start)} did not finish within {timeout ?? DefaultTimeout}; {outcome}."
                 + $"{Environment.NewLine}stdout:{Environment.NewLine}{Snapshot(output)}"
                 + $"{Environment.NewLine}stderr:{Environment.NewLine}{Snapshot(error)}", process.Id);
         }
+        // A descendant that inherited the pipes can hold them open long after the child exits (a dotnet restore
+        // did on Windows CI). The child's own output is already in the pipes, so only a short drain is needed.
+        await Task.WhenAny(streams, Task.Delay(OutputGrace));
         return new(process.ExitCode, Snapshot(output), Snapshot(error));
     }
 
@@ -85,7 +82,7 @@ internal static class ChildProcess
         start.FileName + " " + (start.ArgumentList.Count > 0 ? string.Join(" ", start.ArgumentList) : start.Arguments);
 }
 
-/// <summary>A child process, or a descendant holding its output pipes, outlived its bound.</summary>
+/// <summary>A child process outlived its bound; the message says whether its process tree was killed.</summary>
 internal sealed class ChildProcessTimeoutException(string message, int processId) : TimeoutException(message)
 {
     /// <summary>The child's process id.</summary>

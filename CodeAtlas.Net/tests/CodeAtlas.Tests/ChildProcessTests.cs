@@ -29,22 +29,34 @@ public sealed class ChildProcessTests
     }
 
     [Fact]
-    public async Task ChildThatExitsWhileADescendantHoldsItsOutputFailsWithoutClaimingAKill()
+    public async Task ChildThatExitsWhileADescendantHoldsItsOutputReturnsItsResult()
     {
         // Arrange
-        // The child starts a 10 s grandchild that inherits its output pipes and exits at once.
+        // The child starts a 60 s grandchild that inherits its output pipes, prints its id and exits at once,
+        // as a dotnet restore on Windows CI did when a descendant outlived it.
         var start = OperatingSystem.IsWindows()
-            ? new ProcessStartInfo("cmd") { ArgumentList = { "/c", "start", "/b", "ping", "-n", "11", "127.0.0.1" } }
-            : new ProcessStartInfo("sh") { ArgumentList = { "-c", "sleep 10 &" } };
+            ? new ProcessStartInfo("powershell") { ArgumentList = { "-NoProfile", "-NonInteractive", "-Command",
+                "$p = Start-Process -FilePath ping -ArgumentList '-n','61','127.0.0.1' -NoNewWindow -PassThru; 'grandchild ' + $p.Id" } }
+            : new ProcessStartInfo("sh") { ArgumentList = { "-c", "sleep 60 & echo \"grandchild $!\"" } };
 
         // Act
-        var failure = await Record.ExceptionAsync(() => ChildProcess.RunAsync(start, TimeSpan.FromSeconds(3)));
+        var result = await ChildProcess.RunAsync(start, TimeSpan.FromSeconds(40));
 
         // Assert
-        var timeout = Assert.IsType<ChildProcessTimeoutException>(failure);
-        Assert.Contains(start.FileName + " " + start.ArgumentList[0], timeout.Message);
-        Assert.Contains("output pipes stayed open", timeout.Message);
-        Assert.DoesNotContain("killed", timeout.Message);
+        var grandchild = Regex.Match(result.Output, @"grandchild (\d+)");
+        if (grandchild.Success) KillIfRunning(int.Parse(grandchild.Groups[1].Value));
+        Assert.True(grandchild.Success, result.Output);
+        Assert.Equal(0, result.ExitCode);
+    }
+
+    private static void KillIfRunning(int processId)
+    {
+        try
+        {
+            using var process = Process.GetProcessById(processId);
+            process.Kill();
+        }
+        catch (Exception exited) when (exited is ArgumentException or InvalidOperationException) { }
     }
 
     private static async Task<bool> HasExitedAsync(int processId)
