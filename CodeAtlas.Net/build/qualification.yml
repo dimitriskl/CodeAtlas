@@ -38,8 +38,10 @@ jobs:
       - name: Use a temp folder without symlink aliases on macOS
         if: runner.os == 'macOS'
         run: echo "TMPDIR=$RUNNER_TEMP" >> "$GITHUB_ENV"
+      # The CRAP gate runs on Ubuntu only: one OS gives one set of scores for build/crap-exceptions.json,
+      # and coverage collection stays off the Windows test step, which uses about 20 of its 30 minutes.
       - name: Locked restore, tests, package inspection
-        run: python scripts/qualify-package.py --output .codeatlas/qualification --skip-smoke
+        run: python scripts/qualify-package.py --output .codeatlas/qualification --skip-smoke ${{ runner.os == 'Linux' && '--crap-gate' || '' }}
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         if: always()
         with:
@@ -50,6 +52,7 @@ jobs:
             CodeAtlas.Net/.codeatlas/qualification/test-results/*.trx
             CodeAtlas.Net/.codeatlas/qualification/test-results/*/Sequence_*.xml
             CodeAtlas.Net/.codeatlas/qualification/test-results/*/*.dmp
+            CodeAtlas.Net/.codeatlas/qualification/test-results/*/*.cobertura.xml
           retention-days: 14
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
