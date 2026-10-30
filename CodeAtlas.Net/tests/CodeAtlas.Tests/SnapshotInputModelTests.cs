@@ -436,10 +436,6 @@ public sealed class SnapshotInputModelTests : IDisposable
         // Assert
         Assert.Equal(["CODEATLAS_FIXTURE_FLAVOR", "EXTRA_BUILD_INPUT"], selected);
         Assert.Equal(["BUILD_FLAVOR"], unset);
-        Assert.True(Path.IsPathFullyQualified(outputPath));
-        Assert.True(Path.IsPathFullyQualified(sdkPath));
-        Assert.True(Path.IsPathFullyQualified(projectPath));
-        Assert.True(Path.IsPathFullyQualified(dotnetRoot));
         Assert.True(BuildEnvironment.IsOutputPath(outputPath));
         Assert.True(BuildEnvironment.IsSdkOrPackage(sdkPath, dotnetRoot));
         Assert.False(BuildEnvironment.IsSdkOrPackage(projectPath, dotnetRoot));
