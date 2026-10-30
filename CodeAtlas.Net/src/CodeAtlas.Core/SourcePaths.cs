@@ -7,7 +7,7 @@ namespace CodeAtlas;
 /// <summary>Real paths for included source. The stored form stays a solution-relative path.</summary>
 internal static class SourcePaths
 {
-    private static readonly ConcurrentDictionary<string, string> resolved = new(SnapshotInputModel.PathComparer);
+    private static readonly ConcurrentDictionary<string, string> Resolved = new(SnapshotInputModel.PathComparer);
 
     public static string Relative(string solutionDirectory, string path) =>
         Path.GetRelativePath(Real(solutionDirectory), Real(path)).Replace('\\', '/');
@@ -15,7 +15,7 @@ internal static class SourcePaths
     public static string Real(string path)
     {
         path = Path.GetFullPath(path);
-        return resolved.GetOrAdd(path, Resolve);
+        return Resolved.GetOrAdd(path, Resolve);
     }
 
     public static Solution Collapse(Solution solution, string solutionDirectory, ICollection<string> warnings)
@@ -129,7 +129,7 @@ internal static class SourcePaths
         {
             var next = ResolveParents(path);
             if (SnapshotInputModel.PathComparer.Equals(next, path)) return path;
-            if (resolved.TryGetValue(next, out var known)) return known;
+            if (Resolved.TryGetValue(next, out var known)) return known;
             path = next;
         }
         return path;

@@ -162,8 +162,8 @@ public static class PurposeSearch
         string Language, string? Project, string? Type, int Offset, int Limit);
 
     private const int StoredSearchLimit = 32;
-    private static readonly Dictionary<StoredSearchKey, SearchResult> storedSearches = new();
-    private static readonly object storedSearchGate = new();
+    private static readonly Dictionary<StoredSearchKey, SearchResult> StoredSearches = new();
+    private static readonly object StoredSearchGate = new();
 
     private static StoredSearchKey? StoredCacheKey(ISearchCorpus corpus, string query, string mode, string kind,
         QueryRequest request, string? snapshotId, string language,
@@ -176,15 +176,15 @@ public static class PurposeSearch
 
     private static bool TryGetStoredSearch(StoredSearchKey key, out SearchResult result)
     {
-        lock (storedSearchGate) return storedSearches.TryGetValue(key, out result!);
+        lock (StoredSearchGate) return StoredSearches.TryGetValue(key, out result!);
     }
 
     private static void RememberStoredSearch(StoredSearchKey key, SearchResult result)
     {
-        lock (storedSearchGate)
+        lock (StoredSearchGate)
         {
-            if (storedSearches.Count >= StoredSearchLimit && !storedSearches.ContainsKey(key)) storedSearches.Clear();
-            storedSearches[key] = result;
+            if (StoredSearches.Count >= StoredSearchLimit && !StoredSearches.ContainsKey(key)) StoredSearches.Clear();
+            StoredSearches[key] = result;
         }
     }
 
@@ -227,14 +227,14 @@ public static class PurposeSearch
     internal static string[] QueryTokens(string query) => SearchTokens(query);
 
     private const int TokenSetLimit = 100_000;
-    private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, HashSet<string>> tokenSets = new(StringComparer.Ordinal);
+    private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, HashSet<string>> TokenSets = new(StringComparer.Ordinal);
 
     /// <summary>Distinct search tokens for one text. The set is shared and must not be modified.</summary>
     internal static HashSet<string> TokenSet(string text)
     {
-        if (tokenSets.TryGetValue(text, out var tokens)) return tokens;
+        if (TokenSets.TryGetValue(text, out var tokens)) return tokens;
         tokens = SearchTokens(text).ToHashSet(StringComparer.Ordinal);
-        if (tokenSets.Count < TokenSetLimit) tokenSets.TryAdd(text, tokens);
+        if (TokenSets.Count < TokenSetLimit) TokenSets.TryAdd(text, tokens);
         return tokens;
     }
 
