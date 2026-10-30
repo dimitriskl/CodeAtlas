@@ -17,5 +17,5 @@ Awaiting merge: 01. After 01 is done, 02 and 03 can start. After 03, 04 and 05 c
 | 09 | [Benchmark gate](09-benchmark-gate.md) | 07, 08 | ready |
 | 10 | [macOS solutions reached through a symlinked path](10-macos-aliased-paths.md) | 01 | ready |
 | 11 | [macOS explanation_busy for a held symbol lock](11-macos-explanation-busy.md) | 01 | ready |
-| 12 | [Windows test run hangs until the job timeout](12-windows-test-hang.md) | 01 | ready |
+| 12 | [Windows test run hangs until the job timeout](12-windows-test-hang.md) | 01 | review (https://github.com/dimitriskl/CodeAtlas/pull/11) |
 | 13 | [macOS SqliteStoreTests fail with "database table is locked"](13-macos-sqlite-table-locked.md) | 01 | ready |
