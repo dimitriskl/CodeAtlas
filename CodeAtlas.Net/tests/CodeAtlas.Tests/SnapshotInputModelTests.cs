@@ -11,6 +11,19 @@ public sealed class SnapshotInputModelTests : IDisposable
         [new("Library.csproj", ["net10.0"], "net10.0", [])], []);
     private InputDiscoveryScope SourceScope => new(root.FullName, [".cs", ".csproj", ".props", ".targets"],
         [".editorconfig"], [".codeatlas", "bin", "obj"]);
+    private string DotnetRoot => Path.Combine(root.FullName, "Program Files", "dotnet");
+
+    private static Dictionary<string, string> ShellEnvironment(string shell, string previousShell, string toolCall) =>
+        new(SnapshotInputModel.PathComparer)
+        {
+            ["BUILD_FLAVOR"] = "Debug", ["PWD"] = shell, ["OLDPWD"] = previousShell, ["CODEX_TOOL_CALL_ID"] = toolCall
+        };
+
+    private static Task<SnapshotInputManifest> CaptureShellManifestAsync() =>
+        SnapshotInputModel.CaptureAsync([], [], [], ShellEnvironment(@"C:\indexing-shell", @"C:\old", "index-call"),
+            CompleteEvidence, relevantEnvironment: ["BUILD_FLAVOR"]);
+
+    private static Dictionary<string, string> QueryShell() => ShellEnvironment(@"C:\query-shell", @"C:\other", "query-call");
 
     [Fact]
     public async Task EqualFilesWithMissingEvidenceRemainUnknownAndPartial()
@@ -330,36 +343,53 @@ public sealed class SnapshotInputModelTests : IDisposable
     }
 
     [Fact]
-    public async Task UnreferencedShellVariablesDoNotInvalidateOrDiscloseValues()
+    public async Task UnreferencedShellVariablesDoNotInvalidate()
     {
         // Arrange
-        var indexing = new Dictionary<string, string>(SnapshotInputModel.PathComparer)
-        {
-            ["BUILD_FLAVOR"] = "Debug", ["PWD"] = @"C:\indexing-shell", ["OLDPWD"] = @"C:\old", ["CODEX_TOOL_CALL_ID"] = "index-call"
-        };
-        var manifest = await SnapshotInputModel.CaptureAsync([], [], [], indexing, CompleteEvidence, relevantEnvironment: ["BUILD_FLAVOR"]);
-        var query = new Dictionary<string, string>(SnapshotInputModel.PathComparer)
-        {
-            ["BUILD_FLAVOR"] = "Debug", ["PWD"] = @"C:\query-shell", ["OLDPWD"] = @"C:\other", ["CODEX_TOOL_CALL_ID"] = "query-call"
-        };
+        var manifest = await CaptureShellManifestAsync();
+        var query = QueryShell();
 
         // Act
         var fresh = await SnapshotInputModel.CheckAsync(manifest, query);
-        query["BUILD_FLAVOR"] = "private-value-not-for-reports";
-        var changed = await SnapshotInputModel.CheckAsync(manifest, query);
-        query.Remove("BUILD_FLAVOR");
-        var removed = await SnapshotInputModel.CheckAsync(manifest, query);
 
         // Assert
         Assert.Equal(["BUILD_FLAVOR"], manifest.RelevantEnvironment!);
         Assert.Equal("fresh", fresh.Status);
         Assert.DoesNotContain("<environment>", fresh.ChangedInputs);
+    }
+
+    [Fact]
+    public async Task ChangedReferencedVariableIsStaleAndItsValueIsNotDisclosed()
+    {
+        // Arrange
+        var manifest = await CaptureShellManifestAsync();
+        var query = QueryShell();
+        query["BUILD_FLAVOR"] = "private-value-not-for-reports";
+
+        // Act
+        var changed = await SnapshotInputModel.CheckAsync(manifest, query);
+
+        // Assert
         Assert.Equal("stale", changed.Status);
         Assert.Contains("<environment>", changed.ChangedInputs);
-        Assert.Equal("stale", removed.Status);
         var serialized = System.Text.Json.JsonSerializer.Serialize(changed) + System.Text.Json.JsonSerializer.Serialize(manifest);
         Assert.DoesNotContain("private-value-not-for-reports", serialized);
         Assert.DoesNotContain("query-shell", serialized);
+    }
+
+    [Fact]
+    public async Task RemovedReferencedVariableIsStale()
+    {
+        // Arrange
+        var manifest = await CaptureShellManifestAsync();
+        var query = QueryShell();
+        query.Remove("BUILD_FLAVOR");
+
+        // Act
+        var removed = await SnapshotInputModel.CheckAsync(manifest, query);
+
+        // Assert
+        Assert.Equal("stale", removed.Status);
     }
 
     [Fact]
@@ -422,23 +452,66 @@ public sealed class SnapshotInputModelTests : IDisposable
             </Project>
             $([System.Environment]::GetEnvironmentVariable('EXTRA_BUILD_INPUT'))
             """;
-        var dotnetRoot = Path.Combine(root.FullName, "Program Files", "dotnet");
-        var outputPath = Path.Combine(root.FullName, "repo", "obj", "project.assets.json");
-        var sdkPath = Path.Combine(dotnetRoot, "sdk", "10.0.402", "Sdk.targets");
-        var projectPath = Path.Combine(root.FullName, "repo", "Directory.Build.props");
 
         // Act
         var selected = BuildEnvironment.Select(BuildEnvironment.ReferencesIn(xml),
             ["CODEATLAS_FIXTURE_FLAVOR", "PWD", "PATH"],
             ["Configuration", "TargetFramework"]);
-        var unset = BuildEnvironment.Select(["BUILD_FLAVOR", "Configuration"], ["PATH"], ["Configuration"]);
 
         // Assert
         Assert.Equal(["CODEATLAS_FIXTURE_FLAVOR", "EXTRA_BUILD_INPUT"], selected);
+    }
+
+    [Fact]
+    public void UnsetReferencedVariableIsKeptAndADefinedPropertyIsNot()
+    {
+        // Arrange
+        string[] referenced = ["BUILD_FLAVOR", "Configuration"];
+
+        // Act
+        var unset = BuildEnvironment.Select(referenced, ["PATH"], ["Configuration"]);
+
+        // Assert
         Assert.Equal(["BUILD_FLAVOR"], unset);
-        Assert.True(BuildEnvironment.IsOutputPath(outputPath));
-        Assert.True(BuildEnvironment.IsSdkOrPackage(sdkPath, dotnetRoot));
-        Assert.False(BuildEnvironment.IsSdkOrPackage(projectPath, dotnetRoot));
+    }
+
+    [Fact]
+    public void FileUnderObjIsAnOutputPath()
+    {
+        // Arrange
+        var outputPath = Path.Combine(root.FullName, "repo", "obj", "project.assets.json");
+
+        // Act
+        var isOutput = BuildEnvironment.IsOutputPath(outputPath);
+
+        // Assert
+        Assert.True(isOutput);
+    }
+
+    [Fact]
+    public void FileUnderTheDotnetRootIsSdkOrPackage()
+    {
+        // Arrange
+        var sdkPath = Path.Combine(DotnetRoot, "sdk", "10.0.402", "Sdk.targets");
+
+        // Act
+        var isSdk = BuildEnvironment.IsSdkOrPackage(sdkPath, DotnetRoot);
+
+        // Assert
+        Assert.True(isSdk);
+    }
+
+    [Fact]
+    public void ProjectFileIsNotSdkOrPackage()
+    {
+        // Arrange
+        var projectPath = Path.Combine(root.FullName, "repo", "Directory.Build.props");
+
+        // Act
+        var isSdk = BuildEnvironment.IsSdkOrPackage(projectPath, DotnetRoot);
+
+        // Assert
+        Assert.False(isSdk);
     }
 
     [Fact]
