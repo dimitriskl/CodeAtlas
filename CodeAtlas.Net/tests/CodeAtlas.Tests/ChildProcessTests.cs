@@ -28,6 +28,25 @@ public sealed class ChildProcessTests
         Assert.True(await HasExitedAsync(int.Parse(grandchild.Groups[1].Value)), $"grandchild {grandchild.Groups[1].Value} is still running");
     }
 
+    [Fact]
+    public async Task ChildThatExitsWhileADescendantHoldsItsOutputFailsWithoutClaimingAKill()
+    {
+        // Arrange
+        // The child starts a 10 s grandchild that inherits its output pipes and exits at once.
+        var start = OperatingSystem.IsWindows()
+            ? new ProcessStartInfo("cmd") { ArgumentList = { "/c", "start", "/b", "ping", "-n", "11", "127.0.0.1" } }
+            : new ProcessStartInfo("sh") { ArgumentList = { "-c", "sleep 10 &" } };
+
+        // Act
+        var failure = await Record.ExceptionAsync(() => ChildProcess.RunAsync(start, TimeSpan.FromSeconds(3)));
+
+        // Assert
+        var timeout = Assert.IsType<ChildProcessTimeoutException>(failure);
+        Assert.Contains(start.FileName + " " + start.ArgumentList[0], timeout.Message);
+        Assert.Contains("output pipes stayed open", timeout.Message);
+        Assert.DoesNotContain("killed", timeout.Message);
+    }
+
     private static async Task<bool> HasExitedAsync(int processId)
     {
         // Termination is asynchronous after Kill, so allow the OS a moment to reap the process.
