@@ -36,7 +36,7 @@ A non-capturing lambda is the largest compiler branch: the method that creates i
 The correction is a lower bound, so a shape the report cannot settle keeps the higher value. Compared with the IL of the current code, it subtracts 336 of 400 cached lambdas and never too many. It leaves these counted:
 
 - A lambda that may be nested. The compiler names a nested lambda after the top-level method, and Cobertura lists where statements start, so the report cannot show nesting. A lambda stays counted when an earlier lambda or local function of the same statement has a decision that could hold its null check. `IncrementalGate.WellFormed` scores 13 and has 9 without its lambdas, `PurposeSearch.DeferredContracts` 11 and 10; their reasons say so.
-- A lambda nested in another lambda or a local function. It is subtracted from neither body, so the outer body keeps it.
+- A lambda nested in another lambda, a local function, or an iterator `finally` that guards a `yield`, which compiles to a method of its own. It is subtracted from neither body, so the outer body keeps it.
 - A field initializer's lambda in a constructor, because each constructor repeats the initializer and line order cannot pair them.
 - A lambda beyond the branches of its owner's line: a line gives up no more than its own outcomes.
 
