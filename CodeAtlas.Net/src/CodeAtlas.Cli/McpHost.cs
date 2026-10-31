@@ -99,14 +99,7 @@ internal sealed class McpHost
         {
             var tool = parameters?["name"] is JsonValue name && name.TryGetValue<string>(out var called) ? called : "";
             var arguments = parameters?["arguments"] as JsonObject ?? new JsonObject();
-            var envelope = tool switch
-            {
-                "find_symbol" => await FindSymbolAsync(arguments, cancellationToken),
-                "index_status" => await IndexStatusAsync(arguments, cancellationToken),
-                "coverage" => await CoverageAsync(arguments, cancellationToken),
-                "index" => await IndexAsync(arguments, cancellationToken),
-                _ => Failure(tool.Length == 0 ? null : tool, "invalid_arguments", "Unknown tool.", [])
-            };
+            var envelope = await InvokeAsync(tool, arguments, cancellationToken);
             return ToolResult(id, envelope, envelope["success"]!.GetValue<bool>() == false);
         }
         catch (Exception exception) when (KnownFailure(ToolName(parameters), exception) is { } failure)
@@ -114,6 +107,17 @@ internal sealed class McpHost
             return ToolResult(id, failure, true);
         }
     }
+
+    private Task<JsonObject> InvokeAsync(string tool, JsonObject arguments, CancellationToken cancellationToken) =>
+        tool switch
+        {
+            "find_symbol" => FindSymbolAsync(arguments, cancellationToken),
+            "search_symbols" => SearchSymbolsAsync(arguments, cancellationToken),
+            "index_status" => IndexStatusAsync(arguments, cancellationToken),
+            "coverage" => CoverageAsync(arguments, cancellationToken),
+            "index" => IndexAsync(arguments, cancellationToken),
+            _ => Task.FromResult(Failure(tool.Length == 0 ? null : tool, "invalid_arguments", "Unknown tool.", []))
+        };
 
     private static JsonObject? KnownFailure(string? command, Exception exception) => exception switch
     {
@@ -130,7 +134,7 @@ internal sealed class McpHost
 
     private async Task<JsonObject> FindSymbolAsync(JsonObject arguments, CancellationToken cancellationToken)
     {
-        var query = ReadQuery(arguments);
+        var query = ReadQuery(arguments, "name", "name must not be empty.", "name must not be empty.");
         RequireWorkspace(query.Workspace);
         var manifest = IndexStore.DefaultPath(solutionFile);
         if (!File.Exists(manifest))
@@ -141,10 +145,7 @@ internal sealed class McpHost
         if (query.SnapshotId is not null && !string.Equals(query.SnapshotId, snapshot.Index.IndexId, StringComparison.Ordinal))
             return Mismatch("find_symbol");
         var coverage = Coverage(snapshot.Index.SchemaVersion >= 2, noIndex: false);
-        if (freshness.IsStale)
-            return Stale("find_symbol", snapshot, freshness, coverage);
-        if (freshness.Diagnostics.Length != 0)
-            return Io("find_symbol", snapshot, freshness, coverage);
+        if (Refusal("find_symbol", snapshot, freshness, coverage) is { } refusal) return refusal;
         var rows = (query.Kind ?? "all") == "method"
             ? Methods(snapshot, query)
             : Symbols(snapshot, query);
@@ -153,6 +154,26 @@ internal sealed class McpHost
         var page = matches.Skip(query.Offset).Take(query.Limit).ToArray();
         return SymbolSuccess(Freshness(freshness), coverage,
             Page(matches.Length, query.Offset, query.Limit, page.Length, snapshot.Index.IndexId, true), page, snapshot.Index.Warnings.Length);
+    }
+
+    // Task #04: MCP tool search_symbols. The ranking and the rows are those of search-symbols. The warm
+    // session has checked freshness, so the search skips its own check. Assisted mode reads saved
+    // descriptions from disk; nothing on this path reads credentials or creates a provider client.
+    private async Task<JsonObject> SearchSymbolsAsync(JsonObject arguments, CancellationToken cancellationToken)
+    {
+        var search = ReadSearch(arguments);
+        RequireWorkspace(search.Workspace);
+        var snapshotId = search.Request.Snapshot;
+        if (!File.Exists(Manifest))
+            return snapshotId is null ? NoIndexSearch(search) : Mismatch("search_symbols");
+        var (snapshot, freshness) = await warm.CurrentAsync(cancellationToken);
+        if (snapshotId is not null && !PurposeSnapshotQueries.BelongsTo(snapshotId, snapshot.Index.IndexId))
+            return Mismatch("search_symbols");
+        var coverage = Coverage(snapshot.Index.SchemaVersion >= 2, noIndex: false);
+        if (Refusal("search_symbols", snapshot, freshness, coverage) is { } refusal) return refusal;
+        var found = await PurposeSnapshotQueries.SearchAsync(snapshot, search.Text, search.Mode, search.Kind, search.Request,
+            cancellationToken: cancellationToken, verifyFreshness: false);
+        return SearchSuccess(Freshness(freshness), coverage, found, snapshot.Index.Warnings.Length);
     }
 
     private async Task<JsonObject> IndexStatusAsync(JsonObject arguments, CancellationToken cancellationToken)
@@ -171,9 +192,8 @@ internal sealed class McpHost
             return Zero("coverage", NoIndexFreshness(), Coverage(catalog: true, noIndex: true), snapshotId: null, 0);
         var (snapshot, freshness) = await warm.CurrentAsync(cancellationToken);
         var coverage = LoadedCoverage(snapshot, emptyLimitations: true);
-        if (freshness.IsStale) return Stale("coverage", snapshot, freshness, coverage);
-        if (freshness.Diagnostics.Length != 0) return Io("coverage", snapshot, freshness, coverage);
-        return Zero("coverage", Freshness(freshness), coverage, snapshot.Index.IndexId, snapshot.Index.Warnings.Length);
+        return Refusal("coverage", snapshot, freshness, coverage)
+            ?? Zero("coverage", Freshness(freshness), coverage, snapshot.Index.IndexId, snapshot.Index.Warnings.Length);
     }
 
     private async Task<JsonObject> IndexAsync(JsonObject arguments, CancellationToken cancellationToken)
@@ -193,10 +213,10 @@ internal sealed class McpHost
     private bool IsBound(string workspace) =>
         TryReal(workspace, out var real) && (Paths.Equals(real, solutionDirectory) || Paths.Equals(real, solutionFile));
 
-    private static SymbolQuery ReadQuery(JsonObject arguments)
+    private static SymbolQuery ReadQuery(JsonObject arguments, string selector, string missing, string empty)
     {
         var workspace = Text(arguments, "workspace", "workspace is required.", "workspace must not be empty.");
-        var name = Text(arguments, "name", "name must not be empty.", "name must not be empty.");
+        var name = Text(arguments, selector, missing, empty);
         var kind = OptionalText(arguments, "kind", "kind must not be empty.");
         if (kind is not null && kind is not ("method" or "type" or "property" or "field" or "all"))
             throw new QueryException("invalid_arguments", "Unknown symbol kind.");
@@ -207,6 +227,20 @@ internal sealed class McpHost
         if (offset > 0 && snapshot is null)
             throw new QueryException("invalid_arguments", "offset greater than zero requires snapshotId.");
         return new(workspace, name, kind, project, offset, limit, snapshot);
+    }
+
+    // PurposeSearch.Validate words its checks for CLI options and throws ArgumentException, an internal
+    // error here, so every value it would refuse is refused first with the contract's message.
+    private static SearchQuery ReadSearch(JsonObject arguments)
+    {
+        var query = ReadQuery(arguments, "query", "query is required.", "query must not be empty.");
+        if (query.Name.Length > PurposeSearch.MaximumQueryCharacters || PurposeSearch.Tokenize(query.Name).Length == 0)
+            throw new QueryException("invalid_arguments", "query must have 1-4096 characters and at least one searchable token.");
+        var mode = OptionalText(arguments, "mode", "mode must not be empty.") ?? "assisted";
+        if (mode is not ("names" or "assisted"))
+            throw new QueryException("invalid_arguments", "mode must be names or assisted.");
+        return new(query.Workspace, query.Name, mode, query.Kind ?? "method",
+            new QueryRequest(query.Project, null, query.Limit, query.Offset, query.SnapshotId));
     }
 
     private void RequireWorkspace(string workspace)
@@ -249,6 +283,21 @@ internal sealed class McpHost
         IReadOnlyList<SymbolRow> symbols, int warningCount) =>
         Envelope("find_symbol", true, warningCount, freshness, coverage, pagination, new JsonObject { ["symbols"] = Symbols(symbols) }, error: null);
 
+    private static JsonObject NoIndexSearch(SearchQuery search) =>
+        SearchSuccess(NoIndexFreshness(), Coverage(catalog: true, noIndex: true), PurposeSearch.NoIndex(search.Text, search.Mode, search.Request), 0);
+
+    private static JsonObject SearchSuccess(JsonObject freshness, JsonObject coverage, SearchResult found, int warningCount) =>
+        Envelope("search_symbols", true, warningCount, freshness, coverage,
+            JsonSerializer.SerializeToNode(found.Page.Pagination, Json)!.AsObject(), SearchFields(found), error: null);
+
+    // The field names and order of the search-symbols output, serialized from the same records.
+    private static JsonNode SearchFields(SearchResult found) => JsonSerializer.SerializeToNode(new
+    {
+        symbols = found.Page.Items, found.RankingVersion, found.Mode, found.Language, found.QueryTokens,
+        found.UnmatchedQueryTokens, found.EvidencePolicy, found.Decision, found.WithheldWeakMatches,
+        found.Limitations, searchCoverage = found.Coverage
+    }, Json)!;
+
     private static JsonObject GenerationEnvelope(string command, JsonObject freshness, JsonObject coverage, LoadedSnapshot? snapshot, int warningCount) =>
         Envelope(command, true, warningCount, freshness, coverage, Page(0, 0, 0, 0, snapshot?.Index.IndexId, false),
             snapshot is null ? NoIndexResult() : GenerationResult(snapshot), error: null);
@@ -258,6 +307,10 @@ internal sealed class McpHost
 
     private static JsonObject Mismatch(string command) =>
         Failure(command, "snapshot_mismatch", "The index was replaced. Start a new query at offset zero.", []);
+
+    private static JsonObject? Refusal(string command, LoadedSnapshot snapshot, IndexFreshness freshness, JsonObject coverage) =>
+        freshness.IsStale ? Stale(command, snapshot, freshness, coverage)
+            : freshness.Diagnostics.Length != 0 ? Io(command, snapshot, freshness, coverage) : null;
 
     private static JsonObject Stale(string command, LoadedSnapshot snapshot, IndexFreshness freshness, JsonObject coverage) =>
         Failure(command, "stale_index", "The saved index is stale.", [], Freshness(freshness), coverage, snapshot.Index.Warnings.Length);
@@ -433,6 +486,9 @@ internal sealed class McpHost
             Schema("find_symbol", "Find source symbols by exact name or qualified name in the published index.",
                 ["workspace", "name", "kind", "project", "offset", "limit", "snapshotId"], ["workspace", "name"],
                 ["string", "string", "string", "string", "integer", "integer", "string"]),
+            Schema("search_symbols", "Rank symbols by words from their purpose, documentation or names. Reads the published index and saved AI descriptions; it never calls a provider.",
+                ["workspace", "query", "mode", "kind", "project", "offset", "limit", "snapshotId"], ["workspace", "query"],
+                ["string", "string", "string", "string", "string", "integer", "integer", "string"]),
             Schema("index_status", "Read the published generation and whether its tracked inputs still match.",
                 ["workspace"], ["workspace"], ["string"]),
             Schema("coverage", "Read the analysis boundary. Omit workspace when no index should be read.",
@@ -548,6 +604,8 @@ internal sealed class McpHost
     };
 
     private sealed record SymbolQuery(string Workspace, string Name, string? Kind, string? Project, int Offset, int Limit, string? SnapshotId);
+
+    private sealed record SearchQuery(string Workspace, string Text, string Mode, string Kind, QueryRequest Request);
 
     private sealed record SymbolRow(string Id, string Kind, string Name, string QualifiedName, string Project, string Path,
         int Line, int Column, string Signature, bool HasSignature);

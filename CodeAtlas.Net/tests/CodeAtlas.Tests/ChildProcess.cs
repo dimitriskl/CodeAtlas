@@ -17,14 +17,18 @@ internal static class ChildProcess
 
     /// <summary>Starts the child with redirected output, waits for it to exit, then waits a short grace for both
     /// streams to close. On timeout it kills the process tree and throws <see cref="ChildProcessTimeoutException"/>
-    /// with the command, the kill outcome and the output captured so far. A redirected standard input is closed at
-    /// once, so the child reads end of input.</summary>
-    public static async Task<Result> RunAsync(ProcessStartInfo start, TimeSpan? timeout = null)
+    /// with the command, the kill outcome and the output captured so far. A redirected standard input receives
+    /// <paramref name="input"/>, if any, and is then closed, so the child reads end of input.</summary>
+    public static async Task<Result> RunAsync(ProcessStartInfo start, TimeSpan? timeout = null, string? input = null)
     {
         start.RedirectStandardOutput = true;
         start.RedirectStandardError = true;
         using var process = Process.Start(start) ?? throw new InvalidOperationException($"Could not start {Describe(start)}.");
-        if (start.RedirectStandardInput) process.StandardInput.Close();
+        if (start.RedirectStandardInput)
+        {
+            process.StandardInput.Write(input);
+            process.StandardInput.Close();
+        }
         var output = new StringBuilder();
         var error = new StringBuilder();
         // Read in chunks rather than ReadToEndAsync, so text written before a hang is still available.

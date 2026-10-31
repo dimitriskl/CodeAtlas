@@ -55,7 +55,7 @@ Without a configured selection or legacy credentials AI stays disabled. Effort s
 explain-request exports selected source evidence locally; optional --local, --context, --reference-limit and byte limits bound that context.
 explain-import requires registered request identity, evidence citations, provenance and unchanged observed inputs. No provider is called.
 live reads one JSON object per stdin line and writes one JSON object per line. Request commands are edit, find-symbol, search and find-references.
-mcp reads one JSON-RPC message per stdin line and writes one JSON-RPC message per line. Its tools are find_symbol, index_status, coverage and index.
+mcp reads one JSON-RPC message per stdin line and writes one JSON-RPC message per line. Its tools are find_symbol, search_symbols, index_status, coverage and index.
 """;
 if (StartMenu.ShouldOpen(args, Console.IsInputRedirected, Console.IsOutputRedirected))
     return await StartMenu.RunInConsoleAsync();

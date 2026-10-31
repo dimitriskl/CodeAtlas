@@ -160,15 +160,23 @@ def main():
             "clientInfo": {"name": "package-smoke", "version": "0"}}}),
         json.dumps({"jsonrpc": "2.0", "method": "notifications/initialized"}),
         json.dumps({"jsonrpc": "2.0", "id": 2, "method": "tools/list"}),
+        json.dumps({"jsonrpc": "2.0", "id": 3, "method": "tools/call", "params": {
+            "name": "search_symbols",
+            "arguments": {"workspace": ".", "query": "LocalCaller", "mode": "names"}}}),
     ]) + "\n"
     mcp = run("mcp", [executable, "mcp", "--solution", "Sample.slnx"], stdin=mcp_input.encode())
     messages = [json.loads(line) for line in mcp.stdout.splitlines() if line.strip()]
-    assert len(messages) == 2
+    assert len(messages) == 3
     assert messages[0]["result"]["protocolVersion"] == "2025-06-18"
     assert messages[0]["result"]["capabilities"]["tools"]["listChanged"] is False
     assert messages[0]["result"]["serverInfo"] == {"name": "codeatlas", "version": args.version}
     assert [tool["name"] for tool in messages[1]["result"]["tools"]] == [
-        "find_symbol", "index_status", "coverage", "index"]
+        "find_symbol", "search_symbols", "index_status", "coverage", "index"]
+    assert messages[2]["result"]["isError"] is False
+    found = json.loads(messages[2]["result"]["content"][0]["text"])
+    assert found["command"] == "search_symbols" and found["result"]["decision"] == "lexical-candidates"
+    assert [item["symbol"]["id"] for item in found["result"]["symbols"]] == [
+        "Library/Library.csproj::M:Sample.Calculator.LocalCaller"]
     empty = run("empty", [executable, "find-symbol", "--index", index_path,
                           "--name", "DoesNotExist"], parse=True)
     assert empty["symbols"] == []
