@@ -51,7 +51,7 @@ dotnet src/CodeAtlas.Cli/bin/Debug/net10.0/codeatlas.dll find-symbol `
   --offset 1 --snapshot the-returned-index-id
 ```
 
-Any indexed offset greater than zero requires `--snapshot`. A supplied identity must match even when offset is zero. A replaced index fails with `snapshot_mismatch`; restart discovery at offset zero. Each page independently performs the complete freshness check. A matching snapshot identity does not bypass hashing or make stale data usable.
+Any indexed offset greater than zero requires `--snapshot`. A supplied identity must match even when offset is zero. A replaced index fails with `snapshot_mismatch`; restart discovery at offset zero. Each page independently performs the complete freshness check. A matching snapshot identity does not bypass hashing or make stale data usable. The MCP server verifies each call as well, with one full check per generation and then [file and directory stamps](SQLITE-STORE.md#warm-mcp-session); a changed input gives the same `stale_index`.
 
 Methods sort by ordinal symbol ID. References sort by ordinal file path, numeric line and column, then ordinal definition ID, referencing project and kind. The complete keys preserve linked-file distinctions. Sorting and exact filtering occur before slicing. Empty matches and offsets beyond the final result succeed with empty arrays, truthful totals, hasMore false and nextOffset null.
 

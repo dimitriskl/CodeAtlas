@@ -61,6 +61,15 @@ public sealed class IndexedSolution : IAsyncLifetime
         await IndexStore.SaveAsync(Index);
     }
 
+    // Publishes a generation that tracks only these inputs, so nothing else slows or moves its check.
+    public async Task PublishTrackingAsync(string[] files, string[] inventories)
+    {
+        var published = Index.InputManifest!;
+        var manifest = await SnapshotInputModel.CaptureAsync(files, [], inventories, SnapshotEnvironment.Capture(),
+            published.Evidence, relevantEnvironment: published.RelevantEnvironment);
+        await IndexStore.SaveAsync(SnapshotTestIdentity.NewGeneration(Index) with { InputManifest = manifest });
+    }
+
     public Task DisposeAsync()
     {
         temporary.Delete(recursive: true);
