@@ -39,7 +39,7 @@ jobs:
         if: runner.os == 'macOS'
         run: echo "TMPDIR=$RUNNER_TEMP" >> "$GITHUB_ENV"
       # The CRAP gate runs on Ubuntu only: one OS gives one set of scores for build/crap-exceptions.json,
-      # and coverage collection stays off the Windows test step, which uses about 20 of its 30 minutes.
+      # and coverage stays off Windows, where the test step took 12.8 to 18.8 of its 30 minutes without it.
       - name: Locked restore, tests, package inspection
         run: python scripts/qualify-package.py --output .codeatlas/qualification --skip-smoke ${{ runner.os == 'Linux' && '--crap-gate' || '' }}
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02

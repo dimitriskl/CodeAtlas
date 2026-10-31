@@ -8,8 +8,9 @@
           <Format>Cobertura</Format>
           <CodeCoverage>
             <!-- Tests run the CLI in-process and as child processes from src/CodeAtlas.Cli/bin. Dynamic
-                 instrumentation covers both; static instrumentation of the test output folder lost the
-                 in-process hits of codeatlas.dll on Linux. -->
+                 instrumentation covers both. Static instrumentation of the test output folder is wrong
+                 both ways: on Linux it lost the in-process hits of codeatlas.dll, and it over-reported
+                 Core (98.4% against 92.3%) by marking lines hit that never ran. -->
             <EnableStaticManagedInstrumentation>False</EnableStaticManagedInstrumentation>
             <EnableDynamicManagedInstrumentation>True</EnableDynamicManagedInstrumentation>
           </CodeCoverage>
