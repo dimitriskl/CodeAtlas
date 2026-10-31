@@ -25,7 +25,7 @@ User stories: 21, 24. PRD: [Testing Decisions](../prd/0001-net-release.md#testin
 
 - [01 — CI green](01-ci-green.md)
 
-Status: ready
+Status: deferred until after the release
 
 ## Acceptance criteria
 

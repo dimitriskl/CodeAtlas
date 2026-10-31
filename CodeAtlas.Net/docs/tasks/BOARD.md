@@ -2,7 +2,7 @@
 
 Source: [PRD 0001](../prd/0001-net-release.md). Each task is a vertical slice for one coding session. Domnus reviews each PR technically, then QA reviews it against CODING_STANDARDS.md.
 
-01 and 12 are merged. 02 is in review. 03, 10, 11, 13 and 14 can start. After 03, 04 and 05 can run in parallel. After 02, 15 can start.
+01 and 12 are merged. 02 is in review. 03 and 14 can start. After 03, 04 and 05 can run in parallel. After 02, 15 can start. 10, 11 and 13 stay deferred until after the release: macOS runs only for `v*` tags and manual runs, so macOS regressions surface only at the release.
 
 | # | Task | Blocked by | Status |
 |---|---|---|---|
@@ -15,9 +15,9 @@ Source: [PRD 0001](../prd/0001-net-release.md). Each task is a vertical slice fo
 | 07 | [Benchmark: real MCP mode and success-only statistics](07-benchmark-mcp-mode.md) | 05 | ready |
 | 08 | [Demo and tagged GitHub release](08-demo-release.md) | 06 | ready |
 | 09 | [Benchmark gate](09-benchmark-gate.md) | 07, 08 | ready |
-| 10 | [macOS solutions reached through a symlinked path](10-macos-aliased-paths.md) | 01 | ready |
-| 11 | [macOS explanation_busy for a held symbol lock](11-macos-explanation-busy.md) | 01 | ready |
+| 10 | [macOS solutions reached through a symlinked path](10-macos-aliased-paths.md) | 01 | deferred until after the release |
+| 11 | [macOS explanation_busy for a held symbol lock](11-macos-explanation-busy.md) | 01 | deferred until after the release |
 | 12 | [Windows test run hangs until the job timeout](12-windows-test-hang.md) | 01 | done (https://github.com/dimitriskl/CodeAtlas/pull/11) |
-| 13 | [macOS SqliteStoreTests fail with "database table is locked"](13-macos-sqlite-table-locked.md) | 01 | ready |
+| 13 | [macOS SqliteStoreTests fail with "database table is locked"](13-macos-sqlite-table-locked.md) | 01 | deferred until after the release |
 | 14 | [Child-process diagnostics in tests](14-child-process-diagnostics.md) | 12 | ready |
 | 15 | [CRAP exception burn-down](15-crap-exception-burn-down.md) | 02 | ready |

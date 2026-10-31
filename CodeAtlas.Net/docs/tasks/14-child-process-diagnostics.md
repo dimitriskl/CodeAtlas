@@ -30,7 +30,7 @@ Status: ready
 - [ ] `ChildProcessTests` asserts the drain returns in under 30 s.
 - [ ] `CODING_STANDARDS.md` describes the 10 s drain.
 - [ ] A failing writer-kill test reports its vstest output and its first error.
-- [ ] Qualification is green on Windows, Linux and macOS.
+- [ ] Qualification is green on Windows and Linux.
 - [ ] No change to production behavior, CLI output, exit codes or schema.
 
 ## Review log

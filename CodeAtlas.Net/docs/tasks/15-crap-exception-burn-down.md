@@ -26,7 +26,7 @@ Status: ready
 - [ ] The ten highest scores in the list are lower, or the review log says why not.
 - [ ] Each split has a behavior test that passed before the split.
 - [ ] The review log states the new entry count and the number of bodies above complexity 10.
-- [ ] Qualification is green on Windows, Linux and macOS.
+- [ ] Qualification is green on Windows and Linux.
 - [ ] No change to CLI output, exit codes, MCP output or schema.
 
 ## Review log

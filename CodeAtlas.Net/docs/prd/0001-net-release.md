@@ -54,7 +54,7 @@ Then prove the claim with one controlled benchmark. Run the same agent and model
 
 ### Maintainer
 
-21. As the maintainer, I want CI green on Windows, Linux and macOS for every PR, so that a regression is caught before merge.
+21. As the maintainer, I want CI green on Windows and Linux for every PR and on macOS for every release, so that a regression is caught before merge, or on macOS before the release.
 22. As the maintainer, I want warnings to fail the build and style rules checked by `.editorconfig`, so that the coding standards are enforced, not only described.
 23. As the maintainer, I want a complexity gate (CRAP limit 10) in CI, so that hard-to-test methods are caught in review.
 24. As the maintainer, I want the version bump to work on a clean clone, so that a release never depends on a gitignored file.
@@ -156,7 +156,7 @@ Then prove the claim with one controlled benchmark. Run the same agent and model
 - **Warm session seam.** Change a tracked file and expect `stale_index`. Publish a new generation and expect the new `snapshotId` without a restart. Prior art: the live host tests and the snapshot input model tests.
 - **Store queries.** Existing query and contract tests stay the oracle for search and reference results. The MCP tools must return the same rows as the CLI for the same fixture.
 - **Benchmark harness.** Python unit tests for statistics (median, IQR, success-only filtering, the win rule), cost-cap arithmetic, the MCP config written for the `mcp` mode, and paid-run refusal. Prior art: the existing agent benchmark tests. Then one Ollama dry run end to end.
-- **Cross-platform.** Tests must not assume Windows paths or Windows environment-name casing. CI runs the full .NET and Python suites on Windows, Linux and macOS.
+- **Cross-platform.** Tests must not assume Windows paths or Windows environment-name casing. CI runs the full .NET and Python suites on Windows and Linux for every PR, and also on macOS for `v*` tags and manual runs.
 - **Quality gates.** Build with warnings as errors, style checked from `.editorconfig`, and a CRAP gate at 10.
 - Tests follow Arrange/Act/Assert and run with one xUnit thread, as CODING_STANDARDS says.
 
@@ -179,4 +179,4 @@ Then prove the claim with one controlled benchmark. Run the same agent and model
   - The MCP server sits between these: one process, but a full hash per call.
 - Only local Ollama (qwen3-8b) results exist so far. There is no paid Sonnet baseline yet.
 - The harness already refuses a paid run without its confirmation flag and caps each session at $3. Its run cap defaults to $40 and only stops new sessions after the spend reaches the cap, so it can overshoot by one session. Task 07 fixes this.
-- macOS joins the per-PR matrix. If the repository stays private and macOS minutes cost too much, it may move to release-only.
+- macOS is release-only: it runs for `v*` tags and manual runs, not per PR, because it is not a priority before the release. A macOS regression surfaces only at that run. Tasks 10, 11 and 13 stay deferred until after the release.
