@@ -90,3 +90,32 @@ Non-blocking: (a) `McpHost.cs:140` now runs the freshness work before the `snaps
 6. Measured again, generation `88a31ad3`: warm median 78.2 ms, p95 83.2, first call 1,070.3, fresh process 1,043.9. One earlier run gave a first call of 11,806 ms straight after the test runs; I did not establish why, and did not record it in `SQLITE-STORE.md`.
 
 Local (Windows): build 0 warnings, .NET 622/622 with 0 skipped, Python 145 OK. `InputStamp` methods stay below 10 from Windows coverage of the stamp tests (highest reported complexity 6, at 83% lines); the full CRAP gate runs on Ubuntu in CI. `build/crap-exceptions.json` unchanged. No version bump: 0.00.62.
+
+### 2026-10-31 (Technical review attempt 2)
+
+Commit reviewed: `f279e73`, against `e950179`. Scope: `c941a92`, `053e74f`, `f279e73`.
+
+Verdict: CHANGES REQUESTED. QA may not start.
+
+Blocking:
+
+1. `src/CodeAtlas.Core/DirectoryStamps.cs:42-46`: a missed `stale_index`, so an output change from the base. The same defect as attempt 1 item 1, on directories. `DirectoryInfo` reads a link's own write time, and an inventory directory is recorded by the path the build used (`dotnet/sdk`, `host/fxr`, `shared/Microsoft.NETCore.App`). With a recorded inventory that is a directory symlink, a child added in its target left the warm server answering `find_symbol` as fresh, while a new server and the CLI gave `stale_index` with `<directory-inventory>`. Linux behaves the same: on ext4 under .NET 9 a link's write time stayed put when its target gained a child. Fix: in `Stamp`, follow a reparse point to the final directory and keep its path, as `InputStamp.Of` does, and catch link errors as `OfLink` does: `FullCheckAsync` builds these stamps outside any `try`, so a directory link loop must not throw there. Add a failing test first, through MCP, next to `ARecordedInventoryDirectoryThatGainsAChildMakesTheNextQueryStale`. A sketch of this fix in my scratch copy turned the case stale and kept 44 of 44 stamp, warm and probe tests green.
+
+Non-blocking, not caused by this task:
+
+- `SourcePaths.cs:10`: `Resolved` caches real paths for the life of the process, since `ec86023`. Every full check in an MCP server reads it, as it did before this task. Results against a real CLI process: after a retarget MCP gives the same code but names the old target in `changedFiles` (`../out/t.props`, CLI `../out/t2.props`). A discovered link retargeted inside an excluded directory, or a tracked file replaced by a link to outside the solution, stays fresh in MCP while the CLI gives `stale_index`. Both cases need a link inside a discovery scope to change while a server runs. A likely follow-up: clear the cache when a full check starts.
+- `McpWarmSymlinkTests.cs:64`: the "new server" runs in the test process and shares that cache, so the claim "same `changedFiles` as a new one" in `c941a92` holds only in-process. The test stays valid for `code`.
+- A killed test host leaves the 2 GB file in temp. `Dispose` and `finally` cover every test failure. Harmless on a CI runner, and only a leak on a developer machine.
+
+Verified on `f279e73`:
+
+- Symlinks, on Windows, through MCP, a new server and a real CLI process. `stale_index` from all three, warm included: edited target, broken link, link chain edit, a middle hop of a chain retargeted at the same length and write time, file link retargeted at the same stamp, edit through a directory symlink in a tracked path, that directory link retargeted with a different length, its target removed, an inventory link retargeted. Link cycles, file and directory, and a link to a directory neither hang nor crash: warm and new server both give `snapshot_io_failed`. The CLI's `find-symbol` exits 0 on these. No CLI code changed in these commits, so that MCP and CLI difference is outside this review. A directory link retargeted at the same length and write time stays fresh warm, which is the documented limit, here with no walked directory above the link.
+- Mutations, reproduced in a scratch copy, each failing exactly its test: the old re-stamp loop (`AnEditMadeWhileAnotherFileIsHashedIsSeenByTheNextCheck`), stamps after the full check (`AnEditLandingDuringAFullCheckIsSeenByTheNextCall`), first link hop only (`EditingTheFileAtTheEndOfALinkChainIsSeen`), `Walk` not recursive (`AddingAFileToANestedDirectoryMakesTheNextQueryStale`). No change needed.
+- The 2 GB files. Two tests, run serially, so at most one file exists at a time. Windows: not sparse. `fsutil` reports no sparse flag, free space fell 2.0 GB during the file's life and recovered on delete, creation took 3.1 s and a hash 1.3 s here. Ubuntu: sparse on ext4 (0 blocks, checked on a local ext4 volume, not on the runner). Cost: 11.8 s here; on the Ubuntu runner 8.4 s of 500 s test time, under 2%, against a 30 minute step limit. No leftover file after the failing mutation runs. Neither can fill a runner: peak 2 GB, transient, serial. No change required. The test's doc comment says the length is set, not written; on Windows the space is still allocated, so reword it when next touched.
+- Symlink tests on Ubuntu: the `Link` helper fails instead of skipping off Windows. The Ubuntu TRX lists 622 passed, 0 skipped, with every `McpWarmSymlinkTests` and `InputStampsTests` row passed, including `link-loop`.
+- Docs: task line 9 and the PRD match what was built. Rerun on generation `88a31ad3`, 8 rounds each in Release, alternating: fresh `find-symbol` 1,061.3 ms, and 755.3 ms with that one call removed, so 306 ms against the claimed 294. Both exit 0. The 42 ms is stated as unexplained. `Tracked` entered `Collect` in `ec86023`, as stated.
+- Commits: one change each, behavior before tests before docs, why/what/proof, no names, tool mentions or trailers. Version 0.00.62. `git diff e950179 HEAD` is empty for `McpServerTests.cs`, `LiveHostTests.cs`, `McpWarmIndexTests.cs`, `build/crap-exceptions.json` and `Version.props`.
+
+CI for this HEAD (run 41224282306): Ubuntu build and tests pass, 622/622. CRAP gate: 1585 methods, 0 above 10, 91 listed exceptions, 0 exception problems, 2 better than recorded. Windows was still running when this was written.
+
+Probes and mutations ran in a scratch copy of HEAD, removed afterwards. No production code changed.
