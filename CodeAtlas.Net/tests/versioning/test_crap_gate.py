@@ -12,11 +12,12 @@ gate = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(gate)
 
 
-OUTCOMES_FOR_TEN = 10
+OUTCOMES_FOR_TEN = 18
 
 
-def method(name, complexity, line_rate, signature="()"):
-    return (f'<method line-rate="{line_rate}" branch-rate="1" complexity="{complexity}" '
+def method(name, outcomes, line_rate, signature="()"):
+    """A Cobertura method. Microsoft.CodeCoverage writes IL branch outcomes in its complexity attribute."""
+    return (f'<method line-rate="{line_rate}" branch-rate="1" complexity="{outcomes}" '
             f'name="{name}" signature="{signature}"><lines /></method>')
 
 
@@ -54,10 +55,31 @@ class CrapGateTests(unittest.TestCase):
         # Assert
         self.assertEqual(4 * 4 * 0.125 + 4, score)
 
+    def test_reported_branch_outcomes_become_cyclomatic_complexity(self):
+        # Arrange
+        reported = [1, 8, 12, 14]
+
+        # Act
+        complexity = [gate.cyclomatic(outcomes) for outcomes in reported]
+
+        # Assert
+        self.assertEqual([1, 5, 7, 8], complexity)
+
+    def test_twelve_branch_outcomes_at_full_coverage_score_complexity_seven(self):
+        # Arrange
+        classes = [("CodeAtlas.PurposeSearch", "src/CodeAtlas.Core/PurposeSearch.cs", [method("FoldPlural", 12, 1)])]
+
+        # Act
+        completed, report = self.run_gate(classes)
+
+        # Assert
+        self.assertEqual(0, completed.returncode, completed.stdout + completed.stderr)
+        self.assertEqual([], report["violations"])
+
     def test_a_method_above_the_limit_fails_the_gate_and_is_named(self):
         # Arrange
         classes = [("CodeAtlas.Store", "src/CodeAtlas.Core/Store.cs",
-                    [method("Save", 4, 0), method("Load", 2, 1)])]
+                    [method("Save", 6, 0), method("Load", 2, 1)])]
 
         # Act
         completed, report = self.run_gate(classes)
@@ -82,7 +104,7 @@ class CrapGateTests(unittest.TestCase):
     def test_methods_at_or_below_the_limit_pass(self):
         # Arrange
         classes = [("CodeAtlas.Store", "src/CodeAtlas.Core/Store.cs",
-                    [method("Load", 10, 1), method("Small", 2, 0)])]
+                    [method("Load", 18, 1), method("Small", 2, 0)])]
 
         # Act
         completed, report = self.run_gate(classes)
@@ -94,7 +116,7 @@ class CrapGateTests(unittest.TestCase):
 
     def test_a_listed_exception_with_a_reason_passes(self):
         # Arrange
-        classes = [("CodeAtlas.Store", "src/CodeAtlas.Core/Store.cs", [method("Save", 4, 0, "(string)")])]
+        classes = [("CodeAtlas.Store", "src/CodeAtlas.Core/Store.cs", [method("Save", 6, 0, "(string)")])]
         exceptions = [{"method": "CodeAtlas.Store.Save(string)", "score": 20.0, "reason": "Covered through the CLI."}]
 
         # Act
@@ -106,7 +128,7 @@ class CrapGateTests(unittest.TestCase):
 
     def test_an_exception_without_a_reason_is_rejected(self):
         # Arrange
-        classes = [("CodeAtlas.Store", "src/CodeAtlas.Core/Store.cs", [method("Save", 4, 0)])]
+        classes = [("CodeAtlas.Store", "src/CodeAtlas.Core/Store.cs", [method("Save", 6, 0)])]
         exceptions = [{"method": "CodeAtlas.Store.Save()", "score": 20.0, "reason": " "}]
 
         # Act
@@ -121,9 +143,9 @@ class CrapGateTests(unittest.TestCase):
         classes = [
             ("CodeAtlas.Store.&lt;SaveAsync&gt;d__4", "src/CodeAtlas.Core/Store.cs", [method("MoveNext", 6, 0)]),
             ("CodeAtlas.Store.&lt;&gt;c__DisplayClass5_0", "src/CodeAtlas.Core/Store.cs",
-             [method("&lt;Load&gt;b__0", 3, 0, "(int)")]),
+             [method("&lt;Load&gt;b__0", 6, 0, "(int)")]),
             ("CodeAtlas.Store", "src/CodeAtlas.Core/Store.cs",
-             [method("&lt;Read&gt;g__Parse|7_0", 3, 0, "(string)")]),
+             [method("&lt;Read&gt;g__Parse|7_0", 6, 0, "(string)")]),
         ]
 
         # Act

@@ -1,9 +1,11 @@
 """Fail when a production method's CRAP score is above the limit and it is not a listed exception.
 
-CRAP = complexity^2 * (1 - coverage)^3 + complexity, per method, where complexity is the cyclomatic
-complexity and coverage the line coverage of that method in the Cobertura report. ReportGenerator uses
-the same formula and inputs for its risk hotspots. Only files under --include (default src/) count;
-test projects and files under obj/ (generated code) are skipped.
+CRAP = complexity^2 * (1 - coverage)^3 + complexity, per method, where coverage is the line coverage
+of that method in the Cobertura report. Complexity estimates cyclomatic complexity: Microsoft.CodeCoverage
+writes the number of IL branch outcomes in the complexity attribute, and one decision has two outcomes,
+so complexity = outcomes // 2 + 1. A branch the compiler adds counts too (a pattern in an if adds one),
+and an IL switch counts low (13 outcomes count as 6 decisions, not 12). Only files under --include
+(default src/) count; test projects and files under obj/ (generated code) are skipped.
 
 Exit codes: 0 pass, 1 a method is above the limit, 2 bad input (no coverage, an exception without a reason).
 """
@@ -30,6 +32,10 @@ CLOSURE_PARAMETER = re.compile(r"(, )?ref [^,()]*<>c__DisplayClass[^,()]*")
 
 def crap(complexity, coverage):
     return complexity ** 2 * (1 - coverage) ** 3 + complexity
+
+
+def cyclomatic(outcomes):
+    return outcomes // 2 + 1
 
 
 def source_name(class_name, method_name, signature):
@@ -87,7 +93,7 @@ def methods(paths, root, include):
             if not measured(element.get("filename", ""), root, include):
                 continue
             for entry in element.iter("method"):
-                complexity = int(entry.get("complexity"))
+                complexity = cyclomatic(int(entry.get("complexity")))
                 coverage = float(entry.get("line-rate"))
                 found.append({"method": source_name(element.get("name"), entry.get("name"), entry.get("signature", "")),
                               "file": Path(element.get("filename")).resolve().relative_to(root.resolve()).as_posix(),

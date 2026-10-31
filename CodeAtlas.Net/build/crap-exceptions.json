@@ -2,878 +2,528 @@
   "exceptions": [
     {
       "method": "CodeAtlas.BodySurface.TryHash(Microsoft.CodeAnalysis.SyntaxNode, Microsoft.CodeAnalysis.Text.SourceText)",
-      "score": 28.32,
-      "reason": "Complexity 28 is above 10 on its own, so no test can bring it under the limit (line coverage 93%). It needs a split behind behavior tests; task 02 does not refactor it."
-    },
-    {
-      "method": "CodeAtlas.BuildEnvironment.ProjectTexts",
-      "score": 12.0,
-      "reason": "Complexity 12 is above 10 on its own, so no test can bring it under the limit (line coverage 100%). It needs a split behind behavior tests; task 02 does not refactor it."
+      "score": 15.0914,
+      "reason": "Complexity 15 is above 10, so full line coverage would still score 15. It needs a split behind behavior tests: task 15."
     },
     {
       "method": "CodeAtlas.Callers.Traverse(System.Func<string, System.Collections.Generic.IReadOnlyList<CodeAtlas.StructuralFact>>, int, bool, string, int, int, System.Threading.CancellationToken)",
-      "score": 34.0,
-      "reason": "Complexity 34 is above 10 on its own, so no test can bring it under the limit (line coverage 100%). It needs a split behind behavior tests; task 02 does not refactor it."
-    },
-    {
-      "method": "CodeAtlas.Callers.Validate(string, int, int)",
-      "score": 14.0,
-      "reason": "Complexity 14 is above 10 on its own, so no test can bring it under the limit (line coverage 100%). It needs a split behind behavior tests; task 02 does not refactor it."
+      "score": 18.0,
+      "reason": "Complexity 18 is above 10, so full line coverage would still score 18. It needs a split behind behavior tests: task 15."
     },
     {
       "method": "CodeAtlas.Cli.AiPreferences.ProviderEndpoint(string, System.Func<string, string>)",
-      "score": 106.07,
-      "reason": "Complexity 32 is above 10 on its own, so no test can bring it under the limit (line coverage 58%). It needs a split behind behavior tests; task 02 does not refactor it."
+      "score": 37.9057,
+      "reason": "Complexity 17 is above 10, so full line coverage would still score 17. It needs a split behind behavior tests: task 15."
     },
     {
       "method": "CodeAtlas.Cli.AiPreferences.Select(System.Collections.Generic.IReadOnlyDictionary<string, string>, CodeAtlas.Cli.AiPreferences, System.Func<string, string>)",
-      "score": 87.84,
-      "reason": "Complexity 70 is above 10 on its own, so no test can bring it under the limit (line coverage 85%). It needs a split behind behavior tests; task 02 does not refactor it."
+      "score": 40.7192,
+      "reason": "Complexity 36 is above 10, so full line coverage would still score 36. It needs a split behind behavior tests: task 15."
     },
     {
       "method": "CodeAtlas.Cli.AiSetup.ReadSecret(string)",
-      "score": 210.0,
-      "reason": "Complexity 14 is above 10 on its own, so no test can bring it under the limit (line coverage 0%). It needs a split behind behavior tests; task 02 does not refactor it."
+      "score": 72.0,
+      "reason": "Reads the key with Console.ReadKey from a real terminal; no test has one, and StartMenuTests use a scripted console. Covering it needs a console seam, which is a production change."
     },
     {
       "method": "CodeAtlas.Cli.CredentialFileBackend.WindowsOwnerOnly(string)",
-      "score": 20.0,
+      "score": 12.0,
       "reason": "Windows-only ACL check of the fallback credential file; the gate runs on Ubuntu, where it is never called."
     },
     {
       "method": "CodeAtlas.Cli.IndexProgressReporter.Render()",
-      "score": 34.77,
-      "reason": "Complexity 25 is above 10 on its own, so no test can bring it under the limit (line coverage 75%). It needs a split behind behavior tests; task 02 does not refactor it."
-    },
-    {
-      "method": "CodeAtlas.Cli.IndexProgressReporter.Report(CodeAtlas.IndexProgress)",
-      "score": 10.1,
-      "reason": "Complexity 10 needs full coverage; the one uncovered line ignores a progress report that arrives after the reporter is disposed, a race no test provokes."
-    },
-    {
-      "method": "CodeAtlas.Cli.LiveHost.Field(System.Text.Json.Nodes.JsonObject, string, bool)",
-      "score": 12.1,
-      "reason": "The two uncovered throws reject a missing or empty request field; covering them needs live requests against a loaded solution, which LiveHostTests do only for valid fields."
-    },
-    {
-      "method": "CodeAtlas.Cli.LiveHost.Finish(string, CodeAtlas.LoadedSnapshot, CodeAtlas.IndexFreshness, object)",
-      "score": 16.0,
-      "reason": "Complexity 16 is above 10 on its own, so no test can bring it under the limit (line coverage 100%). It needs a split behind behavior tests; task 02 does not refactor it."
+      "score": 15.6406,
+      "reason": "Complexity 13 is above 10, so full line coverage would still score 13. It needs a split behind behavior tests: task 15."
     },
     {
       "method": "CodeAtlas.Cli.McpHost.CallAsync",
-      "score": 20.15,
-      "reason": "Complexity 20 is above 10 on its own, so no test can bring it under the limit (line coverage 93%). It needs a split behind behavior tests; task 02 does not refactor it."
+      "score": 11.0441,
+      "reason": "Complexity 11 is above 10, so full line coverage would still score 11. It needs a split behind behavior tests: task 15."
     },
     {
       "method": "CodeAtlas.Cli.McpHost.FindSymbolAsync",
-      "score": 18.02,
-      "reason": "Complexity 18 is above 10 on its own, so no test can bring it under the limit (line coverage 96%). It needs a split behind behavior tests; task 02 does not refactor it."
-    },
-    {
-      "method": "CodeAtlas.Cli.McpHost.HandleLineAsync",
-      "score": 15.89,
-      "reason": "Complexity 12 is above 10 on its own, so no test can bring it under the limit (line coverage 70%). It needs a split behind behavior tests; task 02 does not refactor it."
-    },
-    {
-      "method": "CodeAtlas.Cli.McpHost.Initialize(System.Text.Json.Nodes.JsonObject)",
-      "score": 14.0,
-      "reason": "Complexity 14 is above 10 on its own, so no test can bring it under the limit (line coverage 100%). It needs a split behind behavior tests; task 02 does not refactor it."
-    },
-    {
-      "method": "CodeAtlas.Cli.McpHost.KnownFailure(string, System.Exception)",
-      "score": 13.7,
-      "reason": "The uncovered arms map stale_index and SQLite-unavailable exceptions to MCP errors; reaching them needs a stale index or an unusable SQLite behind a running MCP host."
-    },
-    {
-      "method": "CodeAtlas.Cli.McpHost.OptionalInt(System.Text.Json.Nodes.JsonObject, string, int, string, int, int)",
-      "score": 12.0,
-      "reason": "Complexity 12 is above 10 on its own, so no test can bring it under the limit (line coverage 100%). It needs a split behind behavior tests; task 02 does not refactor it."
-    },
-    {
-      "method": "CodeAtlas.Cli.McpHost.ReadQuery(System.Text.Json.Nodes.JsonObject)",
-      "score": 18.0,
-      "reason": "Complexity 18 is above 10 on its own, so no test can bring it under the limit (line coverage 100%). It needs a split behind behavior tests; task 02 does not refactor it."
-    },
-    {
-      "method": "CodeAtlas.Cli.McpHost.SimpleName(string)",
-      "score": 11.38,
-      "reason": "The uncovered lines handle a name made only of '<static>' or empty segments, which no MCP test sends."
-    },
-    {
-      "method": "CodeAtlas.Cli.StartMenu.AskAsync",
-      "score": 11.38,
-      "reason": "The uncovered lines re-prompt after an empty answer that has no default; no StartMenuTests script gives one."
-    },
-    {
-      "method": "CodeAtlas.Cli.StartMenu.ChooseKeyAsync",
-      "score": 14.0,
-      "reason": "Complexity 14 is above 10 on its own, so no test can bring it under the limit (line coverage 100%). It needs a split behind behavior tests; task 02 does not refactor it."
+      "score": 10.0072,
+      "reason": "The one uncovered line returns snapshot_io_failed when input verification reports a diagnostic; no MCP test makes it do so. A test can clear this entry."
     },
     {
       "method": "CodeAtlas.Cli.StartMenu.ConfigureProviderAsync",
-      "score": 48.54,
-      "reason": "Complexity 34 is above 10 on its own, so no test can bring it under the limit (line coverage 77%). It needs a split behind behavior tests; task 02 does not refactor it."
-    },
-    {
-      "method": "CodeAtlas.Cli.StartMenu.Current()",
-      "score": 12.28,
-      "reason": "Complexity 12 is above 10 on its own, so no test can bring it under the limit (line coverage 88%). It needs a split behind behavior tests; task 02 does not refactor it."
-    },
-    {
-      "method": "CodeAtlas.Cli.StartMenu.DescribeAsync",
-      "score": 16.3,
-      "reason": "Complexity 12 is above 10 on its own, so no test can bring it under the limit (line coverage 69%). It needs a split behind behavior tests; task 02 does not refactor it."
-    },
-    {
-      "method": "CodeAtlas.Cli.StartMenu.RemoveKeyAsync",
-      "score": 16.0,
-      "reason": "Complexity 16 is above 10 on its own, so no test can bring it under the limit (line coverage 100%). It needs a split behind behavior tests; task 02 does not refactor it."
+      "score": 22.0751,
+      "reason": "Complexity 18 is above 10, so full line coverage would still score 18. It needs a split behind behavior tests: task 15."
     },
     {
       "method": "CodeAtlas.Cli.StartMenu.RunInConsoleAsync",
-      "score": 20.0,
+      "score": 12.0,
       "reason": "Wires the menu to the real console, Ctrl+C and the user's credential store, so it needs an interactive terminal; StartMenuTests drive StartMenu.RunAsync with a scripted console instead."
     },
     {
       "method": "CodeAtlas.Cli.SystemMenuConsole.ReadSecretAsync.<lambda>()",
-      "score": 156.0,
-      "reason": "Complexity 12 is above 10 on its own, so no test can bring it under the limit (line coverage 0%). It needs a split behind behavior tests; task 02 does not refactor it."
+      "score": 56.0,
+      "reason": "Reads the key with Console.ReadKey from a real terminal; no test has one, and StartMenuTests use a scripted console instead."
     },
     {
       "method": "CodeAtlas.Cli.SystemProcessRunner.Exists(string)",
-      "score": 20.0,
+      "score": 12.0,
       "reason": "Real process runner for the macOS security and Linux secret-tool commands; tests use the fake runner in CredentialTestDoubles.cs so they never touch the user's keychain."
     },
     {
       "method": "CodeAtlas.Cli.SystemProcessRunner.Run(string, System.Collections.Generic.IReadOnlyList<string>, string)",
-      "score": 72.0,
+      "score": 30.0,
       "reason": "Real process runner for the macOS security and Linux secret-tool commands; tests use the fake runner in CredentialTestDoubles.cs so they never touch the user's keychain."
     },
     {
       "method": "CodeAtlas.Cli.WindowsCredentialManagerBackend.Delete(string)",
-      "score": 42.0,
+      "score": 20.0,
       "reason": "Windows Credential Manager P/Invoke; the gate runs on Ubuntu, where it is never called, and tests use a fake keychain so they never touch the user's credentials."
     },
     {
       "method": "CodeAtlas.Cli.WindowsCredentialManagerBackend.Read(string)",
-      "score": 110.0,
+      "score": 42.0,
       "reason": "Windows Credential Manager P/Invoke; the gate runs on Ubuntu, where it is never called, and tests use a fake keychain so they never touch the user's credentials."
     },
     {
       "method": "CodeAtlas.Cli.WindowsCredentialManagerBackend.Write(string, string)",
-      "score": 42.0,
+      "score": 20.0,
       "reason": "Windows Credential Manager P/Invoke; the gate runs on Ubuntu, where it is never called, and tests use a fake keychain so they never touch the user's credentials."
     },
     {
       "method": "CodeAtlas.DocumentationCatalog.Add(Microsoft.CodeAnalysis.Project, Microsoft.CodeAnalysis.ISymbol, Microsoft.CodeAnalysis.SyntaxNode, Microsoft.CodeAnalysis.SemanticModel)",
-      "score": 18.17,
-      "reason": "Complexity 18 is above 10 on its own, so no test can bring it under the limit (line coverage 92%). It needs a split behind behavior tests; task 02 does not refactor it."
+      "score": 10.0512,
+      "reason": "The uncovered lines skip a symbol with no supported kind and throw for a symbol with no documentation id; no fixture has either. A test can clear this entry if a fixture can reach them."
     },
     {
       "method": "CodeAtlas.DocumentationCatalog.CreateAsync",
-      "score": 26.0,
-      "reason": "Complexity 26 is above 10 on its own, so no test can bring it under the limit (line coverage 100%). It needs a split behind behavior tests; task 02 does not refactor it."
+      "score": 14.0,
+      "reason": "Complexity 14 is above 10, so full line coverage would still score 14. It needs a split behind behavior tests: task 15."
     },
     {
       "method": "CodeAtlas.DocumentationCatalog.DiscoverAsync",
-      "score": 48.13,
-      "reason": "Complexity 48 is above 10 on its own, so no test can bring it under the limit (line coverage 96%). It needs a split behind behavior tests; task 02 does not refactor it."
+      "score": 25.0356,
+      "reason": "Complexity 25 is above 10, so full line coverage would still score 25. It needs a split behind behavior tests: task 15."
     },
     {
       "method": "CodeAtlas.DocumentationCatalog.ImplicitTargets(Microsoft.CodeAnalysis.ISymbol)",
-      "score": 38.15,
-      "reason": "Complexity 32 is above 10 on its own, so no test can bring it under the limit (line coverage 82%). It needs a split behind behavior tests; task 02 does not refactor it."
-    },
-    {
-      "method": "CodeAtlas.DocumentationCatalog.Kind(Microsoft.CodeAnalysis.ISymbol)",
-      "score": 14.38,
-      "reason": "Complexity 14 is above 10 on its own, so no test can bring it under the limit (line coverage 88%). It needs a split behind behavior tests; task 02 does not refactor it."
+      "score": 18.737,
+      "reason": "Complexity 17 is above 10, so full line coverage would still score 17. It needs a split behind behavior tests: task 15."
     },
     {
       "method": "CodeAtlas.DocumentationCatalog.ParameterNames(Microsoft.CodeAnalysis.ISymbol, string)",
-      "score": 54.38,
-      "reason": "Complexity 24 is above 10 on its own, so no test can bring it under the limit (line coverage 62%). It needs a split behind behavior tests; task 02 does not refactor it."
+      "score": 21.9121,
+      "reason": "Complexity 13 is above 10, so full line coverage would still score 13. It needs a split behind behavior tests: task 15."
     },
     {
       "method": "CodeAtlas.DocumentationCatalog.ResolveAsync",
-      "score": 92.76,
-      "reason": "Complexity 92 is above 10 on its own, so no test can bring it under the limit (line coverage 96%). It needs a split behind behavior tests; task 02 does not refactor it."
+      "score": 47.1983,
+      "reason": "Complexity 47 is above 10, so full line coverage would still score 47. It needs a split behind behavior tests: task 15."
     },
     {
       "method": "CodeAtlas.DocumentationCatalog.ResolveTargetAsync",
-      "score": 32.0,
-      "reason": "Complexity 32 is above 10 on its own, so no test can bring it under the limit (line coverage 100%). It needs a split behind behavior tests; task 02 does not refactor it."
-    },
-    {
-      "method": "CodeAtlas.DocumentationQueries.FindSymbols.<lambda>(CodeAtlas.DocumentedSymbol)",
-      "score": 12.0,
-      "reason": "Complexity 12 is above 10 on its own, so no test can bring it under the limit (line coverage 100%). It needs a split behind behavior tests; task 02 does not refactor it."
-    },
-    {
-      "method": "CodeAtlas.DocumentationQueries.ValidateKind(string)",
-      "score": 12.0,
-      "reason": "Complexity 12 is above 10 on its own, so no test can bring it under the limit (line coverage 100%). It needs a split behind behavior tests; task 02 does not refactor it."
-    },
-    {
-      "method": "CodeAtlas.DocumentationValidation.RequireInventoryAgreement(System.Collections.Generic.IEnumerable<CodeAtlas.DocumentedSymbol>, System.Collections.Generic.IEnumerable<CodeAtlas.MethodInfo>, System.Collections.Generic.IEnumerable<CodeAtlas.IndexedType>)",
-      "score": 16.0,
-      "reason": "Complexity 16 is above 10 on its own, so no test can bring it under the limit (line coverage 100%). It needs a split behind behavior tests; task 02 does not refactor it."
+      "score": 17.0,
+      "reason": "Complexity 17 is above 10, so full line coverage would still score 17. It needs a split behind behavior tests: task 15."
     },
     {
       "method": "CodeAtlas.DocumentationValidation.Validate(CodeAtlas.CodebaseIndex)",
-      "score": 98.0,
-      "reason": "Complexity 98 is above 10 on its own, so no test can bring it under the limit (line coverage 100%). It needs a split behind behavior tests; task 02 does not refactor it."
-    },
-    {
-      "method": "CodeAtlas.DocumentationValidation.Validate.<lambda>(CodeAtlas.DocumentationComment)",
-      "score": 16.0,
-      "reason": "Complexity 16 is above 10 on its own, so no test can bring it under the limit (line coverage 100%). It needs a split behind behavior tests; task 02 does not refactor it."
+      "score": 50.0,
+      "reason": "Complexity 50 is above 10, so full line coverage would still score 50. It needs a split behind behavior tests: task 15."
     },
     {
       "method": "CodeAtlas.DocumentationValidation.Validate.<lambda>(CodeAtlas.DocumentationIssue)",
-      "score": 42.0,
+      "score": 20.0,
       "reason": "Validates documentation issue rows of a loaded index; it never ran in the test run, so no validated index had documentation issues."
     },
     {
-      "method": "CodeAtlas.DocumentationValidation.Validate.<lambda>(CodeAtlas.DocumentationSection)",
-      "score": 18.0,
-      "reason": "Complexity 18 is above 10 on its own, so no test can bring it under the limit (line coverage 100%). It needs a split behind behavior tests; task 02 does not refactor it."
-    },
-    {
-      "method": "CodeAtlas.DocumentationValidation.Validate.Range(CodeAtlas.DocumentationRange)",
-      "score": 12.0,
-      "reason": "Complexity 12 is above 10 on its own, so no test can bring it under the limit (line coverage 100%). It needs a split behind behavior tests; task 02 does not refactor it."
-    },
-    {
       "method": "CodeAtlas.DuplicateCatalogBuilder.CreateAsync",
-      "score": 107.6,
-      "reason": "Complexity 98 is above 10 on its own, so no test can bring it under the limit (line coverage 90%). It needs a split behind behavior tests; task 02 does not refactor it."
-    },
-    {
-      "method": "CodeAtlas.DuplicateCatalogBuilder.Normalizer..ctor(Microsoft.CodeAnalysis.Solution, Microsoft.CodeAnalysis.SemanticModel, Microsoft.CodeAnalysis.IMethodSymbol, System.Func<string, string>, System.Threading.CancellationToken)",
-      "score": 16.0,
-      "reason": "Complexity 16 is above 10 on its own, so no test can bring it under the limit (line coverage 100%). It needs a split behind behavior tests; task 02 does not refactor it."
+      "score": 52.5,
+      "reason": "Complexity 50 is above 10, so full line coverage would still score 50. It needs a split behind behavior tests: task 15."
     },
     {
       "method": "CodeAtlas.DuplicateCatalogBuilder.Normalizer.SemanticContext(Microsoft.CodeAnalysis.SyntaxNode)",
-      "score": 46.26,
-      "reason": "Complexity 46 is above 10 on its own, so no test can bring it under the limit (line coverage 95%). It needs a split behind behavior tests; task 02 does not refactor it."
+      "score": 24.072,
+      "reason": "Complexity 24 is above 10, so full line coverage would still score 24. It needs a split behind behavior tests: task 15."
     },
     {
       "method": "CodeAtlas.DuplicateCatalogBuilder.Normalizer.SymbolCore(Microsoft.CodeAnalysis.ISymbol)",
-      "score": 28.11,
-      "reason": "Complexity 28 is above 10 on its own, so no test can bring it under the limit (line coverage 95%). It needs a split behind behavior tests; task 02 does not refactor it."
+      "score": 15.0328,
+      "reason": "Complexity 15 is above 10, so full line coverage would still score 15. It needs a split behind behavior tests: task 15."
     },
     {
       "method": "CodeAtlas.DuplicateCatalogBuilder.Normalizer.Token(Microsoft.CodeAnalysis.SyntaxToken)",
-      "score": 34.67,
-      "reason": "Complexity 34 is above 10 on its own, so no test can bring it under the limit (line coverage 92%). It needs a split behind behavior tests; task 02 does not refactor it."
+      "score": 18.1875,
+      "reason": "Complexity 18 is above 10, so full line coverage would still score 18. It needs a split behind behavior tests: task 15."
     },
     {
       "method": "CodeAtlas.DuplicateCatalogBuilder.Normalizer.TypeCore(Microsoft.CodeAnalysis.ITypeSymbol)",
-      "score": 41.77,
-      "reason": "Complexity 26 is above 10 on its own, so no test can bring it under the limit (line coverage 71%). It needs a split behind behavior tests; task 02 does not refactor it."
+      "score": 18.5714,
+      "reason": "Complexity 14 is above 10, so full line coverage would still score 14. It needs a split behind behavior tests: task 15."
     },
     {
       "method": "CodeAtlas.DuplicateCatalogBuilder.Unsupported(Microsoft.CodeAnalysis.CSharp.Syntax.MethodDeclarationSyntax, Microsoft.CodeAnalysis.SyntaxNode, Microsoft.CodeAnalysis.IMethodSymbol, Microsoft.CodeAnalysis.SemanticModel, System.Threading.CancellationToken)",
-      "score": 56.46,
-      "reason": "Complexity 56 is above 10 on its own, so no test can bring it under the limit (line coverage 95%). It needs a split behind behavior tests; task 02 does not refactor it."
+      "score": 29.1226,
+      "reason": "Complexity 29 is above 10, so full line coverage would still score 29. It needs a split behind behavior tests: task 15."
     },
     {
       "method": "CodeAtlas.DuplicateDetector.Differences(CodeAtlas.DuplicateBody, CodeAtlas.DuplicateBody, string[])",
-      "score": 26.0,
-      "reason": "Complexity 26 is above 10 on its own, so no test can bring it under the limit (line coverage 100%). It needs a split behind behavior tests; task 02 does not refactor it."
+      "score": 14.0,
+      "reason": "Complexity 14 is above 10, so full line coverage would still score 14. It needs a split behind behavior tests: task 15."
     },
     {
       "method": "CodeAtlas.DuplicateDetector.Scan(CodeAtlas.DuplicateBodyCatalog, string, CodeAtlas.DuplicateLimits, System.Threading.CancellationToken, System.Action<CodeAtlas.DuplicatePairTrace>)",
-      "score": 76.75,
-      "reason": "Complexity 76 is above 10 on its own, so no test can bring it under the limit (line coverage 95%). It needs a split behind behavior tests; task 02 does not refactor it."
-    },
-    {
-      "method": "CodeAtlas.DuplicateDetector.Scan.AddBucket(System.Collections.Generic.IEnumerable<int>)",
-      "score": 14.0,
-      "reason": "Complexity 14 is above 10 on its own, so no test can bring it under the limit (line coverage 100%). It needs a split behind behavior tests; task 02 does not refactor it."
-    },
-    {
-      "method": "CodeAtlas.DuplicateFinder.CreateAsync",
-      "score": 14.07,
-      "reason": "Complexity 14 is above 10 on its own, so no test can bring it under the limit (line coverage 93%). It needs a split behind behavior tests; task 02 does not refactor it."
+      "score": 39.1974,
+      "reason": "Complexity 39 is above 10, so full line coverage would still score 39. It needs a split behind behavior tests: task 15."
     },
     {
       "method": "CodeAtlas.DuplicateLimits.Validate()",
-      "score": 93.4,
-      "reason": "Complexity 86 is above 10 on its own, so no test can bring it under the limit (line coverage 90%). It needs a split behind behavior tests; task 02 does not refactor it."
+      "score": 45.936,
+      "reason": "Complexity 44 is above 10, so full line coverage would still score 44. It needs a split behind behavior tests: task 15."
     },
     {
       "method": "CodeAtlas.DuplicateSnapshotQueries.FindGroups(CodeAtlas.ISnapshotRows, string, CodeAtlas.QueryRequest, string)",
-      "score": 26.14,
-      "reason": "Complexity 26 is above 10 on its own, so no test can bring it under the limit (line coverage 94%). It needs a split behind behavior tests; task 02 does not refactor it."
+      "score": 14.0399,
+      "reason": "Complexity 14 is above 10, so full line coverage would still score 14. It needs a split behind behavior tests: task 15."
     },
     {
       "method": "CodeAtlas.DuplicateValidation.Validate(CodeAtlas.CodebaseIndex, CodeAtlas.DuplicateCatalog)",
-      "score": 74.9,
-      "reason": "Complexity 26 is above 10 on its own, so no test can bring it under the limit (line coverage 58%). It needs a split behind behavior tests; task 02 does not refactor it."
+      "score": 28.1782,
+      "reason": "Complexity 14 is above 10, so full line coverage would still score 14. It needs a split behind behavior tests: task 15."
     },
     {
       "method": "CodeAtlas.DuplicateValidation.Validate.<lambda>(System.ValueTuple<CodeAtlas.DuplicateGroup, CodeAtlas.DuplicateCandidate>)",
-      "score": 42.0,
+      "score": 20.0,
       "reason": "Compares legacy duplicate groups with their candidates; it never ran in the test run, so no validated index had legacy duplicate groups."
     },
     {
       "method": "CodeAtlas.DuplicateValidation.ValidateCurrent(CodeAtlas.CodebaseIndex, CodeAtlas.DuplicateBodyCatalog, CodeAtlas.DuplicateScan)",
-      "score": 2207.82,
-      "reason": "Complexity 236 is above 10 on its own, so no test can bring it under the limit (line coverage 67%). It needs a split behind behavior tests; task 02 does not refactor it."
+      "score": 620.346,
+      "reason": "Complexity 119 is above 10, so full line coverage would still score 119. It needs a split behind behavior tests: task 15."
     },
     {
       "method": "CodeAtlas.DuplicateValidation.ValidateCurrent.<lambda>(CodeAtlas.DuplicateDifference)",
-      "score": 210.0,
-      "reason": "Complexity 14 is above 10 on its own, so no test can bring it under the limit (line coverage 0%). It needs a split behind behavior tests; task 02 does not refactor it."
-    },
-    {
-      "method": "CodeAtlas.DuplicateValidation.ValidateCurrent.Range(CodeAtlas.DuplicateRange)",
-      "score": 12.0,
-      "reason": "Complexity 12 is above 10 on its own, so no test can bring it under the limit (line coverage 100%). It needs a split behind behavior tests; task 02 does not refactor it."
+      "score": 72.0,
+      "reason": "Validates the important differences of a duplicate candidate; it never ran in the test run, so no validated index had a candidate with differences. A test can clear this entry."
     },
     {
       "method": "CodeAtlas.Explanations.AiConfiguration..ctor(string, string, System.Uri, string, string)",
-      "score": 56.16,
-      "reason": "Complexity 56 is above 10 on its own, so no test can bring it under the limit (line coverage 96%). It needs a split behind behavior tests; task 02 does not refactor it."
+      "score": 29.0427,
+      "reason": "Complexity 29 is above 10, so full line coverage would still score 29. It needs a split behind behavior tests: task 15."
     },
     {
       "method": "CodeAtlas.Explanations.AiConfiguration.NormalizeProvider(string)",
-      "score": 37.37,
-      "reason": "Complexity 34 is above 10 on its own, so no test can bring it under the limit (line coverage 86%). It needs a split behind behavior tests; task 02 does not refactor it."
+      "score": 18.9446,
+      "reason": "Complexity 18 is above 10, so full line coverage would still score 18. It needs a split behind behavior tests: task 15."
     },
     {
       "method": "CodeAtlas.Explanations.AiProviderClient.CompleteAsync",
-      "score": 71.88,
-      "reason": "Complexity 70 is above 10 on its own, so no test can bring it under the limit (line coverage 93%). It needs a split behind behavior tests; task 02 does not refactor it."
+      "score": 36.4985,
+      "reason": "Complexity 36 is above 10, so full line coverage would still score 36. It needs a split behind behavior tests: task 15."
     },
     {
       "method": "CodeAtlas.Explanations.ExplanationFiles.InsideRoot(string, string)",
-      "score": 27.8,
-      "reason": "Complexity 24 is above 10 on its own, so no test can bring it under the limit (line coverage 81%). It needs a split behind behavior tests; task 02 does not refactor it."
+      "score": 14.114,
+      "reason": "Complexity 13 is above 10, so full line coverage would still score 13. It needs a split behind behavior tests: task 15."
     },
     {
       "method": "CodeAtlas.Explanations.ExplanationGenerator.GenerateAsync",
-      "score": 18.01,
-      "reason": "Complexity 18 is above 10 on its own, so no test can bring it under the limit (line coverage 97%). It needs a split behind behavior tests; task 02 does not refactor it."
-    },
-    {
-      "method": "CodeAtlas.Explanations.ExplanationGenerator.GenerateAsync.<lambda>(CodeAtlas.Explanations.ExplanationGenerator.GeneratedClaim)",
-      "score": 12.0,
-      "reason": "Complexity 12 is above 10 on its own, so no test can bring it under the limit (line coverage 100%). It needs a split behind behavior tests; task 02 does not refactor it."
+      "score": 10.0037,
+      "reason": "The one uncovered line refuses a generated explanation above its response byte budget; no test returns one. A test can clear this entry."
     },
     {
       "method": "CodeAtlas.Explanations.ExplanationLimits.Validate()",
-      "score": 36.0,
-      "reason": "Complexity 36 is above 10 on its own, so no test can bring it under the limit (line coverage 100%). It needs a split behind behavior tests; task 02 does not refactor it."
+      "score": 19.0,
+      "reason": "Complexity 19 is above 10, so full line coverage would still score 19. It needs a split behind behavior tests: task 15."
     },
     {
       "method": "CodeAtlas.Explanations.ExplanationRequestBuilder.BuildAsync",
-      "score": 135.24,
-      "reason": "Complexity 100 is above 10 on its own, so no test can bring it under the limit (line coverage 85%). It needs a split behind behavior tests; task 02 does not refactor it."
+      "score": 60.1656,
+      "reason": "Complexity 51 is above 10, so full line coverage would still score 51. It needs a split behind behavior tests: task 15."
     },
     {
       "method": "CodeAtlas.Explanations.ExplanationRequestBuilder.BuildAsync.Read",
-      "score": 24.58,
-      "reason": "Complexity 24 is above 10 on its own, so no test can bring it under the limit (line coverage 90%). It needs a split behind behavior tests; task 02 does not refactor it."
+      "score": 13.169,
+      "reason": "Complexity 13 is above 10, so full line coverage would still score 13. It needs a split behind behavior tests: task 15."
     },
     {
       "method": "CodeAtlas.Explanations.ExplanationRequestBuilder.FindDeclaration(string, CodeAtlas.SourcePosition, CodeAtlas.DocumentedSymbol, System.Threading.CancellationToken)",
-      "score": 62.71,
-      "reason": "Complexity 42 is above 10 on its own, so no test can bring it under the limit (line coverage 77%). It needs a split behind behavior tests; task 02 does not refactor it."
+      "score": 27.6818,
+      "reason": "Complexity 22 is above 10, so full line coverage would still score 22. It needs a split behind behavior tests: task 15."
     },
     {
       "method": "CodeAtlas.Explanations.ExplanationRequestBuilder.FindDeclaration.<lambda>(Microsoft.CodeAnalysis.CSharp.Syntax.VariableDeclaratorSyntax)",
-      "score": 42.0,
+      "score": 20.0,
       "reason": "Finds the declaration of a field for an explanation request; it never ran in the test run, so no test requested an explanation of a field."
     },
     {
-      "method": "CodeAtlas.Explanations.ExplanationRequestBuilder.FindDeclaration.<lambda>(Microsoft.CodeAnalysis.SyntaxTrivia)",
-      "score": 12.0,
-      "reason": "Complexity 12 is above 10 on its own, so no test can bring it under the limit (line coverage 100%). It needs a split behind behavior tests; task 02 does not refactor it."
-    },
-    {
       "method": "CodeAtlas.Explanations.ExplanationRequestBuilder.VerifyContextInputsAsync",
-      "score": 48.2,
-      "reason": "Complexity 40 is above 10 on its own, so no test can bring it under the limit (line coverage 83%). It needs a split behind behavior tests; task 02 does not refactor it."
-    },
-    {
-      "method": "CodeAtlas.Explanations.ExplanationService.CacheFailure(System.Exception)",
-      "score": 12.0,
-      "reason": "Complexity 12 is above 10 on its own, so no test can bring it under the limit (line coverage 100%). It needs a split behind behavior tests; task 02 does not refactor it."
-    },
-    {
-      "method": "CodeAtlas.Explanations.ExplanationService.ExportAsync",
-      "score": 12.04,
-      "reason": "Complexity 12 is above 10 on its own, so no test can bring it under the limit (line coverage 94%). It needs a split behind behavior tests; task 02 does not refactor it."
-    },
-    {
-      "method": "CodeAtlas.Explanations.ExplanationService.GetForSymbolAsync",
-      "score": 10.34,
-      "reason": "Complexity 10 needs full coverage; the uncovered lines are the unknown-symbol and unverifiable-dependency errors and the no-explanation result."
+      "score": 23.2602,
+      "reason": "Complexity 21 is above 10, so full line coverage would still score 21. It needs a split behind behavior tests: task 15."
     },
     {
       "method": "CodeAtlas.Explanations.ExplanationService.GetSearchableAsync",
-      "score": 18.07,
-      "reason": "Complexity 18 is above 10 on its own, so no test can bring it under the limit (line coverage 94%). It needs a split behind behavior tests; task 02 does not refactor it."
-    },
-    {
-      "method": "CodeAtlas.Explanations.ExplanationService.LoadAcceptedAsync",
-      "score": 12.28,
-      "reason": "Complexity 12 is above 10 on its own, so no test can bring it under the limit (line coverage 88%). It needs a split behind behavior tests; task 02 does not refactor it."
+      "score": 10.0223,
+      "reason": "The two uncovered lines refuse a symbol pointer that does not match its file or request; no test damages a pointer. A test can clear this entry."
     },
     {
       "method": "CodeAtlas.Explanations.ExplanationService.ValidateRequest(CodeAtlas.Explanations.ExplanationRequest, string)",
-      "score": 79.8,
-      "reason": "Complexity 62 is above 10 on its own, so no test can bring it under the limit (line coverage 83%). It needs a split behind behavior tests; task 02 does not refactor it."
-    },
-    {
-      "method": "CodeAtlas.Explanations.ExplanationService.ValidateRequest.<lambda>(CodeAtlas.Explanations.ExplanationEvidence)",
-      "score": 12.0,
-      "reason": "Complexity 12 is above 10 on its own, so no test can bring it under the limit (line coverage 100%). It needs a split behind behavior tests; task 02 does not refactor it."
+      "score": 36.7407,
+      "reason": "Complexity 32 is above 10, so full line coverage would still score 32. It needs a split behind behavior tests: task 15."
     },
     {
       "method": "CodeAtlas.Explanations.ExplanationService.ValidateResponse(CodeAtlas.Explanations.ExplanationRequest, CodeAtlas.Explanations.ExplanationResponse)",
-      "score": 78.57,
-      "reason": "Complexity 78 is above 10 on its own, so no test can bring it under the limit (line coverage 95%). It needs a split behind behavior tests; task 02 does not refactor it."
-    },
-    {
-      "method": "CodeAtlas.Explanations.ExplanationSnapshotAdapter.ForSearch(CodeAtlas.LoadedSnapshot)",
-      "score": 12.67,
-      "reason": "Complexity 12 is above 10 on its own, so no test can bring it under the limit (line coverage 83%). It needs a split behind behavior tests; task 02 does not refactor it."
-    },
-    {
-      "method": "CodeAtlas.Explanations.ExplanationSnapshotAdapter.ForSnapshot(CodeAtlas.LoadedSnapshot)",
-      "score": 15.36,
-      "reason": "Complexity 12 is above 10 on its own, so no test can bring it under the limit (line coverage 71%). It needs a split behind behavior tests; task 02 does not refactor it."
+      "score": 40.1503,
+      "reason": "Complexity 40 is above 10, so full line coverage would still score 40. It needs a split behind behavior tests: task 15."
     },
     {
       "method": "CodeAtlas.IncrementalGate.Decide(CodeAtlas.CodebaseIndex, CodeAtlas.IncrementalSnapshotState, CodeAtlas.IncrementalSnapshotState, CodeAtlas.SnapshotInputManifest, string)",
-      "score": 155.32,
-      "reason": "Complexity 102 is above 10 on its own, so no test can bring it under the limit (line coverage 83%). It needs a split behind behavior tests; task 02 does not refactor it."
+      "score": 65.8587,
+      "reason": "Complexity 52 is above 10, so full line coverage would still score 52. It needs a split behind behavior tests: task 15."
     },
     {
       "method": "CodeAtlas.IncrementalGate.WellFormed(CodeAtlas.IncrementalSnapshotState)",
-      "score": 28.0,
-      "reason": "Complexity 28 is above 10 on its own, so no test can bring it under the limit (line coverage 100%). It needs a split behind behavior tests; task 02 does not refactor it."
+      "score": 15.0,
+      "reason": "Complexity 15 is above 10, so full line coverage would still score 15. It needs a split behind behavior tests: task 15."
     },
     {
       "method": "CodeAtlas.IncrementalGate.WellFormed.<lambda>(CodeAtlas.IncrementalTreeState)",
-      "score": 20.0,
-      "reason": "Complexity 20 is above 10 on its own, so no test can bring it under the limit (line coverage 100%). It needs a split behind behavior tests; task 02 does not refactor it."
-    },
-    {
-      "method": "CodeAtlas.IndexStore.AttachCatalog(CodeAtlas.CodebaseIndex, CodeAtlas.SymbolCatalogFile)",
-      "score": 16.35,
-      "reason": "Complexity 16 is above 10 on its own, so no test can bring it under the limit (line coverage 89%). It needs a split behind behavior tests; task 02 does not refactor it."
-    },
-    {
-      "method": "CodeAtlas.IndexStore.ExportJsonAsync",
-      "score": 10.51,
-      "reason": "Complexity 10 needs full coverage; the uncovered lines are the unverified-generation refusal and the store and I/O failure mappings of export-json."
+      "score": 11.0,
+      "reason": "Complexity 11 is above 10, so full line coverage would still score 11. It needs a split behind behavior tests: task 15."
     },
     {
       "method": "CodeAtlas.IndexStore.LoadSnapshotCoreAsync",
-      "score": 39.01,
-      "reason": "Complexity 38 is above 10 on its own, so no test can bring it under the limit (line coverage 91%). It needs a split behind behavior tests; task 02 does not refactor it."
+      "score": 20.2809,
+      "reason": "Complexity 20 is above 10, so full line coverage would still score 20. It needs a split behind behavior tests: task 15."
     },
     {
       "method": "CodeAtlas.IndexStore.Overview(CodeAtlas.CodebaseIndex)",
-      "score": 20.1,
-      "reason": "Complexity 20 is above 10 on its own, so no test can bring it under the limit (line coverage 94%). It needs a split behind behavior tests; task 02 does not refactor it."
+      "score": 11.0295,
+      "reason": "Complexity 11 is above 10, so full line coverage would still score 11. It needs a split behind behavior tests: task 15."
     },
     {
       "method": "CodeAtlas.IndexStore.Validate(CodeAtlas.CodebaseIndex, bool)",
-      "score": 90.76,
-      "reason": "Complexity 90 is above 10 on its own, so no test can bring it under the limit (line coverage 95%). It needs a split behind behavior tests; task 02 does not refactor it."
-    },
-    {
-      "method": "CodeAtlas.IndexStore.Validate.<lambda>(CodeAtlas.IndexedProject)",
-      "score": 12.0,
-      "reason": "Complexity 12 is above 10 on its own, so no test can bring it under the limit (line coverage 100%). It needs a split behind behavior tests; task 02 does not refactor it."
-    },
-    {
-      "method": "CodeAtlas.IndexStore.Validate.<lambda>(CodeAtlas.MethodInfo)",
-      "score": 12.0,
-      "reason": "Complexity 12 is above 10 on its own, so no test can bring it under the limit (line coverage 100%). It needs a split behind behavior tests; task 02 does not refactor it."
+      "score": 46.1987,
+      "reason": "Complexity 46 is above 10, so full line coverage would still score 46. It needs a split behind behavior tests: task 15."
     },
     {
       "method": "CodeAtlas.IndexStore.ValidateHeader(CodeAtlas.CodebaseIndex)",
-      "score": 84.0,
-      "reason": "Complexity 36 is above 10 on its own, so no test can bring it under the limit (line coverage 67%). It needs a split behind behavior tests; task 02 does not refactor it."
+      "score": 32.3704,
+      "reason": "Complexity 19 is above 10, so full line coverage would still score 19. It needs a split behind behavior tests: task 15."
     },
     {
       "method": "CodeAtlas.InputTracker.Collect(System.IO.DirectoryInfo, System.Collections.Generic.HashSet<string>, System.Threading.CancellationToken, string)",
-      "score": 20.0,
-      "reason": "Complexity 20 is above 10 on its own, so no test can bring it under the limit (line coverage 100%). It needs a split behind behavior tests; task 02 does not refactor it."
+      "score": 11.0,
+      "reason": "Complexity 11 is above 10, so full line coverage would still score 11. It needs a split behind behavior tests: task 15."
     },
     {
       "method": "CodeAtlas.LiveIndexSession.CheckedAsync",
-      "score": 20.0,
+      "score": 12.0,
       "reason": "Full freshness check for a generation other than the session's own; it never ran in the test run, so no live session test queried such a generation."
     },
     {
       "method": "CodeAtlas.MemorySnapshotRows.DuplicateCandidates.<lambda>(CodeAtlas.DuplicateCandidate)",
-      "score": 110.0,
+      "score": 42.0,
       "reason": "Filters duplicate candidates of an in-memory (legacy JSON) snapshot; it never ran in the test run, so no legacy snapshot in the tests had duplicate candidates."
     },
     {
       "method": "CodeAtlas.Persistence.GenerationStore.PublishAsync",
-      "score": 28.45,
-      "reason": "Complexity 28 is above 10 on its own, so no test can bring it under the limit (line coverage 92%). It needs a split behind behavior tests; task 02 does not refactor it."
-    },
-    {
-      "method": "CodeAtlas.Persistence.GenerationStore.ReadVerifiedAsync",
-      "score": 12.28,
-      "reason": "Complexity 12 is above 10 on its own, so no test can bring it under the limit (line coverage 88%). It needs a split behind behavior tests; task 02 does not refactor it."
+      "score": 15.1302,
+      "reason": "Complexity 15 is above 10, so full line coverage would still score 15. It needs a split behind behavior tests: task 15."
     },
     {
       "method": "CodeAtlas.Persistence.GenerationStore.ResolveAsync",
-      "score": 34.34,
-      "reason": "Complexity 34 is above 10 on its own, so no test can bring it under the limit (line coverage 93%). It needs a split behind behavior tests; task 02 does not refactor it."
-    },
-    {
-      "method": "CodeAtlas.Persistence.GenerationStore.ResolveAsync.<lambda>(string)",
-      "score": 12.0,
-      "reason": "Complexity 12 is above 10 on its own, so no test can bring it under the limit (line coverage 100%). It needs a split behind behavior tests; task 02 does not refactor it."
+      "score": 18.096,
+      "reason": "Complexity 18 is above 10, so full line coverage would still score 18. It needs a split behind behavior tests: task 15."
     },
     {
       "method": "CodeAtlas.PurposeOverlap.Build(CodeAtlas.DocumentedSymbol[], CodeAtlas.StructuralCatalog, CodeAtlas.DuplicateCatalog, string, string, CodeAtlas.QueryRequest, System.Threading.CancellationToken)",
-      "score": 24.0,
-      "reason": "Complexity 24 is above 10 on its own, so no test can bring it under the limit (line coverage 100%). It needs a split behind behavior tests; task 02 does not refactor it."
+      "score": 13.0,
+      "reason": "Complexity 13 is above 10, so full line coverage would still score 13. It needs a split behind behavior tests: task 15."
     },
     {
       "method": "CodeAtlas.PurposeOverlap.Build.<lambda>(CodeAtlas.DuplicateCandidate)",
-      "score": 42.0,
+      "score": 20.0,
       "reason": "Matches a purpose overlap to a structural duplicate candidate; it never ran in the test run, so no purpose-overlap test had structural candidates."
     },
     {
-      "method": "CodeAtlas.PurposeSearch.AddFieldLengths(System.Collections.Generic.IEnumerable<CodeAtlas.PurposeSearch.SearchField>, System.Collections.Generic.HashSet<System.ValueTuple<string, string, CodeAtlas.DocumentationRange, string>>, System.Collections.Generic.Dictionary<string, System.ValueTuple<long, int>>)",
-      "score": 14.0,
-      "reason": "Complexity 14 is above 10 on its own, so no test can bring it under the limit (line coverage 100%). It needs a split behind behavior tests; task 02 does not refactor it."
-    },
-    {
       "method": "CodeAtlas.PurposeSearch.BuildStoreIndex(CodeAtlas.DocumentedSymbol[], CodeAtlas.StructuralCatalog, System.Action<int, System.Collections.Generic.IReadOnlyCollection<System.Collections.Generic.KeyValuePair<string, bool>>>, System.Threading.CancellationToken)",
-      "score": 24.0,
-      "reason": "Complexity 24 is above 10 on its own, so no test can bring it under the limit (line coverage 100%). It needs a split behind behavior tests; task 02 does not refactor it."
+      "score": 13.0,
+      "reason": "Complexity 13 is above 10, so full line coverage would still score 13. It needs a split behind behavior tests: task 15."
     },
     {
       "method": "CodeAtlas.PurposeSearch.DeferredContracts(System.Collections.Generic.IReadOnlyCollection<CodeAtlas.RankedSymbol>, CodeAtlas.ISearchCorpus, string, System.Threading.CancellationToken)",
-      "score": 28.0,
-      "reason": "Complexity 28 is above 10 on its own, so no test can bring it under the limit (line coverage 100%). It needs a split behind behavior tests; task 02 does not refactor it."
+      "score": 15.0,
+      "reason": "Complexity 15 is above 10, so full line coverage would still score 15. It needs a split behind behavior tests: task 15."
     },
     {
       "method": "CodeAtlas.PurposeSearch.Fields",
-      "score": 42.0,
-      "reason": "Complexity 42 is above 10 on its own, so no test can bring it under the limit (line coverage 100%). It needs a split behind behavior tests; task 02 does not refactor it."
+      "score": 22.0,
+      "reason": "Complexity 22 is above 10, so full line coverage would still score 22. It needs a split behind behavior tests: task 15."
     },
     {
       "method": "CodeAtlas.PurposeSearch.FoldInflection(string)",
-      "score": 58.0,
-      "reason": "Complexity 58 is above 10 on its own, so no test can bring it under the limit (line coverage 100%). It needs a split behind behavior tests; task 02 does not refactor it."
-    },
-    {
-      "method": "CodeAtlas.PurposeSearch.FoldPlural(string)",
-      "score": 12.0,
-      "reason": "Complexity 12 is above 10 on its own, so no test can bring it under the limit (line coverage 100%). It needs a split behind behavior tests; task 02 does not refactor it."
+      "score": 30.0,
+      "reason": "Complexity 30 is above 10, so full line coverage would still score 30. It needs a split behind behavior tests: task 15."
     },
     {
       "method": "CodeAtlas.PurposeSearch.Search(CodeAtlas.ISearchCorpus, string, string, string, CodeAtlas.QueryRequest, string, string, System.Threading.CancellationToken, System.Collections.Generic.IReadOnlyDictionary<string, CodeAtlas.Explanations.AcceptedExplanation>)",
-      "score": 82.03,
-      "reason": "Complexity 82 is above 10 on its own, so no test can bring it under the limit (line coverage 98%). It needs a split behind behavior tests; task 02 does not refactor it."
-    },
-    {
-      "method": "CodeAtlas.PurposeSearch.Search.Weight(CodeAtlas.PurposeSearch.SearchField)",
-      "score": 12.0,
-      "reason": "Complexity 12 is above 10 on its own, so no test can bring it under the limit (line coverage 100%). It needs a split behind behavior tests; task 02 does not refactor it."
-    },
-    {
-      "method": "CodeAtlas.PurposeSearch.Validate(string, string, string, string)",
-      "score": 17.06,
-      "reason": "Complexity 14 is above 10 on its own, so no test can bring it under the limit (line coverage 75%). It needs a split behind behavior tests; task 02 does not refactor it."
+      "score": 42.0071,
+      "reason": "Complexity 42 is above 10, so full line coverage would still score 42. It needs a split behind behavior tests: task 15."
     },
     {
       "method": "CodeAtlas.PurposeSnapshotQueries.GetFactsAsync",
-      "score": 34.17,
-      "reason": "Complexity 30 is above 10 on its own, so no test can bring it under the limit (line coverage 83%). It needs a split behind behavior tests; task 02 does not refactor it."
+      "score": 17.1852,
+      "reason": "Complexity 16 is above 10, so full line coverage would still score 16. It needs a split behind behavior tests: task 15."
     },
     {
       "method": "CodeAtlas.PurposeSnapshotQueries.SearchAsync",
-      "score": 24.26,
-      "reason": "Complexity 24 is above 10 on its own, so no test can bring it under the limit (line coverage 92%). It needs a split behind behavior tests; task 02 does not refactor it."
-    },
-    {
-      "method": "CodeAtlas.QueryPaging.References(System.Collections.Generic.IEnumerable<CodeAtlas.SourceReference>, CodeAtlas.QueryRequest, string)",
-      "score": 12.0,
-      "reason": "Complexity 12 is above 10 on its own, so no test can bring it under the limit (line coverage 100%). It needs a split behind behavior tests; task 02 does not refactor it."
+      "score": 13.0769,
+      "reason": "Complexity 13 is above 10, so full line coverage would still score 13. It needs a split behind behavior tests: task 15."
     },
     {
       "method": "CodeAtlas.QueryRequest.ValidateOptions(bool, bool)",
-      "score": 22.36,
-      "reason": "Complexity 22 is above 10 on its own, so no test can bring it under the limit (line coverage 91%). It needs a split behind behavior tests; task 02 does not refactor it."
-    },
-    {
-      "method": "CodeAtlas.SnapshotInputModel.CaptureAsync",
-      "score": 14.0,
-      "reason": "Complexity 14 is above 10 on its own, so no test can bring it under the limit (line coverage 100%). It needs a split behind behavior tests; task 02 does not refactor it."
+      "score": 12.1082,
+      "reason": "Complexity 12 is above 10, so full line coverage would still score 12. It needs a split behind behavior tests: task 15."
     },
     {
       "method": "CodeAtlas.SnapshotInputModel.CheckAsync",
-      "score": 28.69,
-      "reason": "Complexity 22 is above 10 on its own, so no test can bring it under the limit (line coverage 76%). It needs a split behind behavior tests; task 02 does not refactor it."
-    },
-    {
-      "method": "CodeAtlas.SnapshotInputModel.Classify(CodeAtlas.BuildInputEvidence, System.Collections.Generic.IEnumerable<CodeAtlas.CoverageIssue>)",
-      "score": 16.0,
-      "reason": "Complexity 16 is above 10 on its own, so no test can bring it under the limit (line coverage 100%). It needs a split behind behavior tests; task 02 does not refactor it."
-    },
-    {
-      "method": "CodeAtlas.SnapshotInputModel.Collect(System.IO.DirectoryInfo, CodeAtlas.InputDiscoveryScope, System.Collections.Generic.HashSet<string>, System.Collections.Generic.List<CodeAtlas.CoverageIssue>, System.Threading.CancellationToken)",
-      "score": 14.0,
-      "reason": "Complexity 14 is above 10 on its own, so no test can bring it under the limit (line coverage 100%). It needs a split behind behavior tests; task 02 does not refactor it."
-    },
-    {
-      "method": "CodeAtlas.SnapshotInputModel.EnvironmentValue(System.Collections.Generic.IReadOnlyDictionary<string, string>, string)",
-      "score": 13.7,
-      "reason": "The uncovered fallback finds an environment name that differs only in case; it can match only on Windows, where the path comparer ignores case, and the gate runs on Ubuntu."
+      "score": 13.9907,
+      "reason": "Complexity 12 is above 10, so full line coverage would still score 12. It needs a split behind behavior tests: task 15."
     },
     {
       "method": "CodeAtlas.SnapshotInputModel.Validate(CodeAtlas.SnapshotInputManifest)",
-      "score": 68.0,
-      "reason": "Complexity 68 is above 10 on its own, so no test can bring it under the limit (line coverage 100%). It needs a split behind behavior tests; task 02 does not refactor it."
-    },
-    {
-      "method": "CodeAtlas.SnapshotInputModel.Validate.<lambda>(CodeAtlas.InputDiscoveryScope)",
-      "score": 12.0,
-      "reason": "Complexity 12 is above 10 on its own, so no test can bring it under the limit (line coverage 100%). It needs a split behind behavior tests; task 02 does not refactor it."
+      "score": 35.0,
+      "reason": "Complexity 35 is above 10, so full line coverage would still score 35. It needs a split behind behavior tests: task 15."
     },
     {
       "method": "CodeAtlas.SolutionAnalysis.AddLocationsAsync",
-      "score": 22.0,
-      "reason": "Complexity 22 is above 10 on its own, so no test can bring it under the limit (line coverage 100%). It needs a split behind behavior tests; task 02 does not refactor it."
+      "score": 12.0,
+      "reason": "Complexity 12 is above 10, so full line coverage would still score 12. It needs a split behind behavior tests: task 15."
     },
     {
       "method": "CodeAtlas.SolutionAnalysis.AnalyzeLoadedSolutionAsync",
-      "score": 18.0,
-      "reason": "Complexity 18 is above 10 on its own, so no test can bring it under the limit (line coverage 99%). It needs a split behind behavior tests; task 02 does not refactor it."
+      "score": 10.0002,
+      "reason": "The one uncovered line deletes the spill file when creating the spill database fails; no test makes that fail."
     },
     {
       "method": "CodeAtlas.SolutionAnalysis.ApplyBenchmarkOverlayAsync",
-      "score": 26.51,
-      "reason": "Complexity 26 is above 10 on its own, so no test can bring it under the limit (line coverage 91%). It needs a split behind behavior tests; task 02 does not refactor it."
-    },
-    {
-      "method": "CodeAtlas.SolutionAnalysis.ApplyDocumentText(string, string)",
-      "score": 10.05,
-      "reason": "Complexity 10 needs full coverage; the uncovered line throws when the Roslyn workspace rejects a text change, which needs a faulty workspace."
-    },
-    {
-      "method": "CodeAtlas.SolutionAnalysis.CanonicalReferences(System.Collections.Generic.IEnumerable<CodeAtlas.SourceReference>)",
-      "score": 12.0,
-      "reason": "Complexity 12 is above 10 on its own, so no test can bring it under the limit (line coverage 100%). It needs a split behind behavior tests; task 02 does not refactor it."
+      "score": 14.1473,
+      "reason": "Complexity 14 is above 10, so full line coverage would still score 14. It needs a split behind behavior tests: task 15."
     },
     {
       "method": "CodeAtlas.SolutionAnalysis.CaptureIncrementalStateAsync",
-      "score": 65.94,
-      "reason": "Complexity 64 is above 10 on its own, so no test can bring it under the limit (line coverage 92%). It needs a split behind behavior tests; task 02 does not refactor it."
-    },
-    {
-      "method": "CodeAtlas.SolutionAnalysis.CaptureOptionProperties(object, System.Collections.Generic.List<string>, string)",
-      "score": 10.37,
-      "reason": "The uncovered catch handles a compilation option Roslyn cannot read; no fixture project has one."
+      "score": 33.5152,
+      "reason": "Complexity 33 is above 10, so full line coverage would still score 33. It needs a split behind behavior tests: task 15."
     },
     {
       "method": "CodeAtlas.SolutionAnalysis.CollectBuildInputs(string[], string[], bool)",
-      "score": 47.51,
-      "reason": "Complexity 46 is above 10 on its own, so no test can bring it under the limit (line coverage 91%). It needs a split behind behavior tests; task 02 does not refactor it."
+      "score": 24.41,
+      "reason": "Complexity 24 is above 10, so full line coverage would still score 24. It needs a split behind behavior tests: task 15."
     },
     {
       "method": "CodeAtlas.SolutionAnalysis.CollectRefreshReferencesAsync",
-      "score": 50.39,
-      "reason": "Complexity 50 is above 10 on its own, so no test can bring it under the limit (line coverage 95%). It needs a split behind behavior tests; task 02 does not refactor it."
-    },
-    {
-      "method": "CodeAtlas.SolutionAnalysis.CollectWorkspaceInputs(CodeAtlas.SolutionAnalysis, string, bool)",
-      "score": 14.0,
-      "reason": "Complexity 14 is above 10 on its own, so no test can bring it under the limit (line coverage 100%). It needs a split behind behavior tests; task 02 does not refactor it."
+      "score": 26.1068,
+      "reason": "Complexity 26 is above 10, so full line coverage would still score 26. It needs a split behind behavior tests: task 15."
     },
     {
       "method": "CodeAtlas.SolutionAnalysis.CreateIndexCoreAsync",
-      "score": 44.74,
-      "reason": "Complexity 44 is above 10 on its own, so no test can bring it under the limit (line coverage 93%). It needs a split behind behavior tests; task 02 does not refactor it."
+      "score": 23.2035,
+      "reason": "Complexity 23 is above 10, so full line coverage would still score 23. It needs a split behind behavior tests: task 15."
     },
     {
       "method": "CodeAtlas.SolutionAnalysis.DescribeMethods(System.Collections.Generic.IEnumerable<Microsoft.CodeAnalysis.ISymbol>)",
-      "score": 20.0,
-      "reason": "Complexity 20 is above 10 on its own, so no test can bring it under the limit (line coverage 100%). It needs a split behind behavior tests; task 02 does not refactor it."
+      "score": 11.0,
+      "reason": "Complexity 11 is above 10, so full line coverage would still score 11. It needs a split behind behavior tests: task 15."
     },
     {
       "method": "CodeAtlas.SolutionAnalysis.EncodeOption(object)",
-      "score": 20.3,
-      "reason": "Complexity 20 is above 10 on its own, so no test can bring it under the limit (line coverage 91%). It needs a split behind behavior tests; task 02 does not refactor it."
+      "score": 11.0909,
+      "reason": "Complexity 11 is above 10, so full line coverage would still score 11. It needs a split behind behavior tests: task 15."
     },
     {
       "method": "CodeAtlas.SolutionAnalysis.EvaluateBuildInputs()",
-      "score": 24.0,
-      "reason": "Complexity 24 is above 10 on its own, so no test can bring it under the limit (line coverage 100%). It needs a split behind behavior tests; task 02 does not refactor it."
-    },
-    {
-      "method": "CodeAtlas.SolutionAnalysis.FileRowsAsync",
-      "score": 10.01,
-      "reason": "Complexity 10 needs full coverage; the uncovered line throws for a path that is not an open source document, which no test passes."
+      "score": 13.0,
+      "reason": "Complexity 13 is above 10, so full line coverage would still score 13. It needs a split behind behavior tests: task 15."
     },
     {
       "method": "CodeAtlas.SolutionAnalysis.FindReferencesCoreAsync",
-      "score": 32.07,
-      "reason": "Complexity 32 is above 10 on its own, so no test can bring it under the limit (line coverage 96%). It needs a split behind behavior tests; task 02 does not refactor it."
+      "score": 17.0209,
+      "reason": "Complexity 17 is above 10, so full line coverage would still score 17. It needs a split behind behavior tests: task 15."
     },
     {
       "method": "CodeAtlas.SolutionAnalysis.ImplementationsMissingLocationsAsync",
-      "score": 30.0,
-      "reason": "Complexity 30 is above 10 on its own, so no test can bring it under the limit (line coverage 100%). It needs a split behind behavior tests; task 02 does not refactor it."
-    },
-    {
-      "method": "CodeAtlas.SolutionAnalysis.IndexedTypes(System.Collections.Generic.IEnumerable<Microsoft.CodeAnalysis.ISymbol>)",
-      "score": 18.0,
-      "reason": "Complexity 18 is above 10 on its own, so no test can bring it under the limit (line coverage 100%). It needs a split behind behavior tests; task 02 does not refactor it."
+      "score": 16.0,
+      "reason": "Complexity 16 is above 10, so full line coverage would still score 16. It needs a split behind behavior tests: task 15."
     },
     {
       "method": "CodeAtlas.SolutionAnalysis.LoadRegisteredAsync",
-      "score": 34.73,
-      "reason": "Complexity 34 is above 10 on its own, so no test can bring it under the limit (line coverage 91%). It needs a split behind behavior tests; task 02 does not refactor it."
-    },
-    {
-      "method": "CodeAtlas.SolutionAnalysis.UpdateWorkingCopyAsync",
-      "score": 10.02,
-      "reason": "Complexity 10 needs full coverage; the uncovered line throws when linked documents disagree on their path, which no fixture produces."
-    },
-    {
-      "method": "CodeAtlas.SourcePaths.Adopt(Microsoft.CodeAnalysis.Workspace, Microsoft.CodeAnalysis.Solution)",
-      "score": 11.38,
-      "reason": "The uncovered catch reports a failed reflective path update inside Roslyn; it guards against a Roslyn version change and cannot be provoked by a test."
+      "score": 18.204,
+      "reason": "Complexity 18 is above 10, so full line coverage would still score 18. It needs a split behind behavior tests: task 15."
     },
     {
       "method": "CodeAtlas.SourcePaths.CollapseProject(Microsoft.CodeAnalysis.Solution, Microsoft.CodeAnalysis.ProjectId, string, System.Collections.Generic.ICollection<string>)",
-      "score": 26.0,
-      "reason": "Complexity 26 is above 10 on its own, so no test can bring it under the limit (line coverage 100%). It needs a split behind behavior tests; task 02 does not refactor it."
-    },
-    {
-      "method": "CodeAtlas.SourcePaths.OpenFiles",
-      "score": 12.42,
-      "reason": "Complexity 12 is above 10 on its own, so no test can bring it under the limit (line coverage 86%). It needs a split behind behavior tests; task 02 does not refactor it."
-    },
-    {
-      "method": "CodeAtlas.SourcePaths.Remove(Microsoft.CodeAnalysis.Solution, CodeAtlas.SourcePaths.OpenFile)",
-      "score": 13.7,
-      "reason": "The uncovered arms remove additional and analyzer-config documents; the edited files in the tests are C# documents."
+      "score": 14.0,
+      "reason": "Complexity 14 is above 10, so full line coverage would still score 14. It needs a split behind behavior tests: task 15."
     },
     {
       "method": "CodeAtlas.SqliteAvailability.RegisterSystemFallback.<lambda>(string, System.Reflection.Assembly, System.Nullable<System.Runtime.InteropServices.DllImportSearchPath>)",
-      "score": 54.67,
-      "reason": "Complexity 12 is above 10 on its own, so no test can bring it under the limit (line coverage 33%). It needs a split behind behavior tests; task 02 does not refactor it."
-    },
-    {
-      "method": "CodeAtlas.SqliteAvailability.Run()",
-      "score": 12.38,
-      "reason": "The uncovered branches report an old SQLite, a build without FTS5 and a missing native library; the bundled SQLite in the test run has none of these faults."
-    },
-    {
-      "method": "CodeAtlas.SqliteSearchCorpus.Documents(long[], string, System.Collections.Generic.IReadOnlyDictionary<string, CodeAtlas.Explanations.AcceptedExplanation>, System.Threading.CancellationToken)",
-      "score": 12.02,
-      "reason": "Complexity 12 is above 10 on its own, so no test can bring it under the limit (line coverage 94%). It needs a split behind behavior tests; task 02 does not refactor it."
-    },
-    {
-      "method": "CodeAtlas.SqliteSearchCorpus.LinkedIds()",
-      "score": 18.0,
-      "reason": "Complexity 18 is above 10 on its own, so no test can bring it under the limit (line coverage 100%). It needs a split behind behavior tests; task 02 does not refactor it."
+      "score": 21.5185,
+      "reason": "The uncovered lines load the system SQLite when the bundled library cannot load; the bundled SQLite loads in the test run."
     },
     {
       "method": "CodeAtlas.SqliteSearchCorpus.Select.<lambda>()",
-      "score": 34.0,
-      "reason": "Complexity 34 is above 10 on its own, so no test can bring it under the limit (line coverage 100%). It needs a split behind behavior tests; task 02 does not refactor it."
-    },
-    {
-      "method": "CodeAtlas.Storage.SqliteIndexReader.Session.AllReferences(System.Threading.CancellationToken)",
-      "score": 12.04,
-      "reason": "Complexity 12 is above 10 on its own, so no test can bring it under the limit (line coverage 93%). It needs a split behind behavior tests; task 02 does not refactor it."
-    },
-    {
-      "method": "CodeAtlas.Storage.SqliteIndexReader.Session.IncrementalState()",
-      "score": 12.05,
-      "reason": "Complexity 12 is above 10 on its own, so no test can bring it under the limit (line coverage 93%). It needs a split behind behavior tests; task 02 does not refactor it."
+      "score": 18.0,
+      "reason": "Complexity 18 is above 10, so full line coverage would still score 18. It needs a split behind behavior tests: task 15."
     },
     {
       "method": "CodeAtlas.Storage.SqliteIndexReader.Translate(Microsoft.Data.Sqlite.SqliteException)",
-      "score": 29.56,
-      "reason": "Complexity 22 is above 10 on its own, so no test can bring it under the limit (line coverage 75%). It needs a split behind behavior tests; task 02 does not refactor it."
+      "score": 14.25,
+      "reason": "Complexity 12 is above 10, so full line coverage would still score 12. It needs a split behind behavior tests: task 15."
     },
     {
       "method": "CodeAtlas.Storage.SqliteIndexWriter.ApplyFileRows(Microsoft.Data.Sqlite.SqliteConnection, Microsoft.Data.Sqlite.SqliteTransaction, string, CodeAtlas.MethodInfo[], System.Collections.Generic.IReadOnlyDictionary<string, CodeAtlas.SourceReference[]>)",
-      "score": 20.03,
-      "reason": "Complexity 20 is above 10 on its own, so no test can bring it under the limit (line coverage 96%). It needs a split behind behavior tests; task 02 does not refactor it."
+      "score": 11.0099,
+      "reason": "Complexity 11 is above 10, so full line coverage would still score 11. It needs a split behind behavior tests: task 15."
     },
     {
       "method": "CodeAtlas.Storage.SqliteIndexWriter.RequireFileRows(string, CodeAtlas.MethodInfo[], System.Collections.Generic.IReadOnlyDictionary<string, CodeAtlas.SourceReference[]>)",
-      "score": 23.46,
-      "reason": "Complexity 16 is above 10 on its own, so no test can bring it under the limit (line coverage 69%). It needs a split behind behavior tests; task 02 does not refactor it."
+      "score": 11.3596,
+      "reason": "The four uncovered throws reject replacement rows with an empty file path, repeated method ids, or a method or reference in another file; no test passes such rows. A test can clear this entry."
     },
     {
       "method": "CodeAtlas.Storage.SqliteIndexWriter.WriteDuplicateRows(Microsoft.Data.Sqlite.SqliteConnection, Microsoft.Data.Sqlite.SqliteTransaction, CodeAtlas.DuplicateCatalog, System.Collections.Generic.Dictionary<string, long>)",
-      "score": 42.58,
-      "reason": "Complexity 14 is above 10 on its own, so no test can bring it under the limit (line coverage 47%). It needs a split behind behavior tests; task 02 does not refactor it."
-    },
-    {
-      "method": "CodeAtlas.Storage.SqliteIndexWriter.WriteDuplicates(CodeAtlas.DuplicateCatalog, System.Threading.CancellationToken)",
-      "score": 17.05,
-      "reason": "Complexity 16 is above 10 on its own, so no test can bring it under the limit (line coverage 84%). It needs a split behind behavior tests; task 02 does not refactor it."
-    },
-    {
-      "method": "CodeAtlas.Storage.SqliteIndexWriter.WriteHeader(CodeAtlas.CodebaseIndex)",
-      "score": 16.0,
-      "reason": "Complexity 16 is above 10 on its own, so no test can bring it under the limit (line coverage 100%). It needs a split behind behavior tests; task 02 does not refactor it."
+      "score": 17.3308,
+      "reason": "The uncovered lines write duplicate groups, omissions and candidates and refuse a catalog with no analysis; the indexes the tests replace rows in have none of these. A test can clear this entry."
     },
     {
       "method": "CodeAtlas.StructuralCatalogBuilder.AddAsync",
-      "score": 36.0,
-      "reason": "Complexity 36 is above 10 on its own, so no test can bring it under the limit (line coverage 100%). It needs a split behind behavior tests; task 02 does not refactor it."
+      "score": 19.0,
+      "reason": "Complexity 19 is above 10, so full line coverage would still score 19. It needs a split behind behavior tests: task 15."
     },
     {
       "method": "CodeAtlas.StructuralCatalogBuilder.CollectAsync",
-      "score": 38.74,
-      "reason": "Complexity 38 is above 10 on its own, so no test can bring it under the limit (line coverage 92%). It needs a split behind behavior tests; task 02 does not refactor it."
+      "score": 20.2048,
+      "reason": "Complexity 20 is above 10, so full line coverage would still score 20. It needs a split behind behavior tests: task 15."
     },
     {
       "method": "CodeAtlas.StructuralCatalogBuilder.CreateAsync",
-      "score": 24.0,
-      "reason": "Complexity 24 is above 10 on its own, so no test can bring it under the limit (line coverage 100%). It needs a split behind behavior tests; task 02 does not refactor it."
+      "score": 13.0,
+      "reason": "Complexity 13 is above 10, so full line coverage would still score 13. It needs a split behind behavior tests: task 15."
     },
     {
       "method": "CodeAtlas.StructuralCatalogBuilder.DescribeAsync",
-      "score": 62.32,
-      "reason": "Complexity 62 is above 10 on its own, so no test can bring it under the limit (line coverage 96%). It needs a split behind behavior tests; task 02 does not refactor it."
+      "score": 32.0842,
+      "reason": "Complexity 32 is above 10, so full line coverage would still score 32. It needs a split behind behavior tests: task 15."
     },
     {
       "method": "CodeAtlas.StructuralValidation.Validate(CodeAtlas.CodebaseIndex)",
-      "score": 144.15,
-      "reason": "Complexity 88 is above 10 on its own, so no test can bring it under the limit (line coverage 81%). It needs a split behind behavior tests; task 02 does not refactor it."
-    },
-    {
-      "method": "CodeAtlas.SymbolSummary.From(CodeAtlas.DocumentedSymbol)",
-      "score": 14.0,
-      "reason": "Complexity 14 is above 10 on its own, so no test can bring it under the limit (line coverage 100%). It needs a split behind behavior tests; task 02 does not refactor it."
+      "score": 59.6823,
+      "reason": "Complexity 45 is above 10, so full line coverage would still score 45. It needs a split behind behavior tests: task 15."
     },
     {
       "method": "Program.<Main>$",
-      "score": 749.27,
-      "reason": "Complexity 468 is above 10 on its own, so no test can bring it under the limit (line coverage 89%). It needs a split behind behavior tests; task 02 does not refactor it."
+      "score": 305.9206,
+      "reason": "Complexity 235 is above 10, so full line coverage would still score 235. It needs a split behind behavior tests: task 15."
     },
     {
       "method": "Program.<Main>$.<lambda>(string)",
-      "score": 38.0,
-      "reason": "Complexity 38 is above 10 on its own, so no test can bring it under the limit (line coverage 100%). It needs a split behind behavior tests; task 02 does not refactor it."
+      "score": 20.0,
+      "reason": "Complexity 20 is above 10, so full line coverage would still score 20. It needs a split behind behavior tests: task 15."
     }
   ]
 }
