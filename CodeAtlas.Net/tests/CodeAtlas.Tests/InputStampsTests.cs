@@ -4,8 +4,22 @@ namespace CodeAtlas.Tests;
 
 public sealed class InputStampsTests : IDisposable
 {
+    private const long BigFileLength = 2L * 1024 * 1024 * 1024;
     private static readonly BuildInputEvidence Evidence = new(true, true, true, true, true, true, [], []);
     private readonly DirectoryInfo root = Directory.CreateTempSubdirectory("codeatlas-input-stamps-");
+
+    /// <summary>
+    /// How long a test waits before it edits a file while a big file is hashed. Hashing takes seconds, so
+    /// the edit lands during it. If a slow machine lands it elsewhere, correct code still passes.
+    /// </summary>
+    internal static readonly TimeSpan EditDelay = TimeSpan.FromMilliseconds(100);
+
+    /// <summary>A file that takes seconds to hash. Its length is set, not written, so creating it is quick.</summary>
+    internal static void WriteBigFile(string path)
+    {
+        using var file = new FileStream(path, FileMode.CreateNew, FileAccess.Write);
+        file.SetLength(BigFileLength);
+    }
 
     private string PathOf(string name) => Path.Combine(root.FullName, name);
 
@@ -113,6 +127,33 @@ public sealed class InputStampsTests : IDisposable
         // Assert
         Assert.Empty(whileMissing);
         Assert.Equal(["file.txt"], changed);
+    }
+
+    [Fact]
+    public async Task AnEditMadeWhileAnotherFileIsHashedIsSeenByTheNextCheck()
+    {
+        // Arrange
+        var small = PathOf("a-small.json");
+        var big = PathOf("z-big.json");
+        await File.WriteAllTextAsync(small, "{}");
+        WriteBigFile(big);
+        var stamps = await StampAsync(small, big);
+        File.SetLastWriteTimeUtc(big, File.GetLastWriteTimeUtc(big).AddMinutes(-5));
+
+        // Act
+        var changed = await CheckAfterAnEditDuringAHashAsync(stamps, small);
+
+        // Assert
+        Assert.Equal(["a-small.json"], changed);
+    }
+
+    private static async Task<string[]> CheckAfterAnEditDuringAHashAsync(InputStamps stamps, string file)
+    {
+        var hashing = Task.Run(() => stamps.ChangedFilesAsync(CancellationToken.None));
+        await Task.Delay(EditDelay);
+        await File.WriteAllTextAsync(file, "edited");
+        await hashing;
+        return await stamps.ChangedFilesAsync(CancellationToken.None);
     }
 
     public void Dispose() => root.Delete(recursive: true);
