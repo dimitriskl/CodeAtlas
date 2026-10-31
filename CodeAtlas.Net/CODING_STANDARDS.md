@@ -9,19 +9,19 @@ Checked by `dotnet build CodeAtlas.slnx`. `.editorconfig` holds the rules, and `
 - File-scoped namespaces (IDE0161).
 - PascalCase for types, methods, properties, events, constants, static readonly fields, and fields visible outside their type; an `I` prefix for interfaces; camelCase with no prefix for private fields, parameters, and locals (IDE1006).
 
-Practice, not checked: four-space indentation and braces on their own lines. `.editorconfig` sets four-space indentation for editors. The formatting rule IDE0055 would check both, but it also rewrites what the code does on purpose: several initializer members or switch arms on one line, and initializer braces both after `new` and on their own line. With any brace setting it reformats about 550 lines in 60 files, so it is off. Match the C# around your edit.
+Practice, not checked: four-space indentation and braces on their own lines. `.editorconfig` sets four-space indentation for editors. The formatting rule IDE0055 would check both, but it also rewrites what the code does on purpose: several initializer members or switch arms on one line, and initializer braces both after `new` and on their own line. It changes 43 files with the current settings and 60 files (about 550 lines) with the closest brace settings, so it is off. Match the C# around your edit.
 
 ## Analyzers and warnings
 
-Checked by `dotnet build CodeAtlas.slnx`. `Directory.Build.props` sets `TreatWarningsAsErrors` for every project under `CodeAtlas.Net`, so a compiler, .NET analyzer, or style warning fails the build. The SDK sets `EnableNETAnalyzers` to true and `AnalysisLevel` to `latest`. A clean build has zero warnings, and nothing is suppressed. A suppression needs a specific reason, written in one place: the rule's line in `.editorconfig`, or a `#pragma warning disable` with a comment at the code.
+Checked by `dotnet build CodeAtlas.slnx`. `Directory.Build.props` sets `TreatWarningsAsErrors` for every project in the solution and for `scripts/IncrementalBenchmark`, so a compiler, .NET analyzer, or style warning fails the build. The SDK sets `EnableNETAnalyzers` to true and `AnalysisLevel` to `latest`. A clean build has zero warnings, and nothing is suppressed. A suppression needs a specific reason, written in one place: the rule's line in `.editorconfig`, or a `#pragma warning disable` with a comment at the code.
 
-`Directory.Build.props` also enables nullable reference types, implicit usings, and locked package restore.
+`Directory.Build.props` also enables nullable reference types, implicit usings, and locked package restore. `tests/Qualification/Explanations/fixture` has its own `Directory.Build.props`, so none of this reaches it.
 
 `.github/workflows/qualification.yml` runs `scripts/qualify-package.py` on Windows, Ubuntu and macOS, for pushes to `codex/production-roadmap` and for pull requests: locked restore, Release build, serial .NET tests, Python tests, and package checks. On Ubuntu it also runs the CRAP gate. A warning, a compiler error, a failed test, or a CRAP violation fails the job.
 
 ## Nullable reference types
 
-Checked by `dotnet build CodeAtlas.slnx`. Nullable reference types are on for every project under `CodeAtlas.Net`. Nullable diagnostics are warnings, so they fail the build.
+Checked by `dotnet build CodeAtlas.slnx`. Nullable reference types are on for every project in the solution and for `scripts/IncrementalBenchmark`. Nullable diagnostics are warnings, so they fail the build.
 
 ## CRAP
 
@@ -29,11 +29,22 @@ Checked in CI on Ubuntu by `python scripts/qualify-package.py --output .codeatla
 
 CRAP = complexity² × (1 − line coverage)³ + complexity
 
-ReportGenerator's risk hotspots use the same formula and inputs. Tests and generated files under `obj/` are not scored. An async, iterator, lambda, or local-function body is named after its source method. A method above 10 fails the step, unless `build/crap-exceptions.json` lists it with its score and a reason. The step also fails when the coverage has no production methods. An exception that is no longer needed is printed, so it can be removed. The Cobertura file and `crap-report.json` are kept in the build evidence.
+Complexity estimates cyclomatic complexity. Microsoft.CodeCoverage reports IL branch outcomes, and one decision has two, so the gate uses `outcomes // 2 + 1`. Plain `if`, `&&`, `||`, and loops count exactly: `PurposeSearch.FoldPlural` reports 12 outcomes and has complexity 7. A pattern in an `if` adds a compiler branch (`Callers.Validate` counts 8, 6 by hand). An IL `switch` counts low (`IndexProgressReporter.Render` counts 13, 19 by hand). ReportGenerator's risk hotspots use the same formula on the reported number. Tests and generated files under `obj/` are not scored. An async, iterator, lambda, or local-function body is named after its source method, without compiler ordinals, so several bodies can share one key.
 
-The gate runs on Ubuntu only. One OS gives one set of scores for the exception list: platform-specific code, such as the Windows and macOS credential stores, is covered on its own OS only. Coverage also lengthens the test step (on Ubuntu from about 10 to about 14 minutes), and the Windows step already uses 17 to 21 of its 30 minutes. `tests/versioning/test_crap_gate.py` runs the script on crafted Cobertura on every OS.
+A method above 10 fails the step, unless `build/crap-exceptions.json` lists its key with a reason, its highest `score` to four decimals, and `bodies`, the number of bodies above 10 under that key. The list is a baseline, not a pass:
 
-Locally (Windows scores differ from Ubuntu for platform-specific methods):
+- A worse score or an extra body under a key exits 1.
+- A better score or a missing body exits 1, until the entry records it, so the list only moves down.
+- An entry with no body above 10 exits 1, until it is removed.
+- A source project under `src/` with no methods in the coverage exits 2, as does coverage with no production methods, and an entry with no reason, score or `bodies`.
+
+The result and each failure are printed in the job log. The Cobertura file and `crap-report.json` are kept in the build evidence. [Task 15](docs/tasks/15-crap-exception-burn-down.md) reduces the list.
+
+Not checked: a body that gets worse but stays below the highest score of a shared key (one key has two bodies), and whether a reason is true, which is read in review.
+
+The gate runs on Ubuntu only. One OS gives one set of scores for the exception list: platform-specific code, such as the Windows and macOS credential stores, is covered on its own OS only. Coverage also lengthens the test step: on Ubuntu from about 10 minutes to between 11.9 and 16.2. The Windows test step took 12.8 to 18.8 minutes without coverage, and `qualify-package.py` allows each step 30. `tests/versioning/test_crap_gate.py` runs the script on crafted Cobertura on every OS.
+
+Locally (the entries hold Ubuntu scores, so a Windows run reports platform-specific methods as out of date):
 
 ```bash
 dotnet test CodeAtlas.slnx -c Release --no-build --no-restore --settings build/coverage.runsettings --results-directory .codeatlas/coverage -- xUnit.MaxParallelThreads=1
