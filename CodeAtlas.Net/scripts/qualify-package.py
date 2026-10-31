@@ -22,6 +22,8 @@ def main():
                         help="Prepare inputs for a separate no-checkout qualification job")
     parser.add_argument("--upgrade-from", type=Path,
                         help="Also exercise updating the installed tool from this older local package")
+    parser.add_argument("--crap-gate", action="store_true",
+                        help="Collect coverage in the test step and fail on a CRAP score above the limit")
     args = parser.parse_args()
     if args.skip_smoke and args.upgrade_from:
         parser.error("--upgrade-from requires the local installed-tool smoke")
@@ -39,7 +41,7 @@ def main():
     assert (root / "LICENSE").is_file(), "Adopt the selected MIT license before packaging"
     results = []
 
-    def run(label, command):
+    def run(label, command, show_output=False):
         command = [str(x) for x in command]
         step = {"step": label, "command": command, "state": "running"}
         results.append(step)
@@ -56,6 +58,9 @@ def main():
                 raise
         step.update(exitCode=process.returncode, state="passed" if process.returncode == 0 else "failed")
         evidence.write_text(json.dumps(results, indent=2), encoding="utf-8")
+        if show_output:
+            for stream in ("stdout", "stderr"):
+                print((output / f"{label}.{stream}.txt").read_text(encoding="utf-8", errors="replace"), end="", flush=True)
         if process.returncode:
             raise RuntimeError(f"{label} failed; inspect {output}")
 
@@ -69,10 +74,17 @@ def main():
                  "--results-directory", output / "test-results", "--", "xUnit.MaxParallelThreads=1"])
     # A test idle for 5 minutes is dumped and aborted, so the console names it and the
     # dump lands under test-results/<run id>/ well before the 1800 s step timeout.
+    # The CRAP gate reads coverage from this same run (no second test run), as Cobertura under
+    # test-results/<run id>/. The writer-process step above collects none, so only this run's file is read.
+    coverage = ["--settings", root / "build/coverage.runsettings"] if args.crap_gate else []
     run("test", ["dotnet", "test", "CodeAtlas.slnx", "-c", "Release", "--no-build",
-                 "--no-restore", "--blame-hang-timeout", "5m", "--blame-hang-dump-type", "mini",
+                 "--no-restore", "--blame-hang-timeout", "5m", "--blame-hang-dump-type", "mini", *coverage,
                  "--logger", "trx", "--logger", "console;verbosity=normal",
                  "--results-directory", output / "test-results", "--", "xUnit.MaxParallelThreads=1"])
+    if args.crap_gate:
+        run("crap", [sys.executable, root / "scripts/crap-gate.py",
+                     *sorted((output / "test-results").glob("*/*.cobertura.xml")),
+                     "--report", output / "crap-report.json"], show_output=True)
     run("versioning", [sys.executable, "-m", "unittest", "discover", "-s",
                        "tests/versioning", "-p", "test_*.py"])
     run("pack", ["dotnet", "pack", "src/CodeAtlas.Cli/CodeAtlas.Cli.csproj", "-c", "Release",

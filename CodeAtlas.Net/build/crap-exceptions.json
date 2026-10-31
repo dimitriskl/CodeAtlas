@@ -1,0 +1,550 @@
+{
+  "exceptions": [
+    {
+      "method": "CodeAtlas.BodySurface.TryHash(Microsoft.CodeAnalysis.SyntaxNode, Microsoft.CodeAnalysis.Text.SourceText)",
+      "score": 12.0585,
+      "bodies": 1,
+      "reason": "Complexity 12 is above 10, so full line coverage would still score 12. It needs a split behind behavior tests: task 15."
+    },
+    {
+      "method": "CodeAtlas.Cli.AiPreferences.ProviderEndpoint(string, System.Func<string, string>)",
+      "score": 37.9057,
+      "bodies": 1,
+      "reason": "Complexity 17 is above 10, so full line coverage would still score 17. It needs a split behind behavior tests: task 15."
+    },
+    {
+      "method": "CodeAtlas.Cli.AiPreferences.Select(System.Collections.Generic.IReadOnlyDictionary<string, string>, CodeAtlas.Cli.AiPreferences, System.Func<string, string>)",
+      "score": 40.7192,
+      "bodies": 1,
+      "reason": "Complexity 36 is above 10, so full line coverage would still score 36. It needs a split behind behavior tests: task 15."
+    },
+    {
+      "method": "CodeAtlas.Cli.AiSetup.ReadSecret(string)",
+      "score": 72.0,
+      "bodies": 1,
+      "reason": "Reads the key with Console.ReadKey from a real terminal; no test has one, and StartMenuTests use a scripted console. Covering it needs a console seam, which is a production change."
+    },
+    {
+      "method": "CodeAtlas.Cli.CredentialFileBackend.WindowsOwnerOnly(string)",
+      "score": 12.0,
+      "bodies": 1,
+      "reason": "Windows-only ACL check of the fallback credential file; the gate runs on Ubuntu, where it is never called."
+    },
+    {
+      "method": "CodeAtlas.Cli.IndexProgressReporter.Render()",
+      "score": 14.25,
+      "bodies": 1,
+      "reason": "Complexity 12 is above 10, so full line coverage would still score 12. It needs a split behind behavior tests: task 15."
+    },
+    {
+      "method": "CodeAtlas.Cli.McpHost.CallAsync",
+      "score": 11.0441,
+      "bodies": 1,
+      "reason": "Complexity 11 is above 10, so full line coverage would still score 11. It needs a split behind behavior tests: task 15."
+    },
+    {
+      "method": "CodeAtlas.Cli.McpHost.FindSymbolAsync",
+      "score": 10.0072,
+      "bodies": 1,
+      "reason": "The one uncovered line returns snapshot_io_failed when input verification reports a diagnostic; no MCP test makes it do so. A test can clear this entry."
+    },
+    {
+      "method": "CodeAtlas.Cli.StartMenu.ConfigureProviderAsync",
+      "score": 20.6349,
+      "bodies": 1,
+      "reason": "Complexity 17 is above 10, so full line coverage would still score 17. It needs a split behind behavior tests: task 15."
+    },
+    {
+      "method": "CodeAtlas.Cli.StartMenu.RunInConsoleAsync",
+      "score": 12.0,
+      "bodies": 1,
+      "reason": "Wires the menu to the real console, Ctrl+C and the user's credential store, so it needs an interactive terminal; StartMenuTests drive StartMenu.RunAsync with a scripted console instead."
+    },
+    {
+      "method": "CodeAtlas.Cli.SystemMenuConsole.ReadSecretAsync.<lambda>()",
+      "score": 56.0,
+      "bodies": 1,
+      "reason": "Reads the key with Console.ReadKey from a real terminal; no test has one, and StartMenuTests use a scripted console instead."
+    },
+    {
+      "method": "CodeAtlas.Cli.SystemProcessRunner.Exists(string)",
+      "score": 12.0,
+      "bodies": 1,
+      "reason": "Real process runner for the macOS security and Linux secret-tool commands; tests use the fake runner in CredentialTestDoubles.cs so they never touch the user's keychain."
+    },
+    {
+      "method": "CodeAtlas.Cli.SystemProcessRunner.Run(string, System.Collections.Generic.IReadOnlyList<string>, string)",
+      "score": 30.0,
+      "bodies": 1,
+      "reason": "Real process runner for the macOS security and Linux secret-tool commands; tests use the fake runner in CredentialTestDoubles.cs so they never touch the user's keychain."
+    },
+    {
+      "method": "CodeAtlas.Cli.WindowsCredentialManagerBackend.Delete(string)",
+      "score": 20.0,
+      "bodies": 1,
+      "reason": "Windows Credential Manager P/Invoke; the gate runs on Ubuntu, where it is never called, and tests use a fake keychain so they never touch the user's credentials."
+    },
+    {
+      "method": "CodeAtlas.Cli.WindowsCredentialManagerBackend.Read(string)",
+      "score": 42.0,
+      "bodies": 1,
+      "reason": "Windows Credential Manager P/Invoke; the gate runs on Ubuntu, where it is never called, and tests use a fake keychain so they never touch the user's credentials."
+    },
+    {
+      "method": "CodeAtlas.Cli.WindowsCredentialManagerBackend.Write(string, string)",
+      "score": 20.0,
+      "bodies": 1,
+      "reason": "Windows Credential Manager P/Invoke; the gate runs on Ubuntu, where it is never called, and tests use a fake keychain so they never touch the user's credentials."
+    },
+    {
+      "method": "CodeAtlas.DocumentationCatalog.Add(Microsoft.CodeAnalysis.Project, Microsoft.CodeAnalysis.ISymbol, Microsoft.CodeAnalysis.SyntaxNode, Microsoft.CodeAnalysis.SemanticModel)",
+      "score": 10.0512,
+      "bodies": 1,
+      "reason": "The uncovered lines skip a symbol with no supported kind and throw for a symbol with no documentation id; no fixture has either. A test can clear this entry if a fixture can reach them."
+    },
+    {
+      "method": "CodeAtlas.DocumentationCatalog.DiscoverAsync",
+      "score": 22.0275,
+      "bodies": 1,
+      "reason": "Complexity 22 is above 10, so full line coverage would still score 22. It needs a split behind behavior tests: task 15."
+    },
+    {
+      "method": "CodeAtlas.DocumentationCatalog.ImplicitTargets(Microsoft.CodeAnalysis.ISymbol)",
+      "score": 17.5387,
+      "bodies": 1,
+      "reason": "Complexity 16 is above 10, so full line coverage would still score 16. It needs a split behind behavior tests: task 15."
+    },
+    {
+      "method": "CodeAtlas.DocumentationCatalog.ParameterNames(Microsoft.CodeAnalysis.ISymbol, string)",
+      "score": 13.2715,
+      "bodies": 1,
+      "reason": "Lines 327, 329 and 330 are uncovered: the switch arms for an indexer's parameters, a named type's type parameters, and the default. A test of inherited documentation on those symbols can clear this entry."
+    },
+    {
+      "method": "CodeAtlas.DocumentationCatalog.ResolveAsync",
+      "score": 35.11,
+      "bodies": 1,
+      "reason": "Complexity 35 is above 10, so full line coverage would still score 35. It needs a split behind behavior tests: task 15."
+    },
+    {
+      "method": "CodeAtlas.DocumentationCatalog.ResolveTargetAsync",
+      "score": 14.0,
+      "bodies": 1,
+      "reason": "Complexity 14 is above 10, so full line coverage would still score 14. It needs a split behind behavior tests: task 15."
+    },
+    {
+      "method": "CodeAtlas.DocumentationValidation.Validate(CodeAtlas.CodebaseIndex)",
+      "score": 44.0,
+      "bodies": 1,
+      "reason": "Complexity 44 is above 10, so full line coverage would still score 44. It needs a split behind behavior tests: task 15."
+    },
+    {
+      "method": "CodeAtlas.DocumentationValidation.Validate.<lambda>(CodeAtlas.DocumentationIssue)",
+      "score": 20.0,
+      "bodies": 1,
+      "reason": "Validates documentation issue rows of a loaded index; it never ran in the test run, so no validated index had documentation issues."
+    },
+    {
+      "method": "CodeAtlas.DuplicateCatalogBuilder.CreateAsync",
+      "score": 39.444,
+      "bodies": 1,
+      "reason": "Complexity 38 is above 10, so full line coverage would still score 38. It needs a split behind behavior tests: task 15."
+    },
+    {
+      "method": "CodeAtlas.DuplicateCatalogBuilder.Normalizer.SemanticContext(Microsoft.CodeAnalysis.SyntaxNode)",
+      "score": 24.072,
+      "bodies": 1,
+      "reason": "Complexity 24 is above 10, so full line coverage would still score 24. It needs a split behind behavior tests: task 15."
+    },
+    {
+      "method": "CodeAtlas.DuplicateCatalogBuilder.Normalizer.SymbolCore(Microsoft.CodeAnalysis.ISymbol)",
+      "score": 15.0328,
+      "bodies": 1,
+      "reason": "Complexity 15 is above 10, so full line coverage would still score 15. It needs a split behind behavior tests: task 15."
+    },
+    {
+      "method": "CodeAtlas.DuplicateCatalogBuilder.Normalizer.Token(Microsoft.CodeAnalysis.SyntaxToken)",
+      "score": 18.1875,
+      "bodies": 1,
+      "reason": "Complexity 18 is above 10, so full line coverage would still score 18. It needs a split behind behavior tests: task 15."
+    },
+    {
+      "method": "CodeAtlas.DuplicateCatalogBuilder.Normalizer.TypeCore(Microsoft.CodeAnalysis.ITypeSymbol)",
+      "score": 18.5714,
+      "bodies": 1,
+      "reason": "Complexity 14 is above 10, so full line coverage would still score 14. It needs a split behind behavior tests: task 15."
+    },
+    {
+      "method": "CodeAtlas.DuplicateCatalogBuilder.Unsupported(Microsoft.CodeAnalysis.CSharp.Syntax.MethodDeclarationSyntax, Microsoft.CodeAnalysis.SyntaxNode, Microsoft.CodeAnalysis.IMethodSymbol, Microsoft.CodeAnalysis.SemanticModel, System.Threading.CancellationToken)",
+      "score": 28.1143,
+      "bodies": 1,
+      "reason": "Complexity 28 is above 10, so full line coverage would still score 28. It needs a split behind behavior tests: task 15."
+    },
+    {
+      "method": "CodeAtlas.DuplicateDetector.Differences(CodeAtlas.DuplicateBody, CodeAtlas.DuplicateBody, string[])",
+      "score": 14.0,
+      "bodies": 1,
+      "reason": "Complexity 14 is above 10, so full line coverage would still score 14. It needs a split behind behavior tests: task 15."
+    },
+    {
+      "method": "CodeAtlas.DuplicateDetector.Scan(CodeAtlas.DuplicateBodyCatalog, string, CodeAtlas.DuplicateLimits, System.Threading.CancellationToken, System.Action<CodeAtlas.DuplicatePairTrace>)",
+      "score": 31.1247,
+      "bodies": 1,
+      "reason": "Complexity 31 is above 10, so full line coverage would still score 31. It needs a split behind behavior tests: task 15."
+    },
+    {
+      "method": "CodeAtlas.DuplicateLimits.Validate()",
+      "score": 45.936,
+      "bodies": 1,
+      "reason": "Complexity 44 is above 10, so full line coverage would still score 44. It needs a split behind behavior tests: task 15."
+    },
+    {
+      "method": "CodeAtlas.DuplicateSnapshotQueries.FindGroups(CodeAtlas.ISnapshotRows, string, CodeAtlas.QueryRequest, string)",
+      "score": 13.0344,
+      "bodies": 1,
+      "reason": "Complexity 13 is above 10, so full line coverage would still score 13. It needs a split behind behavior tests: task 15."
+    },
+    {
+      "method": "CodeAtlas.DuplicateValidation.Validate(CodeAtlas.CodebaseIndex, CodeAtlas.DuplicateCatalog)",
+      "score": 22.4167,
+      "bodies": 1,
+      "reason": "Complexity 12 is above 10, so full line coverage would still score 12. It needs a split behind behavior tests: task 15."
+    },
+    {
+      "method": "CodeAtlas.DuplicateValidation.Validate.<lambda>(System.ValueTuple<CodeAtlas.DuplicateGroup, CodeAtlas.DuplicateCandidate>)",
+      "score": 20.0,
+      "bodies": 1,
+      "reason": "Compares legacy duplicate groups with their candidates; it never ran in the test run, so no validated index had legacy duplicate groups."
+    },
+    {
+      "method": "CodeAtlas.DuplicateValidation.ValidateCurrent(CodeAtlas.CodebaseIndex, CodeAtlas.DuplicateBodyCatalog, CodeAtlas.DuplicateScan)",
+      "score": 565.0646,
+      "bodies": 1,
+      "reason": "Complexity 113 is above 10, so full line coverage would still score 113. It needs a split behind behavior tests: task 15."
+    },
+    {
+      "method": "CodeAtlas.DuplicateValidation.ValidateCurrent.<lambda>(CodeAtlas.DuplicateDifference)",
+      "score": 72.0,
+      "bodies": 1,
+      "reason": "Validates the important differences of a duplicate candidate; it never ran in the test run, so no validated index had a candidate with differences. A test can clear this entry."
+    },
+    {
+      "method": "CodeAtlas.Explanations.AiConfiguration..ctor(string, string, System.Uri, string, string)",
+      "score": 29.0427,
+      "bodies": 1,
+      "reason": "Complexity 29 is above 10, so full line coverage would still score 29. It needs a split behind behavior tests: task 15."
+    },
+    {
+      "method": "CodeAtlas.Explanations.AiConfiguration.NormalizeProvider(string)",
+      "score": 18.9446,
+      "bodies": 1,
+      "reason": "Complexity 18 is above 10, so full line coverage would still score 18. It needs a split behind behavior tests: task 15."
+    },
+    {
+      "method": "CodeAtlas.Explanations.AiProviderClient.CompleteAsync",
+      "score": 36.4985,
+      "bodies": 1,
+      "reason": "Complexity 36 is above 10, so full line coverage would still score 36. It needs a split behind behavior tests: task 15."
+    },
+    {
+      "method": "CodeAtlas.Explanations.ExplanationFiles.InsideRoot(string, string)",
+      "score": 12.9492,
+      "bodies": 1,
+      "reason": "Complexity 12 is above 10, so full line coverage would still score 12. It needs a split behind behavior tests: task 15."
+    },
+    {
+      "method": "CodeAtlas.Explanations.ExplanationLimits.Validate()",
+      "score": 19.0,
+      "bodies": 1,
+      "reason": "Complexity 19 is above 10, so full line coverage would still score 19. It needs a split behind behavior tests: task 15."
+    },
+    {
+      "method": "CodeAtlas.Explanations.ExplanationRequestBuilder.BuildAsync",
+      "score": 49.5156,
+      "bodies": 1,
+      "reason": "Complexity 43 is above 10, so full line coverage would still score 43. It needs a split behind behavior tests: task 15."
+    },
+    {
+      "method": "CodeAtlas.Explanations.ExplanationRequestBuilder.BuildAsync.Read",
+      "score": 13.169,
+      "bodies": 1,
+      "reason": "Complexity 13 is above 10, so full line coverage would still score 13. It needs a split behind behavior tests: task 15."
+    },
+    {
+      "method": "CodeAtlas.Explanations.ExplanationRequestBuilder.FindDeclaration(string, CodeAtlas.SourcePosition, CodeAtlas.DocumentedSymbol, System.Threading.CancellationToken)",
+      "score": 26.177,
+      "bodies": 1,
+      "reason": "Complexity 21 is above 10, so full line coverage would still score 21. It needs a split behind behavior tests: task 15."
+    },
+    {
+      "method": "CodeAtlas.Explanations.ExplanationRequestBuilder.FindDeclaration.<lambda>(Microsoft.CodeAnalysis.CSharp.Syntax.VariableDeclaratorSyntax)",
+      "score": 20.0,
+      "bodies": 1,
+      "reason": "Finds the declaration of a field for an explanation request; it never ran in the test run, so no test requested an explanation of a field."
+    },
+    {
+      "method": "CodeAtlas.Explanations.ExplanationRequestBuilder.VerifyContextInputsAsync",
+      "score": 23.2602,
+      "bodies": 1,
+      "reason": "Complexity 21 is above 10, so full line coverage would still score 21. It needs a split behind behavior tests: task 15."
+    },
+    {
+      "method": "CodeAtlas.Explanations.ExplanationService.GetSearchableAsync",
+      "score": 10.0223,
+      "bodies": 1,
+      "reason": "The two uncovered lines refuse a symbol pointer that does not match its file or request; no test damages a pointer. A test can clear this entry."
+    },
+    {
+      "method": "CodeAtlas.Explanations.ExplanationService.ValidateRequest(CodeAtlas.Explanations.ExplanationRequest, string)",
+      "score": 35.4491,
+      "bodies": 1,
+      "reason": "Complexity 31 is above 10, so full line coverage would still score 31. It needs a split behind behavior tests: task 15."
+    },
+    {
+      "method": "CodeAtlas.Explanations.ExplanationService.ValidateResponse(CodeAtlas.Explanations.ExplanationRequest, CodeAtlas.Explanations.ExplanationResponse)",
+      "score": 39.1428,
+      "bodies": 1,
+      "reason": "Complexity 39 is above 10, so full line coverage would still score 39. It needs a split behind behavior tests: task 15."
+    },
+    {
+      "method": "CodeAtlas.IncrementalGate.Decide(CodeAtlas.CodebaseIndex, CodeAtlas.IncrementalSnapshotState, CodeAtlas.IncrementalSnapshotState, CodeAtlas.SnapshotInputManifest, string)",
+      "score": 52.4766,
+      "bodies": 1,
+      "reason": "Complexity 43 is above 10, so full line coverage would still score 43. It needs a split behind behavior tests: task 15."
+    },
+    {
+      "method": "CodeAtlas.IncrementalGate.WellFormed(CodeAtlas.IncrementalSnapshotState)",
+      "score": 13.0,
+      "bodies": 1,
+      "reason": "The gate estimates complexity 13 and keeps that value on purpose: a lambda with decisions comes earlier in the statement, so the report cannot rule out that later lambdas are nested in it. The compiled IL holds 6 cached lambdas, not the 2 subtracted, so the estimate without them is 9 and a split is not the fix: task 15."
+    },
+    {
+      "method": "CodeAtlas.IncrementalGate.WellFormed.<lambda>(CodeAtlas.IncrementalTreeState)",
+      "score": 11.0,
+      "bodies": 1,
+      "reason": "Complexity 11 is above 10, so full line coverage would still score 11. It needs a split behind behavior tests: task 15."
+    },
+    {
+      "method": "CodeAtlas.IndexStore.LoadSnapshotCoreAsync",
+      "score": 18.2276,
+      "bodies": 1,
+      "reason": "Complexity 18 is above 10, so full line coverage would still score 18. It needs a split behind behavior tests: task 15."
+    },
+    {
+      "method": "CodeAtlas.IndexStore.Validate(CodeAtlas.CodebaseIndex, bool)",
+      "score": 44.1818,
+      "bodies": 1,
+      "reason": "Complexity 44 is above 10, so full line coverage would still score 44. It needs a split behind behavior tests: task 15."
+    },
+    {
+      "method": "CodeAtlas.IndexStore.ValidateHeader(CodeAtlas.CodebaseIndex)",
+      "score": 27.7037,
+      "bodies": 1,
+      "reason": "Complexity 17 is above 10, so full line coverage would still score 17. It needs a split behind behavior tests: task 15."
+    },
+    {
+      "method": "CodeAtlas.InputTracker.Collect(System.IO.DirectoryInfo, System.Collections.Generic.HashSet<string>, System.Threading.CancellationToken, string)",
+      "score": 11.0,
+      "bodies": 1,
+      "reason": "Complexity 11 is above 10, so full line coverage would still score 11. It needs a split behind behavior tests: task 15."
+    },
+    {
+      "method": "CodeAtlas.LiveIndexSession.CheckedAsync",
+      "score": 12.0,
+      "bodies": 1,
+      "reason": "Full freshness check for a generation other than the session's own; it never ran in the test run, so no live session test queried such a generation."
+    },
+    {
+      "method": "CodeAtlas.MemorySnapshotRows.DuplicateCandidates.<lambda>(CodeAtlas.DuplicateCandidate)",
+      "score": 42.0,
+      "bodies": 1,
+      "reason": "Filters duplicate candidates of an in-memory (legacy JSON) snapshot; it never ran in the test run, so no legacy snapshot in the tests had duplicate candidates."
+    },
+    {
+      "method": "CodeAtlas.Persistence.GenerationStore.PublishAsync",
+      "score": 11.07,
+      "bodies": 1,
+      "reason": "Complexity 11 is above 10, so full line coverage would still score 11. It needs a split behind behavior tests: task 15."
+    },
+    {
+      "method": "CodeAtlas.Persistence.GenerationStore.ResolveAsync",
+      "score": 17.0856,
+      "bodies": 1,
+      "reason": "Complexity 17 is above 10, so full line coverage would still score 17. It needs a split behind behavior tests: task 15."
+    },
+    {
+      "method": "CodeAtlas.PurposeOverlap.Build.<lambda>(CodeAtlas.DuplicateCandidate)",
+      "score": 20.0,
+      "bodies": 1,
+      "reason": "Matches a purpose overlap to a structural duplicate candidate; it never ran in the test run, so no purpose-overlap test had structural candidates."
+    },
+    {
+      "method": "CodeAtlas.PurposeSearch.DeferredContracts(System.Collections.Generic.IReadOnlyCollection<CodeAtlas.RankedSymbol>, CodeAtlas.ISearchCorpus, string, System.Threading.CancellationToken)",
+      "score": 11.0,
+      "bodies": 1,
+      "reason": "The gate estimates complexity 11 and keeps that value on purpose: a lambda with decisions comes earlier in the statement, so the report cannot rule out that later lambdas are nested in it. The compiled IL holds 5 cached lambdas, not the 4 subtracted, so the estimate without them is 10 and a split is not the fix: task 15."
+    },
+    {
+      "method": "CodeAtlas.PurposeSearch.Fields",
+      "score": 22.0,
+      "bodies": 1,
+      "reason": "Complexity 22 is above 10, so full line coverage would still score 22. It needs a split behind behavior tests: task 15."
+    },
+    {
+      "method": "CodeAtlas.PurposeSearch.FoldInflection(string)",
+      "score": 30.0,
+      "bodies": 1,
+      "reason": "Complexity 30 is above 10, so full line coverage would still score 30. It needs a split behind behavior tests: task 15."
+    },
+    {
+      "method": "CodeAtlas.PurposeSearch.Search(CodeAtlas.ISearchCorpus, string, string, string, CodeAtlas.QueryRequest, string, string, System.Threading.CancellationToken, System.Collections.Generic.IReadOnlyDictionary<string, CodeAtlas.Explanations.AcceptedExplanation>)",
+      "score": 29.0034,
+      "bodies": 1,
+      "reason": "Complexity 29 is above 10, so full line coverage would still score 29. It needs a split behind behavior tests: task 15."
+    },
+    {
+      "method": "CodeAtlas.PurposeSnapshotQueries.SearchAsync",
+      "score": 12.0655,
+      "bodies": 1,
+      "reason": "Complexity 12 is above 10, so full line coverage would still score 12. It needs a split behind behavior tests: task 15."
+    },
+    {
+      "method": "CodeAtlas.QueryRequest.ValidateOptions(bool, bool)",
+      "score": 12.1082,
+      "bodies": 1,
+      "reason": "Complexity 12 is above 10, so full line coverage would still score 12. It needs a split behind behavior tests: task 15."
+    },
+    {
+      "method": "CodeAtlas.SnapshotInputModel.CheckAsync",
+      "score": 12.6727,
+      "bodies": 1,
+      "reason": "Complexity 11 is above 10, so full line coverage would still score 11. It needs a split behind behavior tests: task 15."
+    },
+    {
+      "method": "CodeAtlas.SnapshotInputModel.Validate(CodeAtlas.SnapshotInputManifest)",
+      "score": 34.0,
+      "bodies": 1,
+      "reason": "Complexity 34 is above 10, so full line coverage would still score 34. It needs a split behind behavior tests: task 15."
+    },
+    {
+      "method": "CodeAtlas.SolutionAnalysis.AddLocationsAsync",
+      "score": 11.0,
+      "bodies": 1,
+      "reason": "Complexity 11 is above 10, so full line coverage would still score 11. It needs a split behind behavior tests: task 15."
+    },
+    {
+      "method": "CodeAtlas.SolutionAnalysis.ApplyBenchmarkOverlayAsync",
+      "score": 11.0909,
+      "bodies": 1,
+      "reason": "Complexity 11 is above 10, so full line coverage would still score 11. It needs a split behind behavior tests: task 15."
+    },
+    {
+      "method": "CodeAtlas.SolutionAnalysis.CaptureIncrementalStateAsync",
+      "score": 32.4845,
+      "bodies": 1,
+      "reason": "Complexity 32 is above 10, so full line coverage would still score 32. It needs a split behind behavior tests: task 15."
+    },
+    {
+      "method": "CodeAtlas.SolutionAnalysis.CollectBuildInputs(string[], string[], bool)",
+      "score": 24.41,
+      "bodies": 1,
+      "reason": "Complexity 24 is above 10, so full line coverage would still score 24. It needs a split behind behavior tests: task 15."
+    },
+    {
+      "method": "CodeAtlas.SolutionAnalysis.CollectRefreshReferencesAsync",
+      "score": 17.0456,
+      "bodies": 1,
+      "reason": "Complexity 17 is above 10, so full line coverage would still score 17. It needs a split behind behavior tests: task 15."
+    },
+    {
+      "method": "CodeAtlas.SolutionAnalysis.CreateIndexCoreAsync",
+      "score": 21.1696,
+      "bodies": 1,
+      "reason": "Complexity 21 is above 10, so full line coverage would still score 21. It needs a split behind behavior tests: task 15."
+    },
+    {
+      "method": "CodeAtlas.SolutionAnalysis.FindReferencesCoreAsync",
+      "score": 15.0163,
+      "bodies": 1,
+      "reason": "Complexity 15 is above 10, so full line coverage would still score 15. It needs a split behind behavior tests: task 15."
+    },
+    {
+      "method": "CodeAtlas.SolutionAnalysis.ImplementationsMissingLocationsAsync",
+      "score": 14.0,
+      "bodies": 1,
+      "reason": "Complexity 14 is above 10, so full line coverage would still score 14. It needs a split behind behavior tests: task 15."
+    },
+    {
+      "method": "CodeAtlas.SolutionAnalysis.LoadRegisteredAsync",
+      "score": 17.182,
+      "bodies": 1,
+      "reason": "Complexity 17 is above 10, so full line coverage would still score 17. It needs a split behind behavior tests: task 15."
+    },
+    {
+      "method": "CodeAtlas.SourcePaths.CollapseProject(Microsoft.CodeAnalysis.Solution, Microsoft.CodeAnalysis.ProjectId, string, System.Collections.Generic.ICollection<string>)",
+      "score": 14.0,
+      "bodies": 1,
+      "reason": "Complexity 14 is above 10, so full line coverage would still score 14. It needs a split behind behavior tests: task 15."
+    },
+    {
+      "method": "CodeAtlas.SqliteAvailability.RegisterSystemFallback.<lambda>(string, System.Reflection.Assembly, System.Nullable<System.Runtime.InteropServices.DllImportSearchPath>)",
+      "score": 21.5185,
+      "bodies": 1,
+      "reason": "The uncovered lines load the system SQLite when the bundled library cannot load; the bundled SQLite loads in the test run."
+    },
+    {
+      "method": "CodeAtlas.SqliteSearchCorpus.Select.<lambda>()",
+      "score": 18.0,
+      "bodies": 1,
+      "reason": "Complexity 18 is above 10, so full line coverage would still score 18. It needs a split behind behavior tests: task 15."
+    },
+    {
+      "method": "CodeAtlas.Storage.SqliteIndexReader.Translate(Microsoft.Data.Sqlite.SqliteException)",
+      "score": 14.25,
+      "bodies": 1,
+      "reason": "Complexity 12 is above 10, so full line coverage would still score 12. It needs a split behind behavior tests: task 15."
+    },
+    {
+      "method": "CodeAtlas.Storage.SqliteIndexWriter.WriteDuplicateRows(Microsoft.Data.Sqlite.SqliteConnection, Microsoft.Data.Sqlite.SqliteTransaction, CodeAtlas.DuplicateCatalog, System.Collections.Generic.Dictionary<string, long>)",
+      "score": 17.3308,
+      "bodies": 1,
+      "reason": "The uncovered lines write duplicate groups, omissions and candidates and refuse a catalog with no analysis; the indexes the tests replace rows in have none of these. A test can clear this entry."
+    },
+    {
+      "method": "CodeAtlas.StructuralCatalogBuilder.AddAsync",
+      "score": 15.0,
+      "bodies": 1,
+      "reason": "Complexity 15 is above 10, so full line coverage would still score 15. It needs a split behind behavior tests: task 15."
+    },
+    {
+      "method": "CodeAtlas.StructuralCatalogBuilder.CollectAsync",
+      "score": 18.1659,
+      "bodies": 1,
+      "reason": "Complexity 18 is above 10, so full line coverage would still score 18. It needs a split behind behavior tests: task 15."
+    },
+    {
+      "method": "CodeAtlas.StructuralCatalogBuilder.DescribeAsync",
+      "score": 28.0644,
+      "bodies": 1,
+      "reason": "Complexity 28 is above 10, so full line coverage would still score 28. It needs a split behind behavior tests: task 15."
+    },
+    {
+      "method": "CodeAtlas.StructuralValidation.Validate(CodeAtlas.CodebaseIndex)",
+      "score": 58.037,
+      "bodies": 1,
+      "reason": "Complexity 44 is above 10, so full line coverage would still score 44. It needs a split behind behavior tests: task 15."
+    },
+    {
+      "method": "Program.<Main>$",
+      "score": 293.1741,
+      "bodies": 1,
+      "reason": "Complexity 227 is above 10, so full line coverage would still score 227. It needs a split behind behavior tests: task 15."
+    },
+    {
+      "method": "Program.<Main>$.<lambda>(string)",
+      "score": 20.0,
+      "bodies": 2,
+      "reason": "Complexity 20 is above 10, so full line coverage would still score 20. It needs a split behind behavior tests: task 15."
+    }
+  ]
+}

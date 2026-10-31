@@ -239,6 +239,23 @@ public sealed class McpServerTests(IndexedSolution fixture) : IClassFixture<Inde
         Assert.Equal(snapshotId, page["snapshotId"]!.GetValue<string>());
         Assert.False(page["continuationSupported"]!.GetValue<bool>());
     }
+
+    [Theory]
+    [InlineData("<static>")]
+    [InlineData("Calculator.<static>")]
+    [InlineData("..")]
+    public async Task FindSymbolWithNoExactNameSucceedsWithNoSymbols(string name)
+    {
+        // Arrange
+        var solution = Path.Combine(fixture.Root, "Sample.slnx");
+
+        // Act
+        var responses = await Talk(solution, [Call(1, fixture.Root, name)]);
+
+        // Assert
+        var found = Envelope(responses[0], isError: false);
+        Assert.Empty(found["result"]!["symbols"]!.AsArray());
+    }
 }
 
 public sealed class McpIndexFailureTests
@@ -417,6 +434,48 @@ public sealed class McpIndexFailureTests
         Assert.Equal(0, code);
         Assert.Empty(stderr.ToString());
         Assert.Equal("2025-06-18", JsonNode.Parse(stdout.ToString())!["result"]!["protocolVersion"]!.GetValue<string>());
+    }
+}
+
+public sealed class McpCommandArgumentTests
+{
+    [Theory]
+    [InlineData("mcp")]
+    [InlineData("mcp", "--solution", " ")]
+    [InlineData("mcp", "--path", "Sample.slnx")]
+    [InlineData("live", "--solution", "Sample.slnx")]
+    [InlineData("mcp", "--solution", "Sample.slnx", "--extra")]
+    public async Task McpWithoutExactlyOneSolutionArgumentExitsWithUsage(params string[] args)
+    {
+        // Arrange
+        var stdout = new StringWriter();
+        var stderr = new StringWriter();
+
+        // Act
+        var code = await McpHost.RunAsync(args, new StringReader(""), stdout, stderr, CancellationToken.None);
+
+        // Assert
+        Assert.Equal(2, code);
+        Assert.Empty(stdout.ToString());
+        Assert.Equal("Usage: codeatlas mcp --solution <path.sln|path.slnx>", stderr.ToString().TrimEnd());
+    }
+
+    [Fact]
+    public async Task McpForAMissingSolutionFileExitsBeforeServing()
+    {
+        // Arrange
+        var solution = Path.Combine(Path.GetTempPath(), "codeatlas-mcp-" + Guid.NewGuid().ToString("N"), "Missing.slnx");
+        var stdout = new StringWriter();
+        var stderr = new StringWriter();
+        var input = new StringReader(Request(1, "initialize", new JsonObject { ["protocolVersion"] = "2025-06-18" }) + "\n");
+
+        // Act
+        var code = await McpHost.RunAsync(["mcp", "--solution", solution], input, stdout, stderr, CancellationToken.None);
+
+        // Assert
+        Assert.Equal(2, code);
+        Assert.Empty(stdout.ToString());
+        Assert.Equal("Solution file was not found.", stderr.ToString().TrimEnd());
     }
 }
 

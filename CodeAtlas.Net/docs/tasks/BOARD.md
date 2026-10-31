@@ -2,12 +2,12 @@
 
 Source: [PRD 0001](../prd/0001-net-release.md). Each task is a vertical slice for one coding session. Domnus reviews each PR technically, then QA reviews it against CODING_STANDARDS.md.
 
-Awaiting merge: 01, 12. After 01 is done, 02 and 03 can start. After 03, 04 and 05 can run in parallel.
+01 and 12 are merged. 02 is in review. 03, 10, 11, 13 and 14 can start. After 03, 04 and 05 can run in parallel. After 02, 15 can start.
 
 | # | Task | Blocked by | Status |
 |---|---|---|---|
-| 01 | [CI green on Windows, Linux and macOS](01-ci-green.md) | None | done-awaiting-merge (https://github.com/dimitriskl/CodeAtlas/pull/9) |
-| 02 | [Standards checks in the build](02-standards-checks.md) | 01 | ready |
+| 01 | [CI green on Windows, Linux and macOS](01-ci-green.md) | None | done (https://github.com/dimitriskl/CodeAtlas/pull/9) |
+| 02 | [Standards checks in the build](02-standards-checks.md) | 01 | review (https://github.com/dimitriskl/CodeAtlas/pull/12) |
 | 03 | [MCP server answers from a warm index](03-mcp-warm-index.md) | 01 | ready |
 | 04 | [MCP tool search_symbols](04-search-symbols.md) | 03 | ready |
 | 05 | [MCP tool find_references](05-find-references.md) | 03 | ready |
@@ -17,5 +17,7 @@ Awaiting merge: 01, 12. After 01 is done, 02 and 03 can start. After 03, 04 and 
 | 09 | [Benchmark gate](09-benchmark-gate.md) | 07, 08 | ready |
 | 10 | [macOS solutions reached through a symlinked path](10-macos-aliased-paths.md) | 01 | ready |
 | 11 | [macOS explanation_busy for a held symbol lock](11-macos-explanation-busy.md) | 01 | ready |
-| 12 | [Windows test run hangs until the job timeout](12-windows-test-hang.md) | 01 | done-awaiting-merge (https://github.com/dimitriskl/CodeAtlas/pull/11) |
+| 12 | [Windows test run hangs until the job timeout](12-windows-test-hang.md) | 01 | done (https://github.com/dimitriskl/CodeAtlas/pull/11) |
 | 13 | [macOS SqliteStoreTests fail with "database table is locked"](13-macos-sqlite-table-locked.md) | 01 | ready |
+| 14 | [Child-process diagnostics in tests](14-child-process-diagnostics.md) | 12 | ready |
+| 15 | [CRAP exception burn-down](15-crap-exception-burn-down.md) | 02 | ready |

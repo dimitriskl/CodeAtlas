@@ -151,6 +151,72 @@ public sealed partial class SqliteFileUpdateTests
         Assert.NotEqual(expectedOnce.References, expectedTwice.References);
     }
 
+    [Theory]
+    [InlineData("live")]
+    [InlineData("live", "--solution")]
+    [InlineData("live", "--solution", " ")]
+    [InlineData("live", "--path", "Sample.slnx")]
+    [InlineData("query", "--solution", "Sample.slnx")]
+    [InlineData("live", "--solution", "Sample.slnx", "--extra")]
+    public async Task LiveWithoutExactlyOneSolutionArgumentExitsWithUsage(params string[] args)
+    {
+        // Arrange
+        using var input = new StringReader("{\"command\":\"find-symbol\",\"name\":\"Calculate\"}\n");
+        using var output = new StringWriter();
+        using var error = new StringWriter();
+
+        // Act
+        var exit = await LiveHost.RunAsync(args, input, output, error, CancellationToken.None);
+
+        // Assert
+        Assert.Equal(2, exit);
+        Assert.Equal("", output.ToString());
+        var response = JsonNode.Parse(error.ToString())!.AsObject();
+        Assert.False(response["success"]!.GetValue<bool>());
+        Assert.Equal("invalid_arguments", response["error"]!["code"]!.GetValue<string>());
+        Assert.Contains("codeatlas live --solution", response["error"]!["message"]!.GetValue<string>(), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task LiveForASolutionWithoutAnIndexExitsWithAnalysisFailure()
+    {
+        // Arrange
+        var solution = Path.Combine(Path.GetTempPath(), "codeatlas-live-" + Guid.NewGuid().ToString("N"), "Missing.slnx");
+        using var input = new StringReader("");
+        using var output = new StringWriter();
+        using var error = new StringWriter();
+
+        // Act
+        var exit = await LiveHost.RunAsync(["live", "--solution", solution], input, output, error, CancellationToken.None);
+
+        // Assert
+        Assert.Equal(1, exit);
+        Assert.Equal("", output.ToString());
+        var response = JsonNode.Parse(error.ToString())!.AsObject();
+        Assert.False(response["success"]!.GetValue<bool>());
+        Assert.Equal("analysis_failed", response["error"]!["code"]!.GetValue<string>());
+        Assert.Contains("current.json", response["error"]!["message"]!.GetValue<string>(), StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData("""{"command":"find-symbol"}""")]
+    [InlineData("""{"command":"find-symbol","name":" "}""")]
+    public async Task RequestWithAMissingOrBlankFieldIsRefused(string line)
+    {
+        // Arrange
+        using var fixture = await SampleCopy.CreateAsync();
+        await IndexStore.PublishAsync(await SolutionAnalysis.CreateIndexAsync(fixture.Solution));
+        using var host = await LiveHost.StartAsync(fixture.Solution);
+
+        // Act
+        var response = await host.HandleLineAsync(line);
+
+        // Assert
+        Assert.False(response["success"]!.GetValue<bool>());
+        Assert.Equal("find-symbol", response["command"]!.GetValue<string>());
+        Assert.Equal("Request field 'name' is required.", response["error"]!["message"]!.GetValue<string>());
+    }
+
     private static JsonObject Request(string command, params (string Name, string Value)[] fields)
     {
         var request = new JsonObject { ["command"] = command };

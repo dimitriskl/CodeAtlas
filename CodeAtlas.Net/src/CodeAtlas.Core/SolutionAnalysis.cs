@@ -31,12 +31,12 @@ public sealed partial class SolutionAnalysis : IDisposable
     private string[] evaluatedImports = [];
     private string[] relevantEnvironment = [];
     private static string? selectedMSBuildPath;
-    private static readonly ConcurrentDictionary<string, int> solutionLoads = new(StringComparer.Ordinal);
+    private static readonly ConcurrentDictionary<string, int> SolutionLoadCounts = new(StringComparer.Ordinal);
 
     internal static int SolutionLoads(string path) =>
-        solutionLoads.TryGetValue(Path.GetFullPath(path), out var count) ? count : 0;
+        SolutionLoadCounts.TryGetValue(Path.GetFullPath(path), out var count) ? count : 0;
 
-    internal static void ResetSolutionLoads(string path) => solutionLoads[Path.GetFullPath(path)] = 0;
+    internal static void ResetSolutionLoads(string path) => SolutionLoadCounts[Path.GetFullPath(path)] = 0;
 
     private SolutionAnalysis(MSBuildWorkspace workspace, Solution solution, string path, IReadOnlyList<string> warnings)
     {
@@ -59,7 +59,7 @@ public sealed partial class SolutionAnalysis : IDisposable
         path = Path.GetFullPath(path);
         if (!File.Exists(path))
             throw new AnalysisException($"Solution does not exist: {path}");
-        solutionLoads.AddOrUpdate(path, 1, static (_, count) => count + 1);
+        SolutionLoadCounts.AddOrUpdate(path, 1, static (_, count) => count + 1);
 
         lock (SnapshotEnvironment.Gate)
         {
