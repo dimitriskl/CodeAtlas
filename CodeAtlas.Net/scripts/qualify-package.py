@@ -41,7 +41,7 @@ def main():
     assert (root / "LICENSE").is_file(), "Adopt the selected MIT license before packaging"
     results = []
 
-    def run(label, command):
+    def run(label, command, show_output=False):
         command = [str(x) for x in command]
         step = {"step": label, "command": command, "state": "running"}
         results.append(step)
@@ -58,6 +58,9 @@ def main():
                 raise
         step.update(exitCode=process.returncode, state="passed" if process.returncode == 0 else "failed")
         evidence.write_text(json.dumps(results, indent=2), encoding="utf-8")
+        if show_output:
+            for stream in ("stdout", "stderr"):
+                print((output / f"{label}.{stream}.txt").read_text(encoding="utf-8", errors="replace"), end="", flush=True)
         if process.returncode:
             raise RuntimeError(f"{label} failed; inspect {output}")
 
@@ -81,7 +84,7 @@ def main():
     if args.crap_gate:
         run("crap", [sys.executable, root / "scripts/crap-gate.py",
                      *sorted((output / "test-results").glob("*/*.cobertura.xml")),
-                     "--report", output / "crap-report.json"])
+                     "--report", output / "crap-report.json"], show_output=True)
     run("versioning", [sys.executable, "-m", "unittest", "discover", "-s",
                        "tests/versioning", "-p", "test_*.py"])
     run("pack", ["dotnet", "pack", "src/CodeAtlas.Cli/CodeAtlas.Cli.csproj", "-c", "Release",
