@@ -371,14 +371,14 @@
       "reason": "Complexity 36 is above 10 on its own, so no test can bring it under the limit (line coverage 100%). It needs a split behind behavior tests; task 02 does not refactor it."
     },
     {
-      "method": "CodeAtlas.Explanations.ExplanationRequestBuilder.<>c__DisplayClass7_0.<<BuildAsync>g__Read|1>d.MoveNext()",
-      "score": 24.58,
-      "reason": "Complexity 24 is above 10 on its own, so no test can bring it under the limit (line coverage 90%). It needs a split behind behavior tests; task 02 does not refactor it."
-    },
-    {
       "method": "CodeAtlas.Explanations.ExplanationRequestBuilder.BuildAsync",
       "score": 135.24,
       "reason": "Complexity 100 is above 10 on its own, so no test can bring it under the limit (line coverage 85%). It needs a split behind behavior tests; task 02 does not refactor it."
+    },
+    {
+      "method": "CodeAtlas.Explanations.ExplanationRequestBuilder.BuildAsync.Read",
+      "score": 24.58,
+      "reason": "Complexity 24 is above 10 on its own, so no test can bring it under the limit (line coverage 90%). It needs a split behind behavior tests; task 02 does not refactor it."
     },
     {
       "method": "CodeAtlas.Explanations.ExplanationRequestBuilder.FindDeclaration(string, CodeAtlas.SourcePosition, CodeAtlas.DocumentedSymbol, System.Threading.CancellationToken)",
@@ -521,14 +521,14 @@
       "reason": "Filters duplicate candidates of an in-memory (legacy JSON) snapshot; it never ran in the test run, so no legacy snapshot in the tests had duplicate candidates."
     },
     {
-      "method": "CodeAtlas.Persistence.GenerationStore.<ReadVerifiedAsync>d__15<T>.MoveNext()",
-      "score": 12.28,
-      "reason": "Complexity 12 is above 10 on its own, so no test can bring it under the limit (line coverage 88%). It needs a split behind behavior tests; task 02 does not refactor it."
-    },
-    {
       "method": "CodeAtlas.Persistence.GenerationStore.PublishAsync",
       "score": 28.45,
       "reason": "Complexity 28 is above 10 on its own, so no test can bring it under the limit (line coverage 92%). It needs a split behind behavior tests; task 02 does not refactor it."
+    },
+    {
+      "method": "CodeAtlas.Persistence.GenerationStore.ReadVerifiedAsync",
+      "score": 12.28,
+      "reason": "Complexity 12 is above 10 on its own, so no test can bring it under the limit (line coverage 88%). It needs a split behind behavior tests; task 02 does not refactor it."
     },
     {
       "method": "CodeAtlas.Persistence.GenerationStore.ResolveAsync",

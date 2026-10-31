@@ -19,10 +19,13 @@ ROOT = Path(__file__).resolve().parents[1]
 
 # Compiler-generated names carry ordinals that change whenever a method is added, so a body is named
 # after the source method it came from: <M>d__4 (async/iterator), <M>b__0 (lambda), <M>g__Local|7_0.
-STATE_MACHINE = re.compile(r"^<(?P<method>.+)>d__\d+$")
+# A state machine can be generic (<M>d__4<T>) and can belong to an async lambda or local function
+# (<<M>b__8_0>d, <<M>g__Local|1>d). A local function's closure is a ref parameter in its signature.
+STATE_MACHINE = re.compile(r"^<(?P<method>.+)>d(__\d+)?(<.*>)?$")
 LAMBDA = re.compile(r"^<(?P<method>.*)>b__[\d_]+$")
 LOCAL_FUNCTION = re.compile(r"^<(?P<method>.+?)>g__(?P<local>[^|]+)\|[\d_]+$")
-CLOSURE = re.compile(r"^<>c(__DisplayClass[\d_]+)?$")
+CLOSURE = re.compile(r"^<>c(__DisplayClass)?[\d_]*(<.*>)?$")
+CLOSURE_PARAMETER = re.compile(r"(, )?ref [^,()]*<>c__DisplayClass[^,()]*")
 
 
 def crap(complexity, coverage):
@@ -32,14 +35,19 @@ def crap(complexity, coverage):
 def source_name(class_name, method_name, signature):
     """Returns the stable name of the source method a Cobertura method entry belongs to."""
     parts = split_type_name(class_name)
-    # A closure class adds no name of its own; its lambdas carry the method name.
-    while parts and CLOSURE.match(parts[-1]):
-        parts.pop()
-    machine = STATE_MACHINE.match(parts[-1]) if parts else None
+    machine = STATE_MACHINE.match(parts[-1])
     if machine and method_name == "MoveNext":
         # The async or iterator body: its signature is MoveNext's, so leave it out.
-        return ".".join(parts[:-1] + [lambda_name(machine.group("method"))])
-    return ".".join(parts + [lambda_name(method_name)]) + signature
+        return ".".join(without_closures(parts[:-1]) + [lambda_name(machine.group("method"))])
+    return ".".join(without_closures(parts) + [lambda_name(method_name)]) + CLOSURE_PARAMETER.sub("", signature)
+
+
+def without_closures(parts):
+    """A closure class adds no name of its own; its lambdas carry the method name."""
+    parts = list(parts)
+    while parts and CLOSURE.match(parts[-1]):
+        parts.pop()
+    return parts
 
 
 def split_type_name(name):
@@ -56,10 +64,10 @@ def split_type_name(name):
 def lambda_name(name):
     local = LOCAL_FUNCTION.match(name)
     if local:
-        return f"{local.group('method')}.{local.group('local')}"
+        return f"{lambda_name(local.group('method'))}.{local.group('local')}"
     anonymous = LAMBDA.match(name)
     if anonymous:
-        return f"{anonymous.group('method')}.<lambda>"
+        return f"{lambda_name(anonymous.group('method'))}.<lambda>"
     return name
 
 

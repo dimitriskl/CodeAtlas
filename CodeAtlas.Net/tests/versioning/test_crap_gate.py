@@ -133,6 +133,35 @@ class CrapGateTests(unittest.TestCase):
         self.assertEqual(["Program.<Main>$", "Program.<Main>$.<lambda>(string)", "CodeAtlas.Reader.CodeAtlas.IReader.ReadAsync"],
                          normalized)
 
+    def test_generic_and_async_nested_state_machines_lose_their_compiler_ordinals(self):
+        # Arrange
+        names = [("CodeAtlas.GenerationStore.<ReadVerifiedAsync>d__15<T>", "MoveNext", "()"),
+                 ("CodeAtlas.IndexStore.<>c.<<LoadSnapshotCoreAsync>b__8_0>d", "MoveNext", "()"),
+                 ("Program.<>c__DisplayClass0_0.<<<Main>$>b__13>d", "MoveNext", "()"),
+                 ("CodeAtlas.Builder.<>c__DisplayClass7_0.<<BuildAsync>g__Read|1>d", "MoveNext", "()"),
+                 ("Program.<>c__DisplayClass0_0.<<<Main>$>g__TimedAsync|1>d<T>", "MoveNext", "()")]
+
+        # Act
+        normalized = [gate.source_name(*name) for name in names]
+
+        # Assert
+        self.assertEqual(["CodeAtlas.GenerationStore.ReadVerifiedAsync", "CodeAtlas.IndexStore.LoadSnapshotCoreAsync.<lambda>",
+                          "Program.<Main>$.<lambda>", "CodeAtlas.Builder.BuildAsync.Read", "Program.<Main>$.TimedAsync"],
+                         normalized)
+
+    def test_closure_parameters_and_generic_closures_leave_the_source_name(self):
+        # Arrange
+        names = [("CodeAtlas.Callers", "<Traverse>g__Visit|6_1", "(string, ref CodeAtlas.Callers.<>c__DisplayClass6_0)"),
+                 ("CodeAtlas.Callers", "<Walk>g__Step|2_0", "(ref CodeAtlas.Callers.<>c__DisplayClass2_0)"),
+                 ("CodeAtlas.Page<T>.<>c__DisplayClass3_0<U>", "<Map>b__0", "(T)")]
+
+        # Act
+        normalized = [gate.source_name(*name) for name in names]
+
+        # Assert
+        self.assertEqual(["CodeAtlas.Callers.Traverse.Visit(string)", "CodeAtlas.Callers.Walk.Step()",
+                          "CodeAtlas.Page<T>.Map.<lambda>(T)"], normalized)
+
     def test_test_projects_and_generated_files_are_not_measured(self):
         # Arrange
         classes = [("CodeAtlas.Tests.StoreTests", "tests/CodeAtlas.Tests/StoreTests.cs", [method("Saves", 9, 0)]),
