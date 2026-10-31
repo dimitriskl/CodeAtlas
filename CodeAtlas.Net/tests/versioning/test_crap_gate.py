@@ -32,9 +32,12 @@ def cobertura(root, classes):
 
 
 class CrapGateTests(unittest.TestCase):
-    def run_gate(self, classes, exceptions=None):
+    def run_gate(self, classes, exceptions=None, projects=()):
         with tempfile.TemporaryDirectory() as folder:
             root = Path(folder)
+            for project in projects:
+                (root / project).mkdir(parents=True)
+                (root / project / "Project.csproj").write_text("<Project />", encoding="utf-8")
             coverage = root / "coverage.cobertura.xml"
             coverage.write_text(cobertura(root, classes), encoding="utf-8")
             listed = root / "crap-exceptions.json"
@@ -117,7 +120,7 @@ class CrapGateTests(unittest.TestCase):
     def test_a_listed_exception_with_a_reason_passes(self):
         # Arrange
         classes = [("CodeAtlas.Store", "src/CodeAtlas.Core/Store.cs", [method("Save", 6, 0, "(string)")])]
-        exceptions = [{"method": "CodeAtlas.Store.Save(string)", "score": 20.0, "reason": "Covered through the CLI."}]
+        exceptions = [{"method": "CodeAtlas.Store.Save(string)", "score": 20.0, "bodies": 1, "reason": "Covered through the CLI."}]
 
         # Act
         completed, report = self.run_gate(classes, exceptions)
@@ -129,7 +132,7 @@ class CrapGateTests(unittest.TestCase):
     def test_an_exception_without_a_reason_is_rejected(self):
         # Arrange
         classes = [("CodeAtlas.Store", "src/CodeAtlas.Core/Store.cs", [method("Save", 6, 0)])]
-        exceptions = [{"method": "CodeAtlas.Store.Save()", "score": 20.0, "reason": " "}]
+        exceptions = [{"method": "CodeAtlas.Store.Save()", "score": 20.0, "bodies": 1, "reason": " "}]
 
         # Act
         completed, _ = self.run_gate(classes, exceptions)
@@ -137,6 +140,141 @@ class CrapGateTests(unittest.TestCase):
         # Assert
         self.assertEqual(2, completed.returncode)
         self.assertIn("reason", completed.stderr)
+
+    def test_an_exception_without_a_pin_is_rejected(self):
+        # Arrange
+        classes = [("CodeAtlas.Store", "src/CodeAtlas.Core/Store.cs", [method("Save", 6, 0)])]
+        exceptions = [{"method": "CodeAtlas.Store.Save()", "reason": "Covered through the CLI."}]
+
+        # Act
+        completed, _ = self.run_gate(classes, exceptions)
+
+        # Assert
+        self.assertEqual(2, completed.returncode)
+        self.assertIn("score and a bodies count", completed.stderr)
+
+    def test_a_worse_score_under_a_listed_key_fails(self):
+        # Arrange
+        classes = [("CodeAtlas.Store", "src/CodeAtlas.Core/Store.cs", [method("Save", 8, 0)])]
+        exceptions = [{"method": "CodeAtlas.Store.Save()", "score": 20.0, "bodies": 1, "reason": "Pinned."}]
+
+        # Act
+        completed, report = self.run_gate(classes, exceptions)
+
+        # Assert
+        self.assertEqual(1, completed.returncode, completed.stdout + completed.stderr)
+        self.assertEqual(["CodeAtlas.Store.Save(): score 30.0000, recorded 20.0"], report["outOfDateExceptions"])
+        self.assertIn("recorded 20.0", completed.stdout)
+
+    def test_a_better_score_under_a_listed_key_fails_until_the_pin_is_lowered(self):
+        # Arrange
+        classes = [("CodeAtlas.Store", "src/CodeAtlas.Core/Store.cs", [method("Save", 6, 0)])]
+        exceptions = [{"method": "CodeAtlas.Store.Save()", "score": 30.0, "bodies": 1, "reason": "Pinned."}]
+
+        # Act
+        completed, report = self.run_gate(classes, exceptions)
+
+        # Assert
+        self.assertEqual(1, completed.returncode, completed.stdout + completed.stderr)
+        self.assertEqual(["CodeAtlas.Store.Save(): score 20.0000, recorded 30.0"], report["outOfDateExceptions"])
+
+    def test_a_score_equal_to_its_pin_at_four_decimals_passes(self):
+        # Arrange
+        classes = [("CodeAtlas.Store", "src/CodeAtlas.Core/Store.cs", [method("Near", OUTCOMES_FOR_TEN, 0.9658)])]
+        exceptions = [{"method": "CodeAtlas.Store.Near()", "score": round(gate.crap(10, 0.9658), 4), "bodies": 1,
+                       "reason": "Pinned."}]
+
+        # Act
+        completed, _ = self.run_gate(classes, exceptions)
+
+        # Assert
+        self.assertEqual(0, completed.returncode, completed.stdout + completed.stderr)
+
+    def test_a_small_score_change_on_a_large_method_fails(self):
+        # Arrange: one more uncovered line of 200 moves this score by about 0.001.
+        classes = [("CodeAtlas.Store", "src/CodeAtlas.Core/Store.cs", [method("Big", OUTCOMES_FOR_TEN, 0.97)])]
+        exceptions = [{"method": "CodeAtlas.Store.Big()", "score": round(gate.crap(10, 0.975), 4), "bodies": 1,
+                       "reason": "Pinned."}]
+
+        # Act
+        completed, _ = self.run_gate(classes, exceptions)
+
+        # Assert
+        self.assertEqual(1, completed.returncode, completed.stdout + completed.stderr)
+
+    def test_an_extra_body_under_a_listed_key_fails(self):
+        # Arrange: a new lambda scores no higher than the listed one, under the same key.
+        classes = [("CodeAtlas.Store.&lt;&gt;c", "src/CodeAtlas.Core/Store.cs",
+                    [method("&lt;Load&gt;b__0_0", 6, 0, "(int)"), method("&lt;Load&gt;b__0_1", 6, 0, "(int)")])]
+        exceptions = [{"method": "CodeAtlas.Store.Load.<lambda>(int)", "score": 20.0, "bodies": 1, "reason": "Pinned."}]
+
+        # Act
+        completed, report = self.run_gate(classes, exceptions)
+
+        # Assert
+        self.assertEqual(1, completed.returncode, completed.stdout + completed.stderr)
+        self.assertEqual(["CodeAtlas.Store.Load.<lambda>(int): 2 bodies above the limit, recorded 1"],
+                         report["outOfDateExceptions"])
+
+    def test_a_missing_body_under_a_listed_key_fails(self):
+        # Arrange
+        classes = [("CodeAtlas.Store.&lt;&gt;c", "src/CodeAtlas.Core/Store.cs", [method("&lt;Load&gt;b__0_0", 6, 0, "(int)")])]
+        exceptions = [{"method": "CodeAtlas.Store.Load.<lambda>(int)", "score": 20.0, "bodies": 2, "reason": "Pinned."}]
+
+        # Act
+        completed, report = self.run_gate(classes, exceptions)
+
+        # Assert
+        self.assertEqual(1, completed.returncode, completed.stdout + completed.stderr)
+        self.assertEqual(["CodeAtlas.Store.Load.<lambda>(int): 1 bodies above the limit, recorded 2"],
+                         report["outOfDateExceptions"])
+
+    def test_an_exception_for_a_method_that_is_gone_fails(self):
+        # Arrange
+        classes = [("CodeAtlas.Store", "src/CodeAtlas.Core/Store.cs", [method("Load", 2, 1)])]
+        exceptions = [{"method": "CodeAtlas.Store.Removed()", "score": 20.0, "bodies": 1, "reason": "Pinned."}]
+
+        # Act
+        completed, report = self.run_gate(classes, exceptions)
+
+        # Assert
+        self.assertEqual(1, completed.returncode, completed.stdout + completed.stderr)
+        self.assertEqual(["CodeAtlas.Store.Removed()"], report["unusedExceptions"])
+        self.assertIn("CodeAtlas.Store.Removed()", completed.stdout)
+
+    def test_an_exception_for_a_method_now_within_the_limit_fails(self):
+        # Arrange
+        classes = [("CodeAtlas.Store", "src/CodeAtlas.Core/Store.cs", [method("Save", 6, 1)])]
+        exceptions = [{"method": "CodeAtlas.Store.Save()", "score": 20.0, "bodies": 1, "reason": "Pinned."}]
+
+        # Act
+        completed, report = self.run_gate(classes, exceptions)
+
+        # Assert
+        self.assertEqual(1, completed.returncode, completed.stdout + completed.stderr)
+        self.assertEqual(["CodeAtlas.Store.Save()"], report["unusedExceptions"])
+
+    def test_a_source_project_missing_from_the_coverage_fails(self):
+        # Arrange: no exception names the lost project, so only the project check can catch it.
+        classes = [("CodeAtlas.Store", "src/CodeAtlas.Core/Store.cs", [method("Load", 2, 1)])]
+
+        # Act
+        completed, _ = self.run_gate(classes, projects=["src/CodeAtlas.Core", "src/CodeAtlas.Cli"])
+
+        # Assert
+        self.assertEqual(2, completed.returncode, completed.stdout + completed.stderr)
+        self.assertIn("src/CodeAtlas.Cli", completed.stderr)
+
+    def test_every_source_project_in_the_coverage_passes(self):
+        # Arrange
+        classes = [("CodeAtlas.Store", "src/CodeAtlas.Core/Store.cs", [method("Load", 2, 1)]),
+                   ("CodeAtlas.Cli.Menu", "src/CodeAtlas.Cli/Menu.cs", [method("Run", 2, 1)])]
+
+        # Act
+        completed, _ = self.run_gate(classes, projects=["src/CodeAtlas.Core", "src/CodeAtlas.Cli"])
+
+        # Assert
+        self.assertEqual(0, completed.returncode, completed.stdout + completed.stderr)
 
     def test_compiler_generated_bodies_are_named_after_their_source_method(self):
         # Arrange
@@ -222,6 +360,17 @@ class CrapGateTests(unittest.TestCase):
         self.assertEqual(2, completed.returncode)
         self.assertIn("no production methods", completed.stderr)
 
+    def test_a_missing_coverage_file_fails(self):
+        # Arrange
+        with tempfile.TemporaryDirectory() as folder:
+            missing = Path(folder) / "missing.cobertura.xml"
+
+            # Act
+            code = gate.main([str(missing), "--root", folder])
+
+        # Assert
+        self.assertEqual(2, code)
+
     def test_the_exceptions_file_lists_each_method_once_with_a_score_and_reason(self):
         # Arrange
         listed = Path(__file__).parents[2] / "build/crap-exceptions.json"
@@ -230,7 +379,8 @@ class CrapGateTests(unittest.TestCase):
         exceptions = gate.load_exceptions(listed)
 
         # Assert
-        self.assertTrue(all(entry["reason"].strip() and entry["score"] > gate.LIMIT for entry in exceptions.values()))
+        self.assertTrue(all(entry["reason"].strip() and entry["score"] > gate.LIMIT and entry["bodies"] >= 1
+                            for entry in exceptions.values()))
 
 
 if __name__ == "__main__":

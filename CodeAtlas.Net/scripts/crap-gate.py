@@ -1,4 +1,4 @@
-"""Fail when a production method's CRAP score is above the limit and it is not a listed exception.
+"""Fail when a production method's CRAP score is above the limit and no listed exception pins it.
 
 CRAP = complexity^2 * (1 - coverage)^3 + complexity, per method, where coverage is the line coverage
 of that method in the Cobertura report. Complexity estimates cyclomatic complexity: Microsoft.CodeCoverage
@@ -7,7 +7,11 @@ so complexity = outcomes // 2 + 1. A branch the compiler adds counts too (a patt
 and an IL switch counts low (13 outcomes count as 6 decisions, not 12). Only files under --include
 (default src/) count; test projects and files under obj/ (generated code) are skipped.
 
-Exit codes: 0 pass, 1 a method is above the limit, 2 bad input (no coverage, an exception without a reason).
+An exception pins the highest score and the number of bodies above the limit under its key, so it records
+a baseline: a worse score, an extra body, a better score, a missing body and an unused entry all fail.
+
+Exit codes: 0 pass, 1 a method above the limit or an exception out of date, 2 bad input (no coverage, a
+source project missing from the coverage, an exception without a reason or a pin).
 """
 import argparse
 import json
@@ -17,6 +21,9 @@ import sys
 import xml.etree.ElementTree as ET
 
 LIMIT = 10.0
+# Listed scores carry four decimals. That survives floating-point differences between platforms, and one
+# line of coverage on a large method near the limit still moves a score by more than this.
+SCORE_PRECISION = 0.0001
 ROOT = Path(__file__).resolve().parents[1]
 
 # Compiler-generated names carry ordinals that change whenever a method is added, so a body is named
@@ -109,6 +116,8 @@ def load_exceptions(path):
         name = entry.get("method", "")
         if not str(entry.get("reason", "")).strip():
             raise ValueError(f"CRAP exception {name!r} needs a reason")
+        if not isinstance(entry.get("score"), (int, float)) or not isinstance(entry.get("bodies"), int):
+            raise ValueError(f"CRAP exception {name!r} needs a score and a bodies count")
         if name in listed:
             raise ValueError(f"CRAP exception {name!r} is listed twice")
         listed[name] = entry
@@ -121,7 +130,30 @@ def evaluate(found, exceptions, limit):
     excepted = [entry for entry in above if entry["method"] in exceptions]
     measured_names = {entry["method"] for entry in above}
     unused = sorted(name for name in exceptions if name not in measured_names)
-    return violations, excepted, unused
+    return violations, excepted, unused, out_of_date(excepted, exceptions)
+
+
+def out_of_date(excepted, exceptions):
+    """Compares what each listed key measures with its pin, in both directions: a better result must be
+    recorded too, or the room it leaves would let a later change get worse unnoticed."""
+    measured_scores = {}
+    for entry in excepted:
+        measured_scores.setdefault(entry["method"], []).append(entry["score"])
+    found = []
+    for name, scores in sorted(measured_scores.items()):
+        pin = exceptions[name]
+        if abs(max(scores) - pin["score"]) > SCORE_PRECISION:
+            found.append(f"{name}: score {max(scores):.4f}, recorded {pin['score']}")
+        if len(scores) != pin["bodies"]:
+            found.append(f"{name}: {len(scores)} bodies above the limit, recorded {pin['bodies']}")
+    return found
+
+
+def unmeasured_projects(found, root, include):
+    """Source projects with no method in the coverage: losing a whole assembly must not pass."""
+    projects = sorted(path.parent.relative_to(root).as_posix()
+                      for prefix in include for path in (root / prefix).glob("*/*.csproj"))
+    return [project for project in projects if not any(entry["file"].startswith(project + "/") for entry in found)]
 
 
 def main(argv=None):
@@ -135,26 +167,34 @@ def main(argv=None):
     args = parser.parse_args(argv)
     try:
         exceptions = load_exceptions(args.exceptions)
-        found = methods(args.coverage, args.root, args.include or ["src"])
+        include = args.include or ["src"]
+        found = methods(args.coverage, args.root, include)
     except (OSError, ValueError, KeyError, TypeError, ET.ParseError) as error:
         print(f"crap-gate: {error}", file=sys.stderr)
         return 2
     if not found:
         print("crap-gate: the coverage has no production methods; was coverage collected?", file=sys.stderr)
         return 2
-    violations, excepted, unused = evaluate(found, exceptions, args.limit)
+    missing = unmeasured_projects(found, args.root, include)
+    if missing:
+        print(f"crap-gate: the coverage has no methods of {', '.join(missing)}", file=sys.stderr)
+        return 2
+    violations, excepted, unused, stale = evaluate(found, exceptions, args.limit)
     if args.report:
         args.report.write_text(json.dumps({"limit": args.limit, "methods": len(found), "violations": violations,
-                                           "excepted": excepted, "unusedExceptions": unused}, indent=2),
+                                           "excepted": excepted, "unusedExceptions": unused,
+                                           "outOfDateExceptions": stale}, indent=2),
                                encoding="utf-8")
     for entry in sorted(violations, key=lambda item: -item["score"]):
         print(f"CRAP {entry['score']:.4f} > {args.limit:g}: {entry['method']} ({entry['file']}, "
               f"complexity {entry['complexity']}, line coverage {entry['lineCoverage']:.0%})")
-    # An exception whose method is now within the limit (or gone) only needs removing; it does not fail.
     for name in unused:
-        print(f"CRAP exception no longer needed: {name}")
-    print(f"crap-gate: {len(found)} methods, {len(violations)} above {args.limit:g}, {len(excepted)} listed exceptions")
-    return 1 if violations else 0
+        print(f"CRAP exception not used (remove it): {name}")
+    for line in stale:
+        print(f"CRAP exception out of date: {line}")
+    print(f"crap-gate: {len(found)} methods, {len(violations)} above {args.limit:g}, {len(excepted)} bodies "
+          f"under {len(exceptions)} listed exceptions, {len(unused) + len(stale)} exception problems")
+    return 1 if violations or unused or stale else 0
 
 
 if __name__ == "__main__":
