@@ -92,7 +92,7 @@ def methods(paths, root, include):
                 found.append({"method": source_name(element.get("name"), entry.get("name"), entry.get("signature", "")),
                               "file": Path(element.get("filename")).resolve().relative_to(root.resolve()).as_posix(),
                               "complexity": complexity, "lineCoverage": round(coverage, 4),
-                              "score": round(crap(complexity, coverage), 2)})
+                              "score": crap(complexity, coverage)})
     return found
 
 
@@ -142,7 +142,7 @@ def main(argv=None):
                                            "excepted": excepted, "unusedExceptions": unused}, indent=2),
                                encoding="utf-8")
     for entry in sorted(violations, key=lambda item: -item["score"]):
-        print(f"CRAP {entry['score']} > {args.limit:g}: {entry['method']} ({entry['file']}, "
+        print(f"CRAP {entry['score']:.4f} > {args.limit:g}: {entry['method']} ({entry['file']}, "
               f"complexity {entry['complexity']}, line coverage {entry['lineCoverage']:.0%})")
     # An exception whose method is now within the limit (or gone) only needs removing; it does not fail.
     for name in unused:

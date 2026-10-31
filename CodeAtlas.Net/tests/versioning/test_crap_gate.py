@@ -12,6 +12,9 @@ gate = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(gate)
 
 
+OUTCOMES_FOR_TEN = 10
+
+
 def method(name, complexity, line_rate, signature="()"):
     return (f'<method line-rate="{line_rate}" branch-rate="1" complexity="{complexity}" '
             f'name="{name}" signature="{signature}"><lines /></method>')
@@ -64,6 +67,17 @@ class CrapGateTests(unittest.TestCase):
         self.assertIn("CodeAtlas.Store.Save()", completed.stdout)
         self.assertEqual(["CodeAtlas.Store.Save()"], [entry["method"] for entry in report["violations"]])
         self.assertEqual(20.0, report["violations"][0]["score"])
+
+    def test_a_score_just_above_the_limit_fails_without_rounding(self):
+        # Arrange
+        classes = [("CodeAtlas.Store", "src/CodeAtlas.Core/Store.cs", [method("Near", OUTCOMES_FOR_TEN, 0.9658)])]
+
+        # Act
+        completed, report = self.run_gate(classes)
+
+        # Assert
+        self.assertEqual(1, completed.returncode, completed.stdout + completed.stderr)
+        self.assertAlmostEqual(10.004, report["violations"][0]["score"], places=3)
 
     def test_methods_at_or_below_the_limit_pass(self):
         # Arrange
