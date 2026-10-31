@@ -28,7 +28,7 @@ Status: done (https://github.com/dimitriskl/CodeAtlas/pull/9)
 - [x] The version bump script updates only `README.md` and `docs/VERSION.md` and works on a clean clone. Its test and the VERSION.md rules text say the same.
 - [x] The SnapshotInputModelTests environment-name casing test and the `obj` path test pass on Linux and Windows (and macOS).
 - [x] The Python `C:/bench` instruction test passes on Linux and Windows (and macOS).
-- [x] `macos-latest` is in the qualification matrix, for the build job and the install job. It runs per PR. Note in the workflow: it may move to release-only if the repository stays private.
+- [x] `macos-latest` is in the qualification matrix, for the build job and the install job. It runs per PR. Note in the workflow: it may move to release-only if the repository stays private. Superseded later: macOS now runs only for `v*` tags and manual runs (see CODING_STANDARDS.md).
 - [x] The workflow runs on pull requests, and the in-tree copy (`build/qualification.yml`) stays identical to the active workflow.
 - [x] The qualification workflow is green on all OSes for the PR head, with the full .NET and Python suites on a clean checkout.
 - [ ] No change to production behavior, CLI output, exit codes or schema. Not met as written, by one owner-approved exception: on macOS a held writer lock now reports `index_busy` (errno 35 in `GenerationStore.AcquireWriterLock`), as QUERY-CONTRACT.md already promised; see the review log. No CLI output, exit code or schema change.

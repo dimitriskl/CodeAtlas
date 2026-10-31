@@ -17,7 +17,7 @@ Checked by `dotnet build CodeAtlas.slnx`. `Directory.Build.props` sets `TreatWar
 
 `Directory.Build.props` also enables nullable reference types, implicit usings, and locked package restore. `tests/Qualification/Explanations/fixture` has its own `Directory.Build.props`, so none of this reaches it.
 
-`.github/workflows/qualification.yml` runs `scripts/qualify-package.py` on Windows, Ubuntu and macOS, for pushes to `codex/production-roadmap` and for pull requests: locked restore, Release build, serial .NET tests, Python tests, and package checks. On Ubuntu it also runs the CRAP gate. A warning, a compiler error, a failed test, or a CRAP violation fails the job.
+`.github/workflows/qualification.yml` runs `scripts/qualify-package.py` on Windows and Ubuntu for pushes to `codex/production-roadmap` and for pull requests, and on Windows, Ubuntu and macOS for `v*` tag pushes and manual runs: locked restore, Release build, serial .NET tests, Python tests, and package checks. On Ubuntu it also runs the CRAP gate. A warning, a compiler error, a failed test, or a CRAP violation fails the job. macOS is not a priority before the release, so a macOS regression surfaces only at a tag or manual run; tasks 10, 11 and 13 stay deferred until after the release.
 
 ## Nullable reference types
 

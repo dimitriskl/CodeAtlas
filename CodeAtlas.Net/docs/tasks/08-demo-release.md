@@ -20,7 +20,7 @@ Status: ready
 
 - [ ] The version is bumped with the bump script on a clean clone. README and VERSION.md show the same version.
 - [ ] The release `.nupkg` is the qualified package. Its version matches the tag (NuGet form, for example `0.0.57` for `0.00.57`).
-- [ ] Installing from the release asset and running `codeatlas --version` and the MCP handshake works on Windows, Linux and macOS.
+- [ ] Installing from the release asset and running `codeatlas --version` and the MCP handshake works on Windows, Linux and macOS. The `v*` tag run or a manual run gives the macOS evidence, because pull requests do not run macOS.
 - [ ] The demo is linked from README and uses `<project_name>`.
 - [ ] Tag and release are created only after Dimitris's explicit yes.
 
