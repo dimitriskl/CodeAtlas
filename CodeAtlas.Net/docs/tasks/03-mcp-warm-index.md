@@ -6,7 +6,7 @@ Prefactor. Today every MCP tool call opens the snapshot and hashes every tracked
 
 Add a warm index session behind the MCP host:
 
-- Open the published snapshot once and keep it open.
+- Read the published snapshot's header once and keep it in memory. No SQLite connection stays open between calls: each operation opens its own, because a connection held open failed deletion of its generation on Windows.
 - Run one full freshness check, then compare file stamps (length and write time) and hash only changed files. This is the scheme the live host session already uses.
 - Reload only when `current.json` points at a new generation.
 - Do not load the Roslyn solution.
@@ -79,3 +79,14 @@ Verified:
 - Commits: order, why/what/proof, no names or trailers. `build/crap-exceptions.json` unchanged. BOARD.md is correct for 02 (PR 12 merged) and 03.
 
 Non-blocking: (a) `McpHost.cs:140` now runs the freshness work before the `snapshot_mismatch` check at :142, so a mismatch can cost a full check; the output is the same. (b) `3fbce28` also carries the task 02 status change. (c) A permission change that leaves stamps unmoved no longer gives `snapshot_io_failed`; add it to the limits.
+
+### 2026-10-31 (Developer: addressed technical review attempt 1)
+
+1. Symlinked input: `InputStamp` now stamps the file at the end of a link's chain and keeps that file's path, so an edit of the target and a link pointed somewhere new both move the stamp, including at the same length and write time. A link with no file at the end reads as missing, as in the full check. A link that cannot be followed stamps as present, so the hash fails and the full check answers `snapshot_io_failed`; it never throws while stamping. `LiveIndexSession` gets the same fix. `McpWarmSymlinkTests` compares a warm server with a new one for an edited target, a deleted target, a new target and a link loop. Before the fix the first two failed, as did 4 of the `InputStampsTests`. The retarget and loop rows passed there through directory stamps, because replacing the link moves its directory; `InputStampsTests` pins retargeting without them. Remaining case, documented: a directory link in the middle of a path pointed at a file with the same length and write time.
+2. Symlinks in tests: they use the existing `Link` helper, now internal. On Windows it skips visibly when the privilege is missing, and elsewhere a failure fails the test, so Ubuntu cannot skip. Here they ran: 0 skipped.
+3. Live race: `InputStampsTests.AnEditMadeWhileAnotherFileIsHashedIsSeenByTheNextCheck`, with a 2 GB file and no seam. This corrects my earlier note that it needed one.
+4. Mutations, each applied to the source, built and run against the MCP and stamp tests (28), then restored. Each failed exactly one test, the one meant for it: the old re-stamp loop, `Walk` not recursive, no inventory stamps, stamps taken after the full check, no target path in the stamp, first link hop only, link errors not caught.
+5. Docs: task line 9 and the PRD now say what was built, with the reason for no held connection. `SQLITE-STORE.md` keeps every figure and states what each measures. The cause of the difference is established: `SourcePaths.Tracked`, added to the full check in `ec86023`, cost 294 ms of the fresh process. Removing that call gave 750.5 ms against 1,044.3 ms. The 42 ms between 0.792 s and 750.5 ms stay unexplained. That cost is outside this task and unchanged. Non-blocking (c) is in the limits; (a) and (b) are unchanged.
+6. Measured again, generation `88a31ad3`: warm median 78.2 ms, p95 83.2, first call 1,070.3, fresh process 1,043.9. One earlier run gave a first call of 11,806 ms straight after the test runs; I did not establish why, and did not record it in `SQLITE-STORE.md`.
+
+Local (Windows): build 0 warnings, .NET 622/622 with 0 skipped, Python 145 OK. `InputStamp` methods stay below 10 from Windows coverage of the stamp tests (highest reported complexity 6, at 83% lines); the full CRAP gate runs on Ubuntu in CI. `build/crap-exceptions.json` unchanged. No version bump: 0.00.62.

@@ -164,14 +164,15 @@ The first query of a generation reads the header, stamps the tracked files and d
 
 1. Resolves `current.json`, with its report hashes and artifact lengths. Another generation id reloads the session; a missing, corrupt or unsupported pointer answers as it does in a new process.
 2. Repeats the application ID, completeness marker and store version checks. The stored identity is compared with the manifest when the generation loads, not on each query.
-3. Compares the write time of each directory the full check walks, then the length and write time of each tracked file. Only a file whose stamp moved is hashed. If its content still matches, the file gets the stamp read before the hash.
+3. Compares the write time of each directory the full check walks, then the length and write time of each tracked file. A symlink is stamped by the file at the end of its chain, with that file's path, so an edit of the target or a link pointed somewhere new moves the stamp. A link with no file at the end reads as missing, as it does in the full check. Only a file whose stamp moved is hashed. If its content still matches, the file gets the stamp read before the hash.
 4. Runs the full check when a directory moved, a file's content changed, or a moved file cannot be read, and returns that result, so `stale_index`, `changedFiles` and `snapshot_io_failed` do not depend on the stamps. Stamps are trusted again only after a full check passes.
 
 Directory stamps are what keep an added source file a `stale_index`: adding, removing or renaming an entry moves its directory's write time. `LiveIndexSession` does not use them.
 
 The limits of the scheme:
 
-- An edit that keeps both the length and the write time is not seen until the next full check, which is the next generation or the next server process. The same goes for an added file on a file system that does not move a directory's write time.
+- An edit that keeps both the length and the write time is not seen until the next full check, which is the next generation or the next server process. The same goes for an added file on a file system that does not move a directory's write time, and for a directory link in the middle of a tracked path pointed at a file with the same length and write time.
+- A permission change that moves no stamp gives no `snapshot_io_failed` until a stamp moves or the next full check.
 - The environment digest is checked by the full check only. A process's environment is fixed when it starts.
 
 No SQLite connection stays open between queries. `LoadedSnapshot` keeps the header in memory, and each operation opens its own read-only connection, as it does for the CLI. SQLite on Windows opens without delete sharing: with a session held open, `Directory.Delete` of its generation failed with `IOException`. An idle server holding a replaced generation would block that deletion, with no next query to release it. So there is nothing to dispose. The .NET edition does not prune generations, and publishing leaves old ones on disk. `McpWarmIndexTests` republishes under an idle server, deletes the replaced generation, and deletes the active one, which answers `invalid_index` until the next publish.
@@ -181,8 +182,19 @@ Measured with `benchmarks/agent/measure-mcp-warm.py` on Jellyfin 10.11.9 (`e83a7
 | Query | Warm median / p95 | First call of a server | Fresh process median / p95 |
 | --- | --- | --- | --- |
 | `HandleRequest` (77 methods) | 74.8 / 78.2 ms | 1,066.1 ms | 1,045.8 / 1,052.1 ms |
+| Technical review rerun | 73.4 / 80.6 ms | 1,187.3 ms | 1,038.1 ms median |
+| Rerun with symlink stamps | 78.2 / 83.2 ms | 1,070.3 ms | 1,043.9 / 1,053.9 ms |
 
-The fresh-process figure is this run's. The 0.792 s under [Measurements](#measurements-jellyfin) is the same query from the 0.00.35 run. The warm median is under the PRD's 300 ms target. Medians of 20 rounds of each step inside the process, in ms: `current.json` 0.7, header checks 0.2, directory stamps 7.4, file stamps 61.6, method lookup with its own connection 1.2. So a connection held open could save about 1 ms of the 75.
+What each Jellyfin figure measures:
+
+- **0.6 s** (the task and the PRD) is one phase, not a call: the freshness hash of the 3,643 tracked inputs, profiled at 0.585 s in the 0.00.35 run.
+- **0.792 s** under [Measurements](#measurements-jellyfin) is a whole fresh `find-symbol` process at 0.00.35: runtime start, open, hash and lookup.
+- **1,045.8 ms** is the same whole process at 0.00.62. The two runs differ in build and date, and the older figure stands for its build.
+- **74.8 ms** is one call to a running server: no runtime start and no full check.
+
+Most of the gap between 0.792 s and 1,045.8 ms is the real-path step added in `ec86023`. The full check now calls `SourcePaths.Tracked` for each discovered file, which looks for a link at every path component. On this generation, 7 rounds each in a Release build, removing that one call took fresh `find-symbol` from 1,044.3 to 750.5 ms and `index-status` from 1,197.8 to 891.4 ms. The 0.00.35 build's `index-status` takes 890 ms on the same generation today. That build cannot repeat the `find-symbol` run, because it refuses this generation as stale on `<environment>`. The remaining 42 ms between 0.792 s and 750.5 ms are unexplained. A warm query does not run this step: it costs the first call of a generation and every CLI query.
+
+The warm median is under the PRD's 300 ms target. Medians of 20 rounds of each step inside the process, in ms: `current.json` 0.7, header checks 0.2, directory stamps 7.4, file stamps 61.6, method lookup with its own connection 1.2. So a connection held open could save about 1 ms of the 75.
 
 ## Open items
 
