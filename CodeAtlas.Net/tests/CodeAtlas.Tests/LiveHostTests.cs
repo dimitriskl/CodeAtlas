@@ -198,6 +198,25 @@ public sealed partial class SqliteFileUpdateTests
         Assert.Contains("current.json", response["error"]!["message"]!.GetValue<string>(), StringComparison.Ordinal);
     }
 
+    [Theory]
+    [InlineData("""{"command":"find-symbol"}""")]
+    [InlineData("""{"command":"find-symbol","name":" "}""")]
+    public async Task RequestWithAMissingOrBlankFieldIsRefused(string line)
+    {
+        // Arrange
+        using var fixture = await SampleCopy.CreateAsync();
+        await IndexStore.PublishAsync(await SolutionAnalysis.CreateIndexAsync(fixture.Solution));
+        using var host = await LiveHost.StartAsync(fixture.Solution);
+
+        // Act
+        var response = await host.HandleLineAsync(line);
+
+        // Assert
+        Assert.False(response["success"]!.GetValue<bool>());
+        Assert.Equal("find-symbol", response["command"]!.GetValue<string>());
+        Assert.Equal("Request field 'name' is required.", response["error"]!["message"]!.GetValue<string>());
+    }
+
     private static JsonObject Request(string command, params (string Name, string Value)[] fields)
     {
         var request = new JsonObject { ["command"] = command };

@@ -239,6 +239,23 @@ public sealed class McpServerTests(IndexedSolution fixture) : IClassFixture<Inde
         Assert.Equal(snapshotId, page["snapshotId"]!.GetValue<string>());
         Assert.False(page["continuationSupported"]!.GetValue<bool>());
     }
+
+    [Theory]
+    [InlineData("<static>")]
+    [InlineData("Calculator.<static>")]
+    [InlineData("..")]
+    public async Task FindSymbolWithNoExactNameSucceedsWithNoSymbols(string name)
+    {
+        // Arrange
+        var solution = Path.Combine(fixture.Root, "Sample.slnx");
+
+        // Act
+        var responses = await Talk(solution, [Call(1, fixture.Root, name)]);
+
+        // Assert
+        var found = Envelope(responses[0], isError: false);
+        Assert.Empty(found["result"]!["symbols"]!.AsArray());
+    }
 }
 
 public sealed class McpIndexFailureTests

@@ -176,6 +176,22 @@ public sealed class StartMenuTests : IDisposable
     }
 
     [Fact]
+    public async Task EmptyAnswerWithoutADefaultPromptsAgain()
+    {
+        // Arrange: OpenAI -> empty model -> model back -> provider back -> settings back -> exit.
+        var console = new FakeMenuConsole("3", "1", "2", "", "0", "0", "0", "0");
+
+        // Act
+        var exit = await RunAsync(console);
+
+        // Assert
+        Assert.Equal(0, exit);
+        Assert.Equal(1, Occurrences(console.Text, "Enter a value, or 0 to go back.\n"));
+        Assert.Equal(2, Occurrences(console.Text, "Model (0 = back): "));
+        Assert.Empty(work.Events);
+    }
+
+    [Fact]
     public async Task CloudKeyIsTypedHiddenTestedThenSavedOutsideSettings()
     {
         // Arrange
