@@ -1,6 +1,6 @@
 # CodeAtlas version history
 
-Version: **0.00.61**
+Version: **0.00.62**
 
 Version history starts at `0.00.01`; earlier work did not have assigned version numbers.
 
@@ -31,6 +31,10 @@ python scripts/bump-version.py --major-release --summary "Publish the qualified 
 This flag synchronizes the same files; it does not publish a package, create a tag, or waive release checks. Routine increments never change the major component automatically.
 
 ## History
+
+### 0.00.62
+
+- Serve MCP find_symbol, index_status and coverage from a warm index session that checks freshness in full once per generation, then compares file and directory stamps
 
 ### 0.00.61
 

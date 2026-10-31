@@ -135,12 +135,27 @@ public static class IndexStore
     public static async Task VerifyStoreAsync(LoadedSnapshot snapshot, CancellationToken cancellationToken = default)
     {
         if (snapshot.ArtifactName != SqliteIndexSchema.ArtifactName || snapshot.GenerationDirectory is null) return;
-        try
+        await ReadingStoreAsync(async () =>
         {
             var generation = await GenerationStore.ResolveAsync(Path.Combine(snapshot.GenerationDirectory, "generation.json"),
                 cancellationToken, verifyCatalog: false);
             GenerationStore.RequireIdentity(generation, snapshot.Index.IndexId, snapshot.Index.Solution);
             await GenerationStore.VerifyArtifactAsync(generation, SqliteIndexSchema.ArtifactName, cancellationToken);
+            return true;
+        });
+    }
+
+    /// <summary>The generation <c>current.json</c> names, with the checks and errors of
+    /// <see cref="OpenSnapshotAsync"/>, but without reading that generation's database.</summary>
+    internal static Task<string> PublishedIdAsync(string path, CancellationToken cancellationToken = default) =>
+        ReadingStoreAsync(async () =>
+            (await GenerationStore.ResolveAsync(path, cancellationToken, verifyCatalog: false)).Manifest.IndexId);
+
+    private static async Task<T> ReadingStoreAsync<T>(Func<Task<T>> read)
+    {
+        try
+        {
+            return await read();
         }
         catch (SnapshotStoreException exception)
         {

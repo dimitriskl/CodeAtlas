@@ -124,14 +124,18 @@ public sealed partial class SqliteFileUpdateTests
         }
     }
 
-    private static void Link(string path, string target, bool directory)
+    /// <summary>
+    /// Creates a symlink. Windows needs a privilege for that, so there the test skips and says why.
+    /// Elsewhere a failure fails the test, so Ubuntu CI always runs what Windows may skip.
+    /// </summary>
+    internal static void Link(string path, string target, bool directory)
     {
         try
         {
             if (directory) Directory.CreateSymbolicLink(path, target);
             else File.CreateSymbolicLink(path, target);
         }
-        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException
+        catch (Exception exception) when (OperatingSystem.IsWindows() && exception is IOException or UnauthorizedAccessException
             or PlatformNotSupportedException or NotSupportedException)
         {
             throw SkipException.ForSkip("Creating a symlink is not permitted here.");

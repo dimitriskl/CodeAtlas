@@ -19,6 +19,13 @@ internal sealed class SqliteIndexReader(string path)
         return session.Header(cancellationToken);
     });
 
+    /// <summary>The application id, completeness marker and store version; reads no table.</summary>
+    public void RequireComplete() => Use(session =>
+    {
+        session.RequireComplete();
+        return true;
+    });
+
     /// <summary>Materializes the complete index, equal to the deserialized JSON form of the same data.</summary>
     public CodebaseIndex ReadFull(bool includeCatalog, CancellationToken cancellationToken = default) => Use(session =>
     {

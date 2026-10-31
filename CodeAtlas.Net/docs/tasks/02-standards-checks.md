@@ -16,7 +16,7 @@ User stories: 22, 23. PRD: [Testing Decisions](../prd/0001-net-release.md#testin
 
 - [01 — CI green](01-ci-green.md)
 
-Status: review (https://github.com/dimitriskl/CodeAtlas/pull/12)
+Status: done (https://github.com/dimitriskl/CodeAtlas/pull/12)
 
 ## Acceptance criteria
 
