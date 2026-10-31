@@ -5,8 +5,9 @@ using System.Text.Json.Nodes;
 namespace CodeAtlas.Cli;
 
 /// <summary>
-/// Stdio MCP server for one solution. Queries read the published generation. index builds and
-/// publishes a generation for that solution.
+/// Stdio MCP server for one solution. Queries read the published generation through one
+/// <see cref="WarmIndexSession"/>. index builds and publishes a generation for that solution, and the
+/// next query reloads it.
 /// </summary>
 internal sealed class McpHost
 {
@@ -17,11 +18,13 @@ internal sealed class McpHost
 
     private readonly string solutionFile;
     private readonly string solutionDirectory;
+    private readonly WarmIndexSession warm;
 
     private McpHost(string solution)
     {
         solutionFile = SourcePaths.Real(Path.GetFullPath(solution));
         solutionDirectory = SourcePaths.Real(Path.GetDirectoryName(solutionFile)!);
+        warm = new WarmIndexSession(solutionFile);
     }
 
     public static McpHost Start(string solution) => new(solution);
@@ -134,10 +137,9 @@ internal sealed class McpHost
             return query.SnapshotId is null
                 ? SymbolSuccess(NoIndexFreshness(), Coverage(catalog: true, noIndex: true), Page(0, query.Offset, query.Limit, 0, null, false), [], 0)
                 : Mismatch("find_symbol");
-        var snapshot = await IndexStore.OpenSnapshotAsync(manifest, cancellationToken: cancellationToken);
+        var (snapshot, freshness) = await warm.CurrentAsync(cancellationToken);
         if (query.SnapshotId is not null && !string.Equals(query.SnapshotId, snapshot.Index.IndexId, StringComparison.Ordinal))
             return Mismatch("find_symbol");
-        var freshness = await IndexStore.CheckFreshnessAsync(snapshot.Index, cancellationToken);
         var coverage = Coverage(snapshot.Index.SchemaVersion >= 2, noIndex: false);
         if (freshness.IsStale)
             return Stale("find_symbol", snapshot, freshness, coverage);
@@ -158,8 +160,7 @@ internal sealed class McpHost
         var workspace = Text(arguments, "workspace", "workspace is required.", "workspace must not be empty.");
         if (!IsBound(workspace) || !File.Exists(Manifest))
             return GenerationEnvelope("index_status", NoIndexFreshness(), Coverage(catalog: true, noIndex: true), snapshot: null, 0);
-        var snapshot = await OpenAsync(cancellationToken);
-        var freshness = await IndexStore.CheckFreshnessAsync(snapshot.Index, cancellationToken);
+        var (snapshot, freshness) = await warm.CurrentAsync(cancellationToken);
         return GenerationEnvelope("index_status", Freshness(freshness), LoadedCoverage(snapshot, emptyLimitations: true), snapshot, snapshot.Index.Warnings.Length);
     }
 
@@ -168,8 +169,7 @@ internal sealed class McpHost
         var workspace = OptionalText(arguments, "workspace", "workspace must not be empty.");
         if (workspace is null || !IsBound(workspace) || !File.Exists(Manifest))
             return Zero("coverage", NoIndexFreshness(), Coverage(catalog: true, noIndex: true), snapshotId: null, 0);
-        var snapshot = await OpenAsync(cancellationToken);
-        var freshness = await IndexStore.CheckFreshnessAsync(snapshot.Index, cancellationToken);
+        var (snapshot, freshness) = await warm.CurrentAsync(cancellationToken);
         var coverage = LoadedCoverage(snapshot, emptyLimitations: true);
         if (freshness.IsStale) return Stale("coverage", snapshot, freshness, coverage);
         if (freshness.Diagnostics.Length != 0) return Io("coverage", snapshot, freshness, coverage);
@@ -189,9 +189,6 @@ internal sealed class McpHost
     }
 
     private string Manifest => IndexStore.DefaultPath(solutionFile);
-
-    private Task<LoadedSnapshot> OpenAsync(CancellationToken cancellationToken) =>
-        IndexStore.OpenSnapshotAsync(Manifest, cancellationToken: cancellationToken);
 
     private bool IsBound(string workspace) =>
         TryReal(workspace, out var real) && (Paths.Equals(real, solutionDirectory) || Paths.Equals(real, solutionFile));
