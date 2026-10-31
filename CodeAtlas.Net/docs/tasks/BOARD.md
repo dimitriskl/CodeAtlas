@@ -2,7 +2,7 @@
 
 Source: [PRD 0001](../prd/0001-net-release.md). Each task is a vertical slice for one coding session. Domnus reviews each PR technically, then QA reviews it against CODING_STANDARDS.md.
 
-01 and 12 are merged. 02 is in review. 03, 10, 11, 13 and 14 can start. After 03, 04 and 05 can run in parallel.
+01 and 12 are merged. 02 is in review. 03, 10, 11, 13 and 14 can start. After 03, 04 and 05 can run in parallel. After 02, 15 can start.
 
 | # | Task | Blocked by | Status |
 |---|---|---|---|
@@ -20,3 +20,4 @@ Source: [PRD 0001](../prd/0001-net-release.md). Each task is a vertical slice fo
 | 12 | [Windows test run hangs until the job timeout](12-windows-test-hang.md) | 01 | done (https://github.com/dimitriskl/CodeAtlas/pull/11) |
 | 13 | [macOS SqliteStoreTests fail with "database table is locked"](13-macos-sqlite-table-locked.md) | 01 | ready |
 | 14 | [Child-process diagnostics in tests](14-child-process-diagnostics.md) | 12 | ready |
+| 15 | [CRAP exception burn-down](15-crap-exception-burn-down.md) | 02 | ready |
