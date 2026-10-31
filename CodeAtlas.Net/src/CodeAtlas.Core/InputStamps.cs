@@ -54,12 +54,37 @@ internal sealed class InputStamps
     }
 }
 
-/// <summary>What one metadata read says about a path. A missing path is the default value.</summary>
-internal readonly record struct InputStamp(bool Exists, long Length, long WriteTicks)
+/// <summary>
+/// What one metadata read says about a path. A missing path is the default value. A link is stamped by
+/// the file at the end of its chain, the one a hash reads, and keeps that file's path, so a link pointed
+/// at another file with the same length and write time still moves. A link with no file at the end is
+/// missing, as the full check reports it.
+/// </summary>
+internal readonly record struct InputStamp(bool Exists, long Length, long WriteTicks, string? Target = null)
 {
     public static InputStamp Of(string path)
     {
         var info = new FileInfo(path);
-        return info.Exists ? new(true, info.Length, info.LastWriteTimeUtc.Ticks) : default;
+        if (!info.Exists) return default;
+        return info.Attributes.HasFlag(FileAttributes.ReparsePoint) ? OfLink(info) : new(true, info.Length, info.LastWriteTimeUtc.Ticks);
     }
+
+    private static InputStamp OfLink(FileInfo link)
+    {
+        // A link that cannot be followed, such as a loop, stamps as present: the hash then fails with
+        // the error the full check reports, instead of the file reading as deleted.
+        try { return OfTarget(link, link.ResolveLinkTarget(returnFinalTarget: true)); }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        {
+            return new(true, -1, 0, link.FullName);
+        }
+    }
+
+    // No target means a reparse point that is not a link, such as a cloud placeholder: it reads as a file.
+    private static InputStamp OfTarget(FileInfo link, FileSystemInfo? target) => target switch
+    {
+        null => new(true, link.Length, link.LastWriteTimeUtc.Ticks),
+        FileInfo { Exists: true } file => new(true, file.Length, file.LastWriteTimeUtc.Ticks, file.FullName),
+        _ => default
+    };
 }
