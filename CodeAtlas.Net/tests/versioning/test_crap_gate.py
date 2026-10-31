@@ -462,6 +462,27 @@ class CrapGateTests(unittest.TestCase):
                          {entry["method"]: entry["complexity"] for entry in report["violations"]},
                          completed.stdout)
 
+    def test_a_lambda_of_a_generic_overload_or_type_is_charged_to_its_generic_owner(self):
+        # Arrange: Cobertura writes a generic method's <T> in its signature and moves a generic type's <T> to
+        # the <>c class. Each generic owner holds the lambda; each same-named owner above it keeps 10 decisions.
+        classes = [("CodeAtlas.Over", "src/CodeAtlas.Core/Over.cs",
+                    [method("Of", 20, 1, "(int)", [(10, 20)]),
+                     method("Of", 8, 0, "&lt;T&gt;(T[])", [(20, 8)])]),
+                   ("CodeAtlas.Over.&lt;&gt;c__1&lt;T&gt;", "src/CodeAtlas.Core/Over.cs", [cached("Of", "1_0", 20)]),
+                   ("CodeAtlas.Twin", "src/CodeAtlas.Core/Twin.cs", [method("One", 20, 1, "(int)", [(10, 20)])]),
+                   ("CodeAtlas.Twin&lt;T&gt;", "src/CodeAtlas.Core/Twin.cs",
+                    [method("One", 8, 0, "(T[])", [(20, 8)])]),
+                   ("CodeAtlas.Twin.&lt;&gt;c&lt;T&gt;", "src/CodeAtlas.Core/Twin.cs", [cached("One", "0_0", 20)])]
+
+        # Act
+        completed, report = self.run_gate(classes)
+
+        # Assert
+        self.assertEqual(1, completed.returncode, completed.stdout + completed.stderr)
+        self.assertEqual({"CodeAtlas.Over.Of(int)": 11, "CodeAtlas.Over.Of<T>(T[])": 4,
+                          "CodeAtlas.Twin.One(int)": 11, "CodeAtlas.Twin<T>.One(T[])": 4},
+                         {entry["method"]: entry["complexity"] for entry in report["violations"]})
+
     def test_a_lambda_nested_in_a_lambda_is_not_taken_off_the_owner(self):
         # Arrange: the outer lambda holds the inner one's cache check, so only the outer check is in Save.
         # The other 6 outcomes on line 10 are real decisions, which the correction must leave alone.

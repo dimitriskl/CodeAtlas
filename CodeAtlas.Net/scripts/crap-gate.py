@@ -53,6 +53,7 @@ CACHE_CLASS = re.compile(r"^<>c(__\d+)?(<.*>)?$")
 # A finally that guards a yield is a method of the iterator's state machine, so a lambda in it has its cache
 # check there and not in MoveNext. An async iterator keeps its finally in MoveNext.
 ITERATOR_FINALLY = re.compile(r"^<>m__Finally\d+$")
+GENERIC_ARGUMENTS = re.compile(r"<[^<>]*>(?=\.|$)")
 # The compiler keeps no cache check for a lambda in a static constructor, which runs once.
 UNCACHED_OWNER = ".cctor"
 CONSTRUCTOR = ".ctor"
@@ -168,6 +169,12 @@ def checks_in_owner(statement):
     return checks
 
 
+def owner_key(file, name):
+    """Returns the key that pairs an owner with its inner bodies. An owner's name can carry generic arguments
+    (Of<T>, Twin<T>.One) that its lambda's name lacks, so neither keeps them, and line order tells overloads."""
+    return file, GENERIC_ARGUMENTS.sub("", name)
+
+
 def count_cached_lambdas(bodies):
     """Sets cachedLambdas on each owner: the cache checks that can only be in the owner's own code.
 
@@ -182,10 +189,10 @@ def count_cached_lambdas(bodies):
         if found:
             inner.append((body, *found))
         elif body["lines"]:
-            owners.setdefault((body["file"], body["method"].partition("(")[0]), []).append(body)
+            owners.setdefault(owner_key(body["file"], body["method"].partition("(")[0]), []).append(body)
     statements = {}
     for body, owner_name, cached in inner:
-        place = owner_statement(body, owners.get((body["file"], owner_name), []))
+        place = owner_statement(body, owners.get(owner_key(body["file"], owner_name), []))
         if place:
             statements.setdefault((id(place[0]), place[1]), (place, []))[1].append(
                 (min(body["lines"]), cached, body["outcomes"] // 2))
