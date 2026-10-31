@@ -410,6 +410,30 @@ class CrapGateTests(unittest.TestCase):
                          {entry["method"]: entry["complexity"] for entry in report["violations"]},
                          completed.stdout)
 
+    def test_a_lambda_in_an_iterator_finally_is_not_taken_off_the_iterator_or_its_parent(self):
+        # Arrange: the compiler output for a finally that guards a yield. <>m__Finally1 holds the cache check, so
+        # the 10 decisions of the iterator and of the local iterator's parent stay: complexity 11, not 10.
+        classes = [("CodeAtlas.Store.&lt;Read&gt;d__4", "src/CodeAtlas.Core/Store.cs",
+                    [method("MoveNext", 20, 1, lines=[(10, 20), (20, 0)]),
+                     method("&lt;&gt;m__Finally1", 4, 1, lines=[(15, 4), (17, 0)])]),
+                   ("CodeAtlas.Store", "src/CodeAtlas.Core/Store.cs",
+                    [method("Parent", 20, 1, "(int)", [(24, 20), (25, 0)])]),
+                   ("CodeAtlas.Store.&lt;&gt;c__DisplayClass5_0.&lt;&lt;Parent&gt;g__Local|0&gt;d",
+                    "src/CodeAtlas.Core/Store.cs",
+                    [method("MoveNext", 1, 1, lines=[(28, 0), (31, 0), (40, 0)]),
+                     method("&lt;&gt;m__Finally1", 4, 1, lines=[(35, 4), (37, 0)])]),
+                   ("CodeAtlas.Store.&lt;&gt;c", "src/CodeAtlas.Core/Store.cs",
+                    [cached("Read", "4_0", 15), cached("Parent", "5_1", 35)])]
+
+        # Act
+        completed, report = self.run_gate(classes)
+
+        # Assert
+        self.assertEqual(1, completed.returncode, completed.stdout + completed.stderr)
+        self.assertEqual({"CodeAtlas.Store.Read": (11, 0), "CodeAtlas.Store.Parent(int)": (11, 0)},
+                         {entry["method"]: (entry["complexity"], entry["cachedLambdas"])
+                          for entry in report["violations"]})
+
     def test_an_async_cached_lambda_is_counted_from_its_state_machine(self):
         # Arrange: an async lambda has no method in <>c; its body is the MoveNext of a class nested there.
         classes = [("CodeAtlas.Store", "src/CodeAtlas.Core/Store.cs",

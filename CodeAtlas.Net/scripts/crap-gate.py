@@ -9,8 +9,9 @@ A non-capturing lambda is the largest compiler branch: the method that creates i
 a null check, two outcomes that are no decision of the source. Each such lambda is one entry of a <>c class,
 <Owner>b__N_M, or <>c.<<Owner>b__N_M>d when it is async, and it takes one off its owner, which for an async
 or iterator method is the MoveNext of its state machine. The count is a lower bound, so an unclear shape keeps
-the higher value: a lambda that may be nested in another lambda or local function of the same statement stays
-counted, and so does a field initializer's lambda in a constructor. A static constructor caches nothing.
+the higher value: a lambda that may be nested in another lambda, local function, or iterator finally of the same
+statement stays counted, and so does a field initializer's lambda in a constructor. A static constructor caches
+nothing.
 
 Other compiler branches still count: a cached method group has no Cobertura entry, and a pattern in an if adds
 one. An IL switch counts low (13 outcomes count as 6 decisions, not 12). Only files under --include (default
@@ -49,6 +50,9 @@ CLOSURE = re.compile(r"^<>c(__DisplayClass)?[\d_]*(<.*>)?$")
 CLOSURE_PARAMETER = re.compile(r"(, )?ref [^,()]*<>c__DisplayClass[^,()]*")
 # The class that holds non-capturing lambdas: <>c, <>c<T> in a generic type, <>c__4<T> for a generic method.
 CACHE_CLASS = re.compile(r"^<>c(__\d+)?(<.*>)?$")
+# A finally that guards a yield is a method of the iterator's state machine, so a lambda in it has its cache
+# check there and not in MoveNext. An async iterator keeps its finally in MoveNext.
+ITERATOR_FINALLY = re.compile(r"^<>m__Finally\d+$")
 # The compiler keeps no cache check for a lambda in a static constructor, which runs once.
 UNCACHED_OWNER = ".cctor"
 CONSTRUCTOR = ".ctor"
@@ -112,17 +116,18 @@ def measured(filename, root, include):
 
 
 def inner_body(class_name, method_name):
-    """For a lambda or local function, returns the name of the source method it sits in and whether it is
-    a cached lambda. Returns None for any other body."""
+    """For a lambda, local function, or iterator finally, returns the name of the source method it sits in and
+    whether it is a cached lambda. Returns None for any other body."""
     parts = split_type_name(class_name)
     machine = STATE_MACHINE.match(parts[-1])
-    if machine and method_name == "MoveNext":
+    in_finally = bool(machine and ITERATOR_FINALLY.match(method_name))
+    if machine and (method_name == "MoveNext" or in_finally):
         parts, method_name = parts[:-1], machine.group("method")
     anonymous = LAMBDA.match(method_name)
     generated = anonymous or LOCAL_FUNCTION.match(method_name)
-    if not generated:
+    if not generated and not in_finally:
         return None
-    owner = lambda_name(generated.group("method"))
+    owner = lambda_name(generated.group("method")) if generated else method_name
     cached = bool(anonymous and CACHE_CLASS.match(parts[-1])) and owner != UNCACHED_OWNER
     return ".".join(without_closures(parts) + [owner]), cached
 
