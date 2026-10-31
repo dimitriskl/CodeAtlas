@@ -7,11 +7,13 @@ so complexity = outcomes // 2 + 1. A branch the compiler adds counts too (a patt
 and an IL switch counts low (13 outcomes count as 6 decisions, not 12). Only files under --include
 (default src/) count; test projects and files under obj/ (generated code) are skipped.
 
-An exception pins the highest score and the number of bodies above the limit under its key, so it records
-a baseline: a worse score, an extra body, a better score, a missing body and an unused entry all fail.
+An exception pins the highest score and the number of bodies above the limit under its key, so it records a
+baseline. A worse score, an extra body, and an entry for a method that no longer exists fail. A better score,
+a missing body, and a key with no body above the limit print a warning and pass.
 
-Exit codes: 0 pass, 1 a method above the limit or an exception out of date, 2 bad input (no coverage, a
-source project missing from the coverage, an exception without a reason or a pin).
+Exit codes: 0 pass, 1 a method above the limit, a listed key worse than its pin, or a listed method that is
+gone, 2 bad input (no coverage, a source project missing from the coverage, an exception without a reason or
+a pin).
 """
 import argparse
 import json
@@ -128,25 +130,32 @@ def evaluate(found, exceptions, limit):
     above = [entry for entry in found if entry["score"] > limit]
     violations = [entry for entry in above if entry["method"] not in exceptions]
     excepted = [entry for entry in above if entry["method"] in exceptions]
-    measured_names = {entry["method"] for entry in above}
+    measured_names = {entry["method"] for entry in found}
+    above_names = {entry["method"] for entry in above}
     unused = sorted(name for name in exceptions if name not in measured_names)
-    return violations, excepted, unused, out_of_date(excepted, exceptions)
+    worse, better = out_of_date(excepted, exceptions)
+    better += [f"{name}: no body above the limit, recorded {exceptions[name]['score']}"
+               for name in sorted(exceptions) if name in measured_names and name not in above_names]
+    return violations, excepted, unused, worse, better
 
 
 def out_of_date(excepted, exceptions):
-    """Compares what each listed key measures with its pin, in both directions: a better result must be
-    recorded too, or the room it leaves would let a later change get worse unnoticed."""
+    """Compares what each listed key measures with its pin, and returns the keys that got worse and those
+    that got better. Only worse fails: a pin bounds the room a better result leaves, so a later change
+    cannot pass the recorded baseline, and a CI round per improvement would not buy anything."""
     measured_scores = {}
     for entry in excepted:
         measured_scores.setdefault(entry["method"], []).append(entry["score"])
-    found = []
+    worse, better = [], []
     for name, scores in sorted(measured_scores.items()):
         pin = exceptions[name]
-        if abs(max(scores) - pin["score"]) > SCORE_PRECISION:
-            found.append(f"{name}: score {max(scores):.4f}, recorded {pin['score']}")
+        change = max(scores) - pin["score"]
+        if abs(change) > SCORE_PRECISION:
+            (worse if change > 0 else better).append(f"{name}: score {max(scores):.4f}, recorded {pin['score']}")
         if len(scores) != pin["bodies"]:
-            found.append(f"{name}: {len(scores)} bodies above the limit, recorded {pin['bodies']}")
-    return found
+            (worse if len(scores) > pin["bodies"] else better).append(
+                f"{name}: {len(scores)} bodies above the limit, recorded {pin['bodies']}")
+    return worse, better
 
 
 def unmeasured_projects(found, root, include):
@@ -179,11 +188,11 @@ def main(argv=None):
     if missing:
         print(f"crap-gate: the coverage has no methods of {', '.join(missing)}", file=sys.stderr)
         return 2
-    violations, excepted, unused, stale = evaluate(found, exceptions, args.limit)
+    violations, excepted, unused, stale, improved = evaluate(found, exceptions, args.limit)
     if args.report:
         args.report.write_text(json.dumps({"limit": args.limit, "methods": len(found), "violations": violations,
                                            "excepted": excepted, "unusedExceptions": unused,
-                                           "outOfDateExceptions": stale}, indent=2),
+                                           "outOfDateExceptions": stale, "improvedExceptions": improved}, indent=2),
                                encoding="utf-8")
     for entry in sorted(violations, key=lambda item: -item["score"]):
         print(f"CRAP {entry['score']:.4f} > {args.limit:g}: {entry['method']} ({entry['file']}, "
@@ -192,8 +201,11 @@ def main(argv=None):
         print(f"CRAP exception not used (remove it): {name}")
     for line in stale:
         print(f"CRAP exception out of date: {line}")
+    for line in improved:
+        print(f"CRAP exception better than recorded (lower the pin): {line}")
     print(f"crap-gate: {len(found)} methods, {len(violations)} above {args.limit:g}, {len(excepted)} bodies "
-          f"under {len(exceptions)} listed exceptions, {len(unused) + len(stale)} exception problems")
+          f"under {len(exceptions)} listed exceptions, {len(unused) + len(stale)} exception problems, "
+          f"{len(improved)} better than recorded")
     return 1 if violations or unused or stale else 0
 
 

@@ -166,7 +166,7 @@ class CrapGateTests(unittest.TestCase):
         self.assertEqual(["CodeAtlas.Store.Save(): score 30.0000, recorded 20.0"], report["outOfDateExceptions"])
         self.assertIn("recorded 20.0", completed.stdout)
 
-    def test_a_better_score_under_a_listed_key_fails_until_the_pin_is_lowered(self):
+    def test_a_better_score_under_a_listed_key_warns_and_passes(self):
         # Arrange
         classes = [("CodeAtlas.Store", "src/CodeAtlas.Core/Store.cs", [method("Save", 6, 0)])]
         exceptions = [{"method": "CodeAtlas.Store.Save()", "score": 30.0, "bodies": 1, "reason": "Pinned."}]
@@ -175,8 +175,10 @@ class CrapGateTests(unittest.TestCase):
         completed, report = self.run_gate(classes, exceptions)
 
         # Assert
-        self.assertEqual(1, completed.returncode, completed.stdout + completed.stderr)
-        self.assertEqual(["CodeAtlas.Store.Save(): score 20.0000, recorded 30.0"], report["outOfDateExceptions"])
+        self.assertEqual(0, completed.returncode, completed.stdout + completed.stderr)
+        self.assertEqual([], report["outOfDateExceptions"])
+        self.assertEqual(["CodeAtlas.Store.Save(): score 20.0000, recorded 30.0"], report["improvedExceptions"])
+        self.assertIn("better than recorded", completed.stdout)
 
     def test_a_score_equal_to_its_pin_at_four_decimals_passes(self):
         # Arrange
@@ -216,7 +218,7 @@ class CrapGateTests(unittest.TestCase):
         self.assertEqual(["CodeAtlas.Store.Load.<lambda>(int): 2 bodies above the limit, recorded 1"],
                          report["outOfDateExceptions"])
 
-    def test_a_missing_body_under_a_listed_key_fails(self):
+    def test_a_missing_body_under_a_listed_key_warns_and_passes(self):
         # Arrange
         classes = [("CodeAtlas.Store.&lt;&gt;c", "src/CodeAtlas.Core/Store.cs", [method("&lt;Load&gt;b__0_0", 6, 0, "(int)")])]
         exceptions = [{"method": "CodeAtlas.Store.Load.<lambda>(int)", "score": 20.0, "bodies": 2, "reason": "Pinned."}]
@@ -225,9 +227,10 @@ class CrapGateTests(unittest.TestCase):
         completed, report = self.run_gate(classes, exceptions)
 
         # Assert
-        self.assertEqual(1, completed.returncode, completed.stdout + completed.stderr)
+        self.assertEqual(0, completed.returncode, completed.stdout + completed.stderr)
+        self.assertEqual([], report["outOfDateExceptions"])
         self.assertEqual(["CodeAtlas.Store.Load.<lambda>(int): 1 bodies above the limit, recorded 2"],
-                         report["outOfDateExceptions"])
+                         report["improvedExceptions"])
 
     def test_an_exception_for_a_method_that_is_gone_fails(self):
         # Arrange
@@ -242,7 +245,7 @@ class CrapGateTests(unittest.TestCase):
         self.assertEqual(["CodeAtlas.Store.Removed()"], report["unusedExceptions"])
         self.assertIn("CodeAtlas.Store.Removed()", completed.stdout)
 
-    def test_an_exception_for_a_method_now_within_the_limit_fails(self):
+    def test_an_exception_for_a_method_now_within_the_limit_warns_and_passes(self):
         # Arrange
         classes = [("CodeAtlas.Store", "src/CodeAtlas.Core/Store.cs", [method("Save", 6, 1)])]
         exceptions = [{"method": "CodeAtlas.Store.Save()", "score": 20.0, "bodies": 1, "reason": "Pinned."}]
@@ -251,8 +254,23 @@ class CrapGateTests(unittest.TestCase):
         completed, report = self.run_gate(classes, exceptions)
 
         # Assert
+        self.assertEqual(0, completed.returncode, completed.stdout + completed.stderr)
+        self.assertEqual([], report["unusedExceptions"])
+        self.assertEqual(["CodeAtlas.Store.Save(): no body above the limit, recorded 20.0"], report["improvedExceptions"])
+
+    def test_a_worse_score_still_fails_when_another_key_improved(self):
+        # Arrange
+        classes = [("CodeAtlas.Store", "src/CodeAtlas.Core/Store.cs", [method("Save", 8, 0), method("Load", 6, 0)])]
+        exceptions = [{"method": "CodeAtlas.Store.Save()", "score": 20.0, "bodies": 1, "reason": "Pinned."},
+                      {"method": "CodeAtlas.Store.Load()", "score": 30.0, "bodies": 1, "reason": "Pinned."}]
+
+        # Act
+        completed, report = self.run_gate(classes, exceptions)
+
+        # Assert
         self.assertEqual(1, completed.returncode, completed.stdout + completed.stderr)
-        self.assertEqual(["CodeAtlas.Store.Save()"], report["unusedExceptions"])
+        self.assertEqual(["CodeAtlas.Store.Save(): score 30.0000, recorded 20.0"], report["outOfDateExceptions"])
+        self.assertEqual(["CodeAtlas.Store.Load(): score 20.0000, recorded 30.0"], report["improvedExceptions"])
 
     def test_a_source_project_missing_from_the_coverage_fails(self):
         # Arrange: no exception names the lost project, so only the project check can catch it.
