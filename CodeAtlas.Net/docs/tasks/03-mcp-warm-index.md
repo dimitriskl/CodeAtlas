@@ -131,3 +131,28 @@ Probes and mutations ran in a scratch copy of HEAD, removed afterwards. No produ
 7. `PublishTrackingAsync` moved to `IndexedSolution` so both test classes share it. `McpWarmInputTests` keeps a one-line private forwarder and its test methods are unchanged. No other doc changes: no stated fact became untrue.
 
 Local (Windows): build 0 warnings, .NET 629/629 with 0 skipped, Python 145 OK. Changed methods, from Windows coverage of the warm and stamp tests: highest complexity 3, highest CRAP 3.04 (`OfTarget`, its placeholder line uncovered). The full CRAP gate runs on Ubuntu in CI. `build/crap-exceptions.json` unchanged. No version bump: 0.00.62.
+
+### 2026-10-31 (Technical review attempt 3)
+
+Commit reviewed: `2972771`, against `386a89e`. Scope: `3544342`, `2972771`.
+
+Verdict: APPROVED. QA may start.
+
+Blocking: none.
+
+Non-blocking, no change required:
+
+- `tests/CodeAtlas.Tests/McpWarmSymlinkTests.cs:66-72`: the theory has no renamed-child row, and the `add-child`, `remove-child` and `retarget` rows assert a refusal both servers agree on, not the literal `stale_index`. The probes below show the code on Windows. If this test is touched again, add a rename row and pin the code for those three rows.
+
+Verified on `2972771`:
+
+- Warm against a new server, through MCP on the two-link chain of the new test, on Windows. Same code and same `changedFiles` in every case. `stale_index` with `<directory-inventory>`: child directory added, removed and renamed, a linked child added, middle link retargeted, recorded link retargeted, recorded link deleted. `snapshot_io_failed` from both: broken chain, self-loop on the recorded link, two-link cycle, middle link pointed at a file. None hung or crashed. Fresh from both: file added, file removed, middle link retargeted at a directory with the same child names. A junction in place of the links gave `stale_index` from both, for a child added and renamed. One server across five calls: file added stays fresh, child added is `stale_index`, child removed is fresh again.
+- The deviation is accepted. `SnapshotInputModel.CaptureAsync` lists inventories with `Directory.EnumerateDirectories`, and `CheckAsync` compares only `Exists` and `ChildDirectoryNames`, so a plain file leaves the full check fresh. Warm agrees: the stamp moves, the full check answers, nothing changes in the output.
+- Mutation: the old `Stamp` restored in `DirectoryStamps`, built and run. The rows `add-child`, `remove-child`, `retarget`, `break-chain` and `link-loop` failed; `add-file` and `remove-file` passed, as the developer entry says. The rename, `add-linked-child` and file-then-child probes failed too.
+- `InputStamp.Of` keeps its behavior after the refactor: same results for a plain file, a link and a placeholder, and `ResolveLinkTarget` returns the link's kind. `DirectoryStamps` is built outside any `try`, and `OfLink` catches the link errors there. Warm trust is set only by a clean full check, so a failed one is never cached.
+- On ext4 a rename moved the parent's write time, checked in WSL. That is the one row the Ubuntu CI run does not cover.
+- Commits: one change each, why/what/proof, no names, tool mentions or trailers. Version 0.00.62. `git diff 386a89e 2972771` is empty for `Version.props`, `README.md`, `docs/VERSION.md` and `build/crap-exceptions.json`.
+
+CI for this HEAD (run 41227356693), all passed: build Ubuntu, build Windows, install Ubuntu, install Windows. Ubuntu TRX: 629 passed, 0 failed, 0 not executed, all 7 rows of the new theory passed. CRAP gate on Ubuntu: 1587 methods, 0 above 10, 91 listed exceptions, 0 exception problems, 2 better than recorded.
+
+My local full suite did not finish: it hit a 540 s limit I set, so the 629 rests on CI. Probes and the mutation ran in a scratch copy of HEAD, removed afterwards. No production code changed.
