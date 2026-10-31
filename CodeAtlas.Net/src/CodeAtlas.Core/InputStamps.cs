@@ -58,18 +58,24 @@ internal sealed class InputStamps
 /// What one metadata read says about a path. A missing path is the default value. A link is stamped by
 /// the file at the end of its chain, the one a hash reads, and keeps that file's path, so a link pointed
 /// at another file with the same length and write time still moves. A link with no file at the end is
-/// missing, as the full check reports it.
+/// missing, as the full check reports it. A directory link is read the same way, down to a directory.
 /// </summary>
 internal readonly record struct InputStamp(bool Exists, long Length, long WriteTicks, string? Target = null)
 {
-    public static InputStamp Of(string path)
+    public static InputStamp Of(string path) => Read(new FileInfo(path));
+
+    public static InputStamp OfDirectory(string path) => Read(new DirectoryInfo(path));
+
+    private static InputStamp Read(FileSystemInfo info)
     {
-        var info = new FileInfo(path);
         if (!info.Exists) return default;
-        return info.Attributes.HasFlag(FileAttributes.ReparsePoint) ? OfLink(info) : new(true, info.Length, info.LastWriteTimeUtc.Ticks);
+        return info.Attributes.HasFlag(FileAttributes.ReparsePoint) ? OfLink(info) : Present(info);
     }
 
-    private static InputStamp OfLink(FileInfo link)
+    private static InputStamp Present(FileSystemInfo entry, string? target = null) =>
+        new(true, entry is FileInfo file ? file.Length : 0, entry.LastWriteTimeUtc.Ticks, target);
+
+    private static InputStamp OfLink(FileSystemInfo link)
     {
         // A link that cannot be followed, such as a loop, stamps as present: the hash then fails with
         // the error the full check reports, instead of the file reading as deleted.
@@ -80,11 +86,12 @@ internal readonly record struct InputStamp(bool Exists, long Length, long WriteT
         }
     }
 
-    // No target means a reparse point that is not a link, such as a cloud placeholder: it reads as a file.
-    private static InputStamp OfTarget(FileInfo link, FileSystemInfo? target) => target switch
+    // No target means a reparse point that is not a link, such as a cloud placeholder: it reads as itself.
+    // A target has the link's kind, so a file link at a directory, or the reverse, does not exist here.
+    private static InputStamp OfTarget(FileSystemInfo link, FileSystemInfo? target) => target switch
     {
-        null => new(true, link.Length, link.LastWriteTimeUtc.Ticks),
-        FileInfo { Exists: true } file => new(true, file.Length, file.LastWriteTimeUtc.Ticks, file.FullName),
+        null => Present(link),
+        { Exists: true } => Present(target, target.FullName),
         _ => default
     };
 }

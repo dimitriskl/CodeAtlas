@@ -14,6 +14,11 @@ public sealed class McpWarmSymlinkTests(IndexedSolution fixture) : IClassFixture
     private const string DeleteTarget = "delete-target";
     private const string Retarget = "retarget";
     private const string LinkLoop = "link-loop";
+    private const string AddChild = "add-child";
+    private const string RemoveChild = "remove-child";
+    private const string AddFile = "add-file";
+    private const string RemoveFile = "remove-file";
+    private const string BreakChain = "break-chain";
     private string Solution => Path.Combine(fixture.Root, "Sample.slnx");
     private string Imported => Path.Combine(fixture.Root, "Version.props");
 
@@ -51,6 +56,86 @@ public sealed class McpWarmSymlinkTests(IndexedSolution fixture) : IClassFixture
             File.Delete(Imported);
             await File.WriteAllBytesAsync(Imported, original);
             Directory.Delete(outside, recursive: true);
+        }
+    }
+
+    // An inventory lists child directories only, so an added or removed file moves the stamp, the full
+    // check finds nothing, and both servers stay fresh. Which error a broken link or a cycle gives depends
+    // on the OS, because a link's own attributes differ there, so those rows pin that both servers agree.
+    [Theory]
+    [InlineData(AddChild, true)]
+    [InlineData(RemoveChild, true)]
+    [InlineData(AddFile, false)]
+    [InlineData(RemoveFile, false)]
+    [InlineData(Retarget, true)]
+    [InlineData(BreakChain, true)]
+    [InlineData(LinkLoop, true)]
+    public async Task AChangeBehindALinkedInventoryAnswersLikeANewServer(string change, bool refused)
+    {
+        // Arrange
+        var root = Directory.CreateDirectory(Path.Combine(fixture.Parent, "inventory-" + Guid.NewGuid().ToString("N"))).FullName;
+        try
+        {
+            await fixture.PublishTrackingAsync([Imported], [CreateLinkedInventory(root)]);
+
+            // Act
+            var (first, warm, restarted) = await AskAcrossAsync(() => ApplyBehindInventory(change, root));
+
+            // Assert
+            Assert.False(Envelope(first, isError: false)["freshness"]!["isStale"]!.GetValue<bool>());
+            var warmAnswer = Envelope(warm, isError: refused);
+            var newAnswer = Envelope(restarted, isError: refused);
+            Assert.Equal(newAnswer["error"]?["code"]?.GetValue<string>(), warmAnswer["error"]?["code"]?.GetValue<string>());
+            Assert.Equal(newAnswer["freshness"]!["changedFiles"]!.ToJsonString(), warmAnswer["freshness"]!["changedFiles"]!.ToJsonString());
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+            await fixture.RestorePublicationAsync();
+        }
+    }
+
+    // The chain has two links, so a change at its end or in its middle leaves the recorded link untouched.
+    private static string CreateLinkedInventory(string root)
+    {
+        var inventory = Path.Combine(root, "inventory");
+        Directory.CreateDirectory(Path.Combine(root, "first", "10.0.100"));
+        File.WriteAllText(Path.Combine(root, "first", "kept.txt"), "kept");
+        Directory.CreateDirectory(Path.Combine(root, "second", "10.0.200"));
+        SqliteFileUpdateTests.Link(Path.Combine(root, "hop"), Path.Combine(root, "first"), directory: true);
+        SqliteFileUpdateTests.Link(inventory, Path.Combine(root, "hop"), directory: true);
+        return inventory;
+    }
+
+    private static void ApplyBehindInventory(string change, string root)
+    {
+        var first = Path.Combine(root, "first");
+        var hop = Path.Combine(root, "hop");
+        switch (change)
+        {
+            case AddChild:
+                Directory.CreateDirectory(Path.Combine(first, "10.0.200"));
+                break;
+            case RemoveChild:
+                Directory.Delete(Path.Combine(first, "10.0.100"));
+                break;
+            case AddFile:
+                File.WriteAllText(Path.Combine(first, "added.txt"), "added");
+                break;
+            case RemoveFile:
+                File.Delete(Path.Combine(first, "kept.txt"));
+                break;
+            case Retarget:
+                Directory.Delete(hop);
+                SqliteFileUpdateTests.Link(hop, Path.Combine(root, "second"), directory: true);
+                break;
+            case BreakChain:
+                Directory.Delete(first, recursive: true);
+                break;
+            case LinkLoop:
+                Directory.Delete(hop);
+                SqliteFileUpdateTests.Link(hop, Path.Combine(root, "inventory"), directory: true);
+                break;
         }
     }
 

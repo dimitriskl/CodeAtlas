@@ -13,14 +13,7 @@ public sealed class McpWarmInputTests(IndexedSolution fixture) : IClassFixture<I
     private static string[] Changed(JsonObject envelope) =>
         envelope["freshness"]!["changedFiles"]!.AsArray().Select(file => file!.GetValue<string>()).ToArray();
 
-    // Publishes a generation that tracks only these inputs, so nothing else slows or moves its check.
-    private async Task PublishTrackingAsync(string[] files, string[] inventories)
-    {
-        var published = fixture.Index.InputManifest!;
-        var manifest = await SnapshotInputModel.CaptureAsync(files, [], inventories, SnapshotEnvironment.Capture(),
-            published.Evidence, relevantEnvironment: published.RelevantEnvironment);
-        await IndexStore.SaveAsync(SnapshotTestIdentity.NewGeneration(fixture.Index) with { InputManifest = manifest });
-    }
+    private Task PublishTrackingAsync(string[] files, string[] inventories) => fixture.PublishTrackingAsync(files, inventories);
 
     [Fact]
     public async Task AddingAFileToANestedDirectoryMakesTheNextQueryStale()
