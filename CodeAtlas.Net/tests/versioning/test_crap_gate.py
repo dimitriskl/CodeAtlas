@@ -15,10 +15,14 @@ spec.loader.exec_module(gate)
 OUTCOMES_FOR_TEN = 18
 
 
-def method(name, outcomes, line_rate, signature="()"):
-    """A Cobertura method. Microsoft.CodeCoverage writes IL branch outcomes in its complexity attribute."""
+def method(name, outcomes, line_rate, signature="()", lines=()):
+    """A Cobertura method. Microsoft.CodeCoverage writes IL branch outcomes in its complexity attribute, and
+    one line element per statement start. lines holds (number, branch outcomes on that line) pairs."""
+    elements = "".join(f'<line number="{number}" hits="1" branch="{"true" if branches else "false"}"'
+                       + (f' condition-coverage="100% ({branches}/{branches})"' if branches else "") + " />"
+                       for number, branches in lines)
     return (f'<method line-rate="{line_rate}" branch-rate="1" complexity="{outcomes}" '
-            f'name="{name}" signature="{signature}"><lines /></method>')
+            f'name="{name}" signature="{signature}"><lines>{elements}</lines></method>')
 
 
 def cobertura(root, classes):
@@ -29,6 +33,11 @@ def cobertura(root, classes):
         for name, file, methods in classes)
     return ('<?xml version="1.0" encoding="utf-8"?><coverage line-rate="0" branch-rate="0" complexity="0">'
             f'<packages><package name="CodeAtlas.Core"><classes>{body}</classes></package></packages></coverage>')
+
+
+def cached(owner, ordinal, line, outcomes=1, branches=0):
+    """A non-capturing lambda, as the compiler writes it into the <>c class."""
+    return method(f"&lt;{owner}&gt;b__{ordinal}", outcomes, 1, "(int)", [(line, branches)])
 
 
 class CrapGateTests(unittest.TestCase):
@@ -353,6 +362,195 @@ class CrapGateTests(unittest.TestCase):
         # Assert
         self.assertEqual(["CodeAtlas.Callers.Traverse.Visit(string)", "CodeAtlas.Callers.Walk.Step()",
                           "CodeAtlas.Page<T>.Map.<lambda>(T)"], normalized)
+
+    def test_a_method_with_only_cached_lambdas_scores_as_having_no_decisions(self):
+        # Arrange: one async return with 12 lambdas, the shape of StructuralCatalogBuilder.CreateAsync.
+        lambdas = [cached("CreateAsync", f"7_{index}", 35 + index) for index in range(12)]
+        classes = [("CodeAtlas.Builder.&lt;CreateAsync&gt;d__7", "src/CodeAtlas.Core/Builder.cs",
+                    [method("MoveNext", 24, 1, lines=[(33, 0), (34, 24), (47, 0)])]),
+                   ("CodeAtlas.Builder.&lt;&gt;c", "src/CodeAtlas.Core/Builder.cs", lambdas)]
+
+        # Act
+        completed, report = self.run_gate(classes)
+
+        # Assert
+        self.assertEqual(0, completed.returncode, completed.stdout + completed.stderr)
+        self.assertEqual([], report["violations"])
+
+    def test_each_cached_lambda_takes_one_off_the_complexity_of_its_owner(self):
+        # Arrange: 8 outcomes are 5 by the estimate; 2 are lambda branches, so 3 remain. At 0% that scores 12.
+        classes = [("CodeAtlas.Store", "src/CodeAtlas.Core/Store.cs",
+                    [method("Save", 8, 0, "(int)", [(10, 2), (11, 4), (14, 2)])]),
+                   ("CodeAtlas.Store.&lt;&gt;c", "src/CodeAtlas.Core/Store.cs",
+                    [cached("Save", "3_0", 11), cached("Save", "3_1", 12)])]
+
+        # Act
+        completed, report = self.run_gate(classes)
+
+        # Assert
+        self.assertEqual(1, completed.returncode, completed.stdout + completed.stderr)
+        self.assertEqual([("CodeAtlas.Store.Save(int)", 3, 2, 12.0)],
+                         [(entry["method"], entry["complexity"], entry["cachedLambdas"], entry["score"])
+                          for entry in report["violations"]])
+
+    def test_iterator_and_async_owners_lose_their_cached_lambdas(self):
+        # Arrange: each owner reports 8 outcomes and holds one cached lambda, so each has complexity 4.
+        classes = [("CodeAtlas.Store.&lt;Read&gt;d__4", "src/CodeAtlas.Core/Store.cs",
+                    [method("MoveNext", 8, 0, lines=[(10, 2), (11, 6)])]),
+                   ("CodeAtlas.Store.&lt;SaveAsync&gt;d__5", "src/CodeAtlas.Core/Store.cs",
+                    [method("MoveNext", 8, 0, lines=[(20, 6), (21, 2)])]),
+                   ("CodeAtlas.Store.&lt;&gt;c", "src/CodeAtlas.Core/Store.cs",
+                    [cached("Read", "4_0", 10), cached("SaveAsync", "5_0", 21)])]
+
+        # Act
+        completed, report = self.run_gate(classes)
+
+        # Assert
+        self.assertEqual({"CodeAtlas.Store.Read": 4, "CodeAtlas.Store.SaveAsync": 4},
+                         {entry["method"]: entry["complexity"] for entry in report["violations"]},
+                         completed.stdout)
+
+    def test_an_async_cached_lambda_is_counted_from_its_state_machine(self):
+        # Arrange: an async lambda has no method in <>c; its body is the MoveNext of a class nested there.
+        classes = [("CodeAtlas.Store", "src/CodeAtlas.Core/Store.cs",
+                    [method("Save", 8, 0, "(int)", [(10, 8)])]),
+                   ("CodeAtlas.Store.&lt;&gt;c.&lt;&lt;Save&gt;b__3_0&gt;d", "src/CodeAtlas.Core/Store.cs",
+                    [method("MoveNext", 1, 1, lines=[(11, 0)])])]
+
+        # Act
+        completed, report = self.run_gate(classes)
+
+        # Assert
+        self.assertEqual([4], [entry["complexity"] for entry in report["violations"]], completed.stdout)
+
+    def test_a_lambda_is_charged_to_the_overload_above_it(self):
+        # Arrange: both overloads report 8 outcomes; only the second holds the lambda.
+        classes = [("CodeAtlas.Store", "src/CodeAtlas.Core/Store.cs",
+                    [method("Save", 8, 0, "(int)", [(10, 8), (12, 0)]),
+                     method("Save", 8, 0, "(string)", [(20, 8), (22, 0)])]),
+                   ("CodeAtlas.Store.&lt;&gt;c", "src/CodeAtlas.Core/Store.cs", [cached("Save", "4_0", 21)])]
+
+        # Act
+        completed, report = self.run_gate(classes)
+
+        # Assert
+        self.assertEqual({"CodeAtlas.Store.Save(int)": 5, "CodeAtlas.Store.Save(string)": 4},
+                         {entry["method"]: entry["complexity"] for entry in report["violations"]},
+                         completed.stdout)
+
+    def test_a_lambda_nested_in_a_lambda_is_not_taken_off_the_owner(self):
+        # Arrange: the outer lambda holds the inner one's cache check, so only the outer check is in Save.
+        # The other 6 outcomes on line 10 are real decisions, which the correction must leave alone.
+        classes = [("CodeAtlas.Store", "src/CodeAtlas.Core/Store.cs",
+                    [method("Save", 8, 0, "(int)", [(10, 8)])]),
+                   ("CodeAtlas.Store.&lt;&gt;c", "src/CodeAtlas.Core/Store.cs",
+                    [cached("Save", "3_0", 11, outcomes=2, branches=2), cached("Save", "3_1", 12)])]
+
+        # Act
+        completed, report = self.run_gate(classes)
+
+        # Assert
+        self.assertEqual([(4, 1)], [(entry["complexity"], entry["cachedLambdas"]) for entry in report["violations"]],
+                         completed.stdout)
+
+    def test_a_lambda_nested_in_a_capturing_lambda_is_not_taken_off_the_owner(self):
+        # Arrange: the capturing lambda can hold the cache check, so the owner keeps its full estimate.
+        classes = [("CodeAtlas.Store", "src/CodeAtlas.Core/Store.cs",
+                    [method("Save", 8, 0, "(int)", [(10, 8)])]),
+                   ("CodeAtlas.Store.&lt;&gt;c__DisplayClass3_0", "src/CodeAtlas.Core/Store.cs",
+                    [method("&lt;Save&gt;b__1", 2, 1, "(int)", [(11, 2)])]),
+                   ("CodeAtlas.Store.&lt;&gt;c", "src/CodeAtlas.Core/Store.cs", [cached("Save", "3_1", 12)])]
+
+        # Act
+        completed, report = self.run_gate(classes)
+
+        # Assert
+        self.assertEqual([(5, 0)], [(entry["complexity"], entry["cachedLambdas"]) for entry in report["violations"]],
+                         completed.stdout)
+
+    def test_a_lambda_in_a_local_function_is_not_taken_off_the_owner(self):
+        # Arrange: the compiler names the lambda after Save, but its cache check is in the local function.
+        classes = [("CodeAtlas.Store", "src/CodeAtlas.Core/Store.cs",
+                    [method("Save", 8, 0, "(int)", [(10, 8), (20, 0)]),
+                     method("&lt;Save&gt;g__Local|3_0", 2, 1, "(int)", [(21, 2)])]),
+                   ("CodeAtlas.Store.&lt;&gt;c", "src/CodeAtlas.Core/Store.cs", [cached("Save", "3_1", 21)])]
+
+        # Act
+        completed, report = self.run_gate(classes)
+
+        # Assert
+        self.assertEqual([(5, 0)], [(entry["complexity"], entry["cachedLambdas"]) for entry in report["violations"]],
+                         completed.stdout)
+
+    def test_a_static_constructor_lambda_is_not_cached_so_it_takes_nothing_off(self):
+        # Arrange: the compiler keeps no cache check in a static constructor.
+        classes = [("CodeAtlas.Store", "src/CodeAtlas.Core/Store.cs", [method(".cctor", 8, 0, lines=[(10, 8)])]),
+                   ("CodeAtlas.Store.&lt;&gt;c", "src/CodeAtlas.Core/Store.cs", [cached(".cctor", "3_0", 10)])]
+
+        # Act
+        completed, report = self.run_gate(classes)
+
+        # Assert
+        self.assertEqual([5], [entry["complexity"] for entry in report["violations"]], completed.stdout)
+
+    def test_a_lambda_above_every_owner_line_takes_nothing_off(self):
+        # Arrange: a field initializer above the constructors, which the lines cannot tie to one constructor.
+        classes = [("CodeAtlas.Store", "src/CodeAtlas.Core/Store.cs", [method(".ctor", 8, 0, lines=[(20, 8)])]),
+                   ("CodeAtlas.Store.&lt;&gt;c", "src/CodeAtlas.Core/Store.cs", [cached(".ctor", "3_0", 10)])]
+
+        # Act
+        completed, report = self.run_gate(classes)
+
+        # Assert
+        self.assertEqual([5], [entry["complexity"] for entry in report["violations"]], completed.stdout)
+
+    def test_a_field_initializer_below_a_constructor_takes_nothing_off_its_decisions(self):
+        # Arrange: every constructor has its own copy of the initializer, so line order cannot pair them.
+        classes = [("CodeAtlas.Store", "src/CodeAtlas.Core/Store.cs", [method(".ctor", 8, 0, lines=[(10, 8), (12, 0)])]),
+                   ("CodeAtlas.Store.&lt;&gt;c", "src/CodeAtlas.Core/Store.cs", [cached(".ctor", "3_0", 30)])]
+
+        # Act
+        completed, report = self.run_gate(classes)
+
+        # Assert
+        self.assertEqual([5], [entry["complexity"] for entry in report["violations"]], completed.stdout)
+
+    def test_a_lambda_on_a_continuation_line_is_charged_to_the_branches_above_it(self):
+        # Arrange: Cobertura lists line 11 of the multi-line statement, with no branches; they are all on line 10.
+        classes = [("CodeAtlas.Store", "src/CodeAtlas.Core/Store.cs",
+                    [method("Save", 8, 0, "(int)", [(10, 8), (11, 0)])]),
+                   ("CodeAtlas.Store.&lt;&gt;c", "src/CodeAtlas.Core/Store.cs", [cached("Save", "3_0", 12)])]
+
+        # Act
+        completed, report = self.run_gate(classes)
+
+        # Assert
+        self.assertEqual([4], [entry["complexity"] for entry in report["violations"]], completed.stdout)
+
+    def test_a_statement_line_gives_up_no_more_than_the_branches_it_reports(self):
+        # Arrange: two lambdas follow line 10, which reports one cache check; line 11 holds real decisions.
+        classes = [("CodeAtlas.Store", "src/CodeAtlas.Core/Store.cs",
+                    [method("Save", 8, 0, "(int)", [(10, 2), (11, 6)])]),
+                   ("CodeAtlas.Store.&lt;&gt;c", "src/CodeAtlas.Core/Store.cs",
+                    [cached("Save", "3_0", 10), cached("Save", "3_1", 10)])]
+
+        # Act
+        completed, report = self.run_gate(classes)
+
+        # Assert
+        self.assertEqual([4], [entry["complexity"] for entry in report["violations"]], completed.stdout)
+
+    def test_a_lambda_that_captures_this_is_not_cached_so_it_takes_nothing_off(self):
+        # Arrange: it compiles to a method on the type itself, with no cache check.
+        classes = [("CodeAtlas.Store", "src/CodeAtlas.Core/Store.cs",
+                    [method("Save", 8, 0, "(int)", [(10, 8)]),
+                     method("&lt;Save&gt;b__3_0", 1, 1, "(int)", [(11, 0)])])]
+
+        # Act
+        completed, report = self.run_gate(classes)
+
+        # Assert
+        self.assertEqual([5], [entry["complexity"] for entry in report["violations"]], completed.stdout)
 
     def test_test_projects_and_generated_files_are_not_measured(self):
         # Arrange

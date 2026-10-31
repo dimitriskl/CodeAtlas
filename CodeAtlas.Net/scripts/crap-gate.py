@@ -3,9 +3,18 @@
 CRAP = complexity^2 * (1 - coverage)^3 + complexity, per method, where coverage is the line coverage
 of that method in the Cobertura report. Complexity estimates cyclomatic complexity: Microsoft.CodeCoverage
 writes the number of IL branch outcomes in the complexity attribute, and one decision has two outcomes,
-so complexity = outcomes // 2 + 1. A branch the compiler adds counts too (a pattern in an if adds one),
-and an IL switch counts low (13 outcomes count as 6 decisions, not 12). Only files under --include
-(default src/) count; test projects and files under obj/ (generated code) are skipped.
+so complexity = outcomes // 2 + 1 - cached lambdas.
+
+A non-capturing lambda is the largest compiler branch: the method that creates it caches the delegate behind
+a null check, two outcomes that are no decision of the source. Each such lambda is one entry of a <>c class,
+<Owner>b__N_M, or <>c.<<Owner>b__N_M>d when it is async, and it takes one off its owner, which for an async
+or iterator method is the MoveNext of its state machine. The count is a lower bound, so an unclear shape keeps
+the higher value: a lambda that may be nested in another lambda or local function of the same statement stays
+counted, and so does a field initializer's lambda in a constructor. A static constructor caches nothing.
+
+Other compiler branches still count: a cached method group has no Cobertura entry, and a pattern in an if adds
+one. An IL switch counts low (13 outcomes count as 6 decisions, not 12). Only files under --include (default
+src/) count; test projects and files under obj/ (generated code) are skipped.
 
 An exception pins the highest score and the number of bodies above the limit under its key, so it records a
 baseline. A worse score, an extra body, and an entry for a method that no longer exists fail. A better score,
@@ -16,6 +25,7 @@ gone, 2 bad input (no coverage, a source project missing from the coverage, an e
 a pin).
 """
 import argparse
+from itertools import groupby
 import json
 from pathlib import Path
 import re
@@ -37,6 +47,12 @@ LAMBDA = re.compile(r"^<(?P<method>.*)>b__[\d_]+$")
 LOCAL_FUNCTION = re.compile(r"^<(?P<method>.+?)>g__(?P<local>[^|]+)\|[\d_]+$")
 CLOSURE = re.compile(r"^<>c(__DisplayClass)?[\d_]*(<.*>)?$")
 CLOSURE_PARAMETER = re.compile(r"(, )?ref [^,()]*<>c__DisplayClass[^,()]*")
+# The class that holds non-capturing lambdas: <>c, <>c<T> in a generic type, <>c__4<T> for a generic method.
+CACHE_CLASS = re.compile(r"^<>c(__\d+)?(<.*>)?$")
+# The compiler keeps no cache check for a lambda in a static constructor, which runs once.
+UNCACHED_OWNER = ".cctor"
+CONSTRUCTOR = ".ctor"
+BRANCH_OUTCOMES = re.compile(r"\(\d+/(?P<outcomes>\d+)\)")
 
 
 def crap(complexity, coverage):
@@ -95,19 +111,114 @@ def measured(filename, root, include):
     return any(relative.startswith(prefix.rstrip("/") + "/") for prefix in include) and "/obj/" not in relative
 
 
+def inner_body(class_name, method_name):
+    """For a lambda or local function, returns the name of the source method it sits in and whether it is
+    a cached lambda. Returns None for any other body."""
+    parts = split_type_name(class_name)
+    machine = STATE_MACHINE.match(parts[-1])
+    if machine and method_name == "MoveNext":
+        parts, method_name = parts[:-1], machine.group("method")
+    anonymous = LAMBDA.match(method_name)
+    generated = anonymous or LOCAL_FUNCTION.match(method_name)
+    if not generated:
+        return None
+    owner = lambda_name(generated.group("method"))
+    cached = bool(anonymous and CACHE_CLASS.match(parts[-1])) and owner != UNCACHED_OWNER
+    return ".".join(without_closures(parts) + [owner]), cached
+
+
+def owner_statement(body, owners):
+    """Returns the owner overload and its last branching line at or above a body. Overloads share a name, so
+    the owner is the last one that starts at or above the body. A cache check is a branch, and it sits on the
+    line that starts its statement, so a line with no branches cannot hold one. None when no owner fits, as
+    for a field initializer, which every constructor repeats, so line order cannot pair it with one."""
+    first = min(body["lines"], default=None)
+    above = [owner for owner in owners if first is not None and min(owner["lines"]) <= first]
+    if not above:
+        return None
+    owner = max(above, key=lambda candidate: min(candidate["lines"]))
+    branching = [line for line, outcomes in owner["lines"].items() if outcomes and line <= first]
+    if not branching or (owner["name"] == CONSTRUCTOR and first > max(owner["lines"])):
+        return None
+    return owner, max(branching)
+
+
+def checks_in_owner(statement):
+    """Returns the cache checks one owner statement must hold itself, as a lower bound.
+
+    A lambda nested in another inner body has its check there, which takes one decision of that body, and a
+    body can only hold a lambda that starts at or below it. So walk the bodies in source order and treat a
+    lambda as nested whenever an earlier body has a decision to spare. Bodies on one line can hold each other,
+    except that without an earlier body one of them must be the outermost.
+    """
+    checks, spare = 0, 0
+    for _, group in groupby(sorted(statement, key=lambda item: item[0]), key=lambda item: item[0]):
+        group = list(group)
+        cached = sum(item[1] for item in group)
+        decisions = sum(item[2] for item in group)
+        may_be_nested = cached if spare or len(group) > cached else cached - 1
+        nested = min(may_be_nested, spare + decisions)
+        checks += cached - nested
+        spare += decisions - nested
+    return checks
+
+
+def count_cached_lambdas(bodies):
+    """Sets cachedLambdas on each owner: the cache checks that can only be in the owner's own code.
+
+    The compiler names a lambda after the top-level method even when another lambda or a local function
+    holds it, and Cobertura records statement starts only, so the lines cannot show nesting. checks_in_owner
+    takes a lower bound instead, and a line gives up no more than it reports. A low bound leaves the higher
+    score, so the correction can never take off a real decision.
+    """
+    owners, inner = {}, []
+    for body in bodies:
+        found = inner_body(body["class"], body["name"])
+        if found:
+            inner.append((body, *found))
+        elif body["lines"]:
+            owners.setdefault((body["file"], body["method"].partition("(")[0]), []).append(body)
+    statements = {}
+    for body, owner_name, cached in inner:
+        place = owner_statement(body, owners.get((body["file"], owner_name), []))
+        if place:
+            statements.setdefault((id(place[0]), place[1]), (place, []))[1].append(
+                (min(body["lines"]), cached, body["outcomes"] // 2))
+    for (owner, line), statement in statements.values():
+        owner["cachedLambdas"] += min(checks_in_owner(statement), owner["lines"][line] // 2)
+
+
+def branch_outcomes(entry):
+    """Maps each line of a Cobertura method to the branch outcomes reported on it."""
+    lines = {}
+    for line in entry.iter("line"):
+        outcomes = BRANCH_OUTCOMES.search(line.get("condition-coverage", ""))
+        lines[int(line.get("number"))] = int(outcomes.group("outcomes")) if outcomes else 0
+    return lines
+
+
+def read_body(element, entry, root):
+    return {"class": element.get("name"), "name": entry.get("name"), "cachedLambdas": 0,
+            "method": source_name(element.get("name"), entry.get("name"), entry.get("signature", "")),
+            "file": Path(element.get("filename")).resolve().relative_to(root.resolve()).as_posix(),
+            "outcomes": int(entry.get("complexity")), "coverage": float(entry.get("line-rate")),
+            "lines": branch_outcomes(entry)}
+
+
+def scored(body):
+    complexity = cyclomatic(body["outcomes"]) - body["cachedLambdas"]
+    return {"method": body["method"], "file": body["file"], "complexity": complexity,
+            "cachedLambdas": body["cachedLambdas"], "lineCoverage": round(body["coverage"], 4),
+            "score": crap(complexity, body["coverage"])}
+
+
 def methods(paths, root, include):
     found = []
     for path in paths:
-        for element in ET.parse(path).getroot().iter("class"):
-            if not measured(element.get("filename", ""), root, include):
-                continue
-            for entry in element.iter("method"):
-                complexity = cyclomatic(int(entry.get("complexity")))
-                coverage = float(entry.get("line-rate"))
-                found.append({"method": source_name(element.get("name"), entry.get("name"), entry.get("signature", "")),
-                              "file": Path(element.get("filename")).resolve().relative_to(root.resolve()).as_posix(),
-                              "complexity": complexity, "lineCoverage": round(coverage, 4),
-                              "score": crap(complexity, coverage)})
+        bodies = [read_body(element, entry, root) for element in ET.parse(path).getroot().iter("class")
+                  if measured(element.get("filename", ""), root, include) for entry in element.iter("method")]
+        count_cached_lambdas(bodies)
+        found.extend(scored(body) for body in bodies)
     return found
 
 
