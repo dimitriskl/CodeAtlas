@@ -155,4 +155,38 @@ Verified on `2972771`:
 
 CI for this HEAD (run 41227356693), all passed: build Ubuntu, build Windows, install Ubuntu, install Windows. Ubuntu TRX: 629 passed, 0 failed, 0 not executed, all 7 rows of the new theory passed. CRAP gate on Ubuntu: 1587 methods, 0 above 10, 91 listed exceptions, 0 exception problems, 2 better than recorded.
 
-My local full suite did not finish: it hit a 540 s limit I set, so the 629 rests on CI. Probes and the mutation ran in a scratch copy of HEAD, removed afterwards. No production code changed.
+My local full suite did not finish: it hit a 540 s limit I set, so the 629 rests on CI. Probes and the mutation ran in a scratch copy of HEAD, left in place because its removal was denied. No production code changed.
+
+### 2026-10-31 (QA)
+
+Commit tested: `9ab75bf`, against `724e713` (`codex/production-roadmap`).
+
+Verdict: FAILED on one listed check. All 7 acceptance criteria pass. The failure is not a regression: the baseline gives the same answers. Waiving it or fixing it first is a decision for the task owner. No production code changed and no test was added.
+
+Failed check: a symlinked input gives the same answer as the one-shot CLI. On a server that has already run a full check, a link changed afterwards gives a different answer from a new server and from the CLI:
+
+| Change while the server runs | Warm server | New server and CLI |
+| --- | --- | --- |
+| Tracked `Library/Calculator.cs` replaced by a link to a same-bytes file under `Library/bin` | `isStale` false, `stale_index` missed | `stale_index`, `Library/bin/Calculator.copy.cs` |
+| Discovered link retargeted to a same-bytes file under `Library/bin` | `isStale` false, `stale_index` missed | `stale_index`, `Library/bin/B.cs` |
+| `Version.props` link retargeted at a file with other bytes | `stale_index`, names `Version.props` | `stale_index`, names `Version2.props` |
+
+Cause: `SourcePaths.Resolved` in `src/CodeAtlas.Core/SourcePaths.cs:10` keeps real paths for the life of the process, so a full check reuses the old one. This branch does not change that file. It is the cache the attempt 2 review listed as non-blocking, and its retarget and excluded-directory cases reproduce here on `9ab75bf` and on the baseline. A tracked file replaced by a link to outside the solution, the third case of that entry, gave the same answer from all three in these runs. The same cache gives two cosmetic differences for a new file: after `New.cs` was added and removed, adding `New.CS` reports `Library/New.cs`, and `NuGet.Config` reports `nuget.config` in the same way. The code is `stale_index` from all three.
+
+Evidence, from a real `codeatlas mcp` process over stdio on a scratch copy of `tests/Fixtures/Sample.slnx`, built from this commit, with the baseline built from `724e713`. This fixture's input coverage is partial, so its state is `unknown` when nothing changed; "fresh" below means a successful answer with `isStale` false:
+
+- Two `find_symbol` calls: same 2 rows, first 229.7 ms, second 16.9 ms, then a median of 10.5 ms over 20 calls, against 288 ms for a new process. With `Library/Calculator.cs` held exclusively, the warm server still answered. A new server and a baseline server both gave `snapshot_io_failed`, so the second call does not read unchanged inputs.
+- Edit: the next query gave `stale_index` with `Library/Calculator.cs`, and restoring the file returned to fresh with the same rows. A touch with no content change stayed fresh.
+- `index` from the same server: same process, new `snapshotId` from the next `find_symbol`, `index_status` and `coverage`. A publish from another process was picked up as well.
+- Old `snapshotId`: `snapshot_mismatch` at offset 0 and offset 1.
+- Deletion on Windows, with the server running: every replaced generation; a generation replaced under an idle server, before its next call; and the active one, which gave `invalid_index` from the warm server, a new server and the CLI until `index` from the same server recovered it.
+- Same as the baseline: 144 scripted steps on one long-lived server, 0 differences in any response line, key order included, ignoring ids, timings, tool version and the run's folder. They cover `initialize`, `tools/list`, `index_status`, `coverage`, `index`, 12 malformed requests, 16 bad argument sets, no index, 9 kinds of damaged `current.json` plus a missing one, damaged artifacts, a failed `index`, and exit code and stderr.
+- Warm server against a new server and a real CLI process, on `find_symbol`, `index_status` and `coverage`: 299 comparisons, 294 the same. They cover 32 added paths (nested, new directories, excluded directories, ancestors), a removed, renamed and case-renamed source, a renamed project directory, edits, same-length edits and touches of 7 input kinds, file links, directory links and a junction, and a seeded 150-step random walk (seed 20261031) with no mismatch. The 5 that differ are those above, with no symlink skipped. The same scripted cases on a long-lived baseline server gave the same 5, of 149.
+- Memory, one server, 6,000 warm calls: private bytes 68.4 MiB at call 500 and 63.6 MiB at call 6,000, working set 98.2 to 103.5 MiB, handles 239 to 245. After 1,000 reloads forced by moving `current.json` between two generations: 70.0 MiB, 248 handles. Stdin closed: exit 0 in 0.01 s, empty stderr. Exit 0 also with no calls and after a partial line.
+- Jellyfin, rerun with `benchmarks/agent/measure-mcp-warm.py`, Release build, generation `88a31ad3`: warm median 75.1 ms, p95 83.5, first call 1,138.0, fresh process median 1,055.5, p95 1,075.4. The figures in `docs/SQLITE-STORE.md` (74.8 and 1,045.8) are present and match within run-to-run spread.
+
+Suite, local (Windows): `dotnet restore --locked-mode` clean, `dotnet build` 0 warnings and 0 errors, also with `--no-incremental`. `dotnet test` 629 passed, 0 failed, 0 skipped, in 698 s with no time cap, which is the full local pass the attempt 3 review did not reach. Python 145 OK.
+
+CI for `9ab75bf` (run 41228799118), all passed: build Ubuntu, build Windows, install Ubuntu, install Windows. CRAP gate: 1587 methods, 0 above 10, 0 exception problems.
+
+`git diff 724e713...9ab75bf` is empty for `McpServerTests.cs`, `LiveHostTests.cs`, `tests/Fixtures`, `ResponseContract.cs` and `SqliteIndexWriter.cs`, which holds the schema. The acceptance boxes were already ticked. Probes ran in a scratch folder of their own, which was removed by exact name once they finished. The attempt 3 scratch folder was not touched.
