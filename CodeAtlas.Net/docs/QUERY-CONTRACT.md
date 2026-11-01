@@ -353,7 +353,7 @@ For an optional input, JSON `null` means the same as omitting it. A required inp
 
 Rows come from the generation. The tool does not analyze source again. For the same `id` and `project` the rows and their order are those of `find-references`, and `kinds` removes rows before the page is cut.
 
-- `invocation`: the use writes the method's name, and the name lies inside the callee expression of an invocation, receiver chain included. This is usually a call of the method, but not always: in `Wrap(Zero).Run()` the method group `Zero` is inside the callee `Wrap(Zero).Run`, and in `Mark(nameof(Target)).Run()` nothing calls `Target`. Both are stored as `invocation`, so a row of this kind does not prove a call.
+- `invocation`: the use writes the method's name, and the name lies inside the callee expression of an invocation, receiver chain included. This is usually a call of the method, but not always: in `Wrap(Zero).Run()` the method group `Zero` is inside the callee `Wrap(Zero).Run`, and in `Mark(nameof(Target)).Run()` nothing calls `Target`. Both are stored as `invocation`, so a row of this kind does not prove a call. A receiver before `?.` is outside the callee expression, so `Zero` in `Wrap(Zero)?.Run()` is a `reference`.
 - `reference`: every other use. This is an implicit use, or a method group, a `nameof` or a `cref` of a documentation comment outside every callee expression, such as `Zero` in `Wrap(Zero)`.
 
 `line` and `column` are 1-based. `column` counts UTF-16 code units from the start of the line: a tab counts 1, a character such as `ζ` counts 1, and a surrogate pair counts 2. The method's own declaration is not a use.
