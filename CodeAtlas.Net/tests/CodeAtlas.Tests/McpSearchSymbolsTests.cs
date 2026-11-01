@@ -291,11 +291,13 @@ public sealed class McpSearchSymbolsTests(DocumentationCliContractFixture fixtur
     [Theory]
     [InlineData("workspace", null, "workspace is required.")]
     [InlineData("workspace", "7", "workspace is required.")]
+    [InlineData("workspace", "null", "workspace is required.")]
     [InlineData("workspace", "\"\"", "workspace must not be empty.")]
     [InlineData("workspace", "\"elsewhere\"", "workspace must be the solution directory.")]
     [InlineData("workspace", UnpairedHigh, "workspace is required.")]
     [InlineData("query", null, "query is required.")]
     [InlineData("query", "7", "query is required.")]
+    [InlineData("query", "null", "query is required.")]
     [InlineData("query", "\"\"", "query must not be empty.")]
     [InlineData("query", "\"   \"", "query must have 1-4096 characters and at least one searchable token.")]
     [InlineData("query", "\"the\"", "query must have 1-4096 characters and at least one searchable token.")]
@@ -339,6 +341,31 @@ public sealed class McpSearchSymbolsTests(DocumentationCliContractFixture fixtur
         // Assert
         AssertInvalid(responses[0], message);
         Assert.Contains("search_symbols", ToolNames(responses[1]));
+    }
+
+    // Many JSON clients send null for an unset optional field, so it means the same as omitting it.
+    [Theory]
+    [InlineData("mode")]
+    [InlineData("kind")]
+    [InlineData("project")]
+    [InlineData("snapshotId")]
+    [InlineData("offset")]
+    [InlineData("limit")]
+    public async Task NullForAnOptionalInputReturnsTheSameRowsAsOmittingIt(string field)
+    {
+        // Arrange
+        var arguments = new JsonObject { ["workspace"] = fixture.Root, ["query"] = DocumentedWords };
+        var lines = new[] { Search(1, DocumentedWords), RawTool(2, "search_symbols", arguments, field, "null") };
+
+        // Act
+        var responses = await Talk(Solution, lines);
+
+        // Assert
+        var omitted = Envelope(responses[0], isError: false);
+        var sentNull = Envelope(responses[1], isError: false);
+        Assert.NotEmpty(omitted["result"]!["symbols"]!.AsArray());
+        Assert.True(JsonNode.DeepEquals(omitted["result"], sentNull["result"]));
+        Assert.True(JsonNode.DeepEquals(omitted["pagination"], sentNull["pagination"]));
     }
 
     [Fact]
