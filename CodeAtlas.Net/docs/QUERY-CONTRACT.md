@@ -114,6 +114,21 @@ Saved documentation, fact, purpose-search, duplicate, caller and explanation com
 
 Where one physical project path has several realized target contexts, method IDs remain project/declaration IDs and observed references are unioned deterministically. This does not establish target-specific or unobserved-target completeness; multi-target coverage stays partial. Unsupported reference symbol kinds return `unsupported_symbol_kind` explicitly.
 
+## Encoding of `mcp` and `live`
+
+`mcp` and `live` read and write UTF-8 on stdin and stdout, one JSON value per line, whatever console encoding the process inherits: the Windows code page (`chcp`) or the charset in `LC_ALL`, `LC_MESSAGES` or `LANG`. The same request gets the same response under each of them.
+
+Stdin:
+
+- Non-ASCII text may be sent as raw UTF-8 or as `\uXXXX` escapes.
+- A UTF-8 byte order mark at the very start of stdin is ignored. No other byte order mark is detected.
+- A line with an invalid UTF-8 byte sequence is refused as a whole, because a repaired line could return a successful wrong answer. The server keeps reading, the next line is unaffected, and the exit code does not change. `mcp` answers JSON-RPC `-32700` `Parse error` with a null `id`. `live` answers an error object with `command` null, code `invalid_arguments` and the message `The request line is not a JSON object.`
+- A raw U+FFFD in valid UTF-8 is ordinary text.
+
+Stdout has no byte order mark. The JSON writer escapes non-ASCII text as `\uXXXX`, so it arrives correctly when the line is parsed as JSON. Each line is flushed when written.
+
+Typing at a terminal is not covered: there the terminal's code page decides the bytes, so non-ASCII text on a non-UTF-8 terminal is an invalid byte sequence or different text. Other commands and stderr keep the console encoding.
+
 ## MCP tool `search_symbols`
 
 Read-only. It ranks the symbols of the published generation with the search behind `search-symbols`, from the warm session, with no Roslyn or MSBuild load. It writes nothing. It does not read credentials and it does not call an AI provider, in either mode.
