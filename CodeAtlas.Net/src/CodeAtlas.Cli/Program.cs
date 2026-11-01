@@ -75,9 +75,9 @@ Console.CancelKeyPress += (_, e) => { e.Cancel = true; cancellation.Cancel(); };
 using var indexingProgress = args.Length > 0 && (args[0] is "index" or "refresh") ? new IndexProgressReporter() : null;
 var command = args.FirstOrDefault();
 if (command == "live")
-    return await LiveHost.RunAsync(args, Console.In, Console.Out, Console.Error, cancellation.Token);
+    return await LiveHost.RunAsync(args, ProtocolStreams.OpenInput(), ProtocolStreams.OpenOutput(), Console.Error, cancellation.Token);
 if (command == "mcp")
-    return await McpHost.RunAsync(args, Console.In, Console.Out, Console.Error, cancellation.Token);
+    return await McpHost.RunAsync(args, ProtocolStreams.OpenInput(), ProtocolStreams.OpenOutput(), Console.Error, cancellation.Token);
 CodebaseIndex? loadedIndex = null;
 LoadedSnapshot? loadedSnapshot = null;
 TimingSnapshot? committedTimings = null;
