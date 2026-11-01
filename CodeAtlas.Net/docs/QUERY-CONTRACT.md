@@ -208,6 +208,8 @@ Errors keep the envelope. The tool result is an MCP error, with no `result` and 
 | `limit` is outside 1 through 1000, or not an integer | `limit must be an integer from 1 through 1000.` |
 | `offset` is greater than zero with no `snapshotId` | `offset greater than zero requires snapshotId.` |
 
+A string with an unpaired surrogate, such as `"\ud800"`, counts as not a string, so it gets that field's "not a string" message above.
+
 When the solution has no published generation and `snapshotId` was not supplied, the tool succeeds. `result.symbols` is `[]`, `decision` is `abstained-no-index`, `freshness` and `coverage` are the no-index values, and pagination echoes `offset` and `limit` with `returned` 0, `total` 0, `hasMore` false, `nextOffset` null, `snapshotId` null and `continuationSupported` false. Nothing is written.
 
 ### Example: `search_symbols`
