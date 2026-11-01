@@ -156,3 +156,18 @@ Non-blocking:
 CI for the latest finished code commit `513152c` (run 41275016526; `bb20c11` changes docs only): `build (windows-2025)`, `build (ubuntu-24.04)`, `install (windows-2025)` and `install (ubuntu-24.04)` passed. CRAP gate on Ubuntu: 1598 methods, 0 above 10, 0 exception problems, 4 better than recorded.
 
 Probes and mutations ran in a scratch copy. No production code changed.
+
+### 2026-11-01 (Developer: addressed technical review attempt 2)
+
+- Contract first: `3b98256` adds "Encoding of `mcp` and `live`" to QUERY-CONTRACT. The fix is the commit after it.
+- Stdin: `ProtocolStreams` opens it as UTF-8, and `Program.cs` passes it to both hosts. On Windows `ζεστό καφέ` now returns `Sample.Brew.Prepare` with the right tokens on code pages 437, 737, 932, 1252, 20127, 50220, 37, 1026, 65000 and 65001, with the same response length on each. `Größe` through `find_symbol` and a raw workspace path work too.
+- Stdout was affected, which attempt 2 did not cover. The JSON writer escapes non-ASCII text, so no non-ASCII byte is written on 437 or 737. But `Console.Out` encoded those ASCII bytes with the code page: 37 and 1026 gave EBCDIC and 65000 gave UTF-7, and none was UTF-8. `ProtocolStreams` writes UTF-8 with no byte order mark, flushed per line. The escaping stays, so a non-ASCII result leaves as `\uXXXX`, not as raw multi-byte UTF-8.
+- `live` had the same failure and has the same fix and tests.
+- Invalid bytes: a line is refused whole, `-32700` on `mcp` and `invalid_arguments` on `live`, and the next line is answered. The review's `new UTF8Encoding(false)` would replace them with U+FFFD, which parses and is searched as a successful wrong answer, so it was not used. It also has no preamble, so a leading byte order mark would stay in the first line. U+0000 did not work as the marker: a decoder fallback treats it as the end of the replacement and drops the byte, which the tests caught. The marker is U+0001.
+- Tests: `ProtocolEncodingTests`, 16 cases. Each child inherits its encoding, stdin is written byte for byte, and stdout is read back from a file, because the reader in `ChildProcess` would consume a byte order mark. On the old code 15 of 16 fail on Windows, and the 65001 case passes.
+- Ubuntu: the same tests set `LC_ALL` in place of `chcp`, so they run there and are not skipped. Run in a throwaway WSL Ubuntu 24.04 copy with SDK 10.0.403: 13 of 16 fail on the old code and 16 pass on the fix. The default UTF-8 locale was never affected, but ISO-8859-1 and UTF-16 charsets were. ISO-8859-7 passes on the old code there, because .NET has no such charset without an extra provider and falls back to UTF-8.
+- Mutations in that copy: stdout with a byte order mark, and stdout without per-line flushing, each fail all 16.
+- Real client: a process that waits for each answer and splits a request inside a multi-byte character across two writes gets the right answer each time, then exit 0.
+- Limit, in the contract: a person typing into a terminal with a non-UTF-8 code page sends code-page bytes, so non-ASCII text there is now refused or misread. Protocol clients use pipes. Not tested.
+- Left as they are: task 17, the unticked group announcement. No version bump: 0.00.63. `build/crap-exceptions.json` is unchanged. Both new methods have complexity 1, and `Program.<Main>$` has no new branch.
+- Local (Windows), Debug: build 0 warnings, .NET 716/716, Python 145 OK. The CRAP gate was not run locally.
