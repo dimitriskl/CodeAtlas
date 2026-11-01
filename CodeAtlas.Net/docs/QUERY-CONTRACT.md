@@ -370,7 +370,7 @@ A use that writes the method's name points at the name. An implicit use writes n
 
 `Dispose` rows are not a list of disposable locals. A file has them only if it contains a `using` statement or declaration somewhere; an `await using` counts, a `using` directive does not. Such a file has a row for each `using` statement with an expression, and for each `using` statement, `using` declaration or local declaration with one variable and an initializer, when the type of that expression or initializer has an accessible `Dispose()` with no parameters. That type need not implement `IDisposable`, and it is the type before any conversion to the local's type: `object held = new Resource();` has a row, and `var held = (object)new Resource();` has none. There is no row for a local with no initializer, or with a `null` literal or `ref` initializer, for two variables in one declaration, for an `await using`, or for a type that implements `Dispose` only explicitly.
 
-A `Dispose` that implements `IDisposable.Dispose` has these rows across the whole solution, not only for its own type. `targetId` names the `Dispose` that type resolves to when that is in source, a base type's included, and otherwise the queried `id`. The `Dispose` of a `foreach`, `DisposeAsync`, `GetAsyncEnumerator` and the methods of a query expression have no implicit rows.
+A method that implements an interface method has that interface method's implicit rows across the whole solution, not only those of its own type. A `Dispose` that implements `IDisposable.Dispose` has the `Dispose` rows of every type, and `targetId` names the `Dispose` that type resolves to when that is in source, a base type's included, and otherwise the queried `id`. A `GetEnumerator` that implements `IEnumerable.GetEnumerator` has a row at each `foreach` over an array, a `MoveNext` that implements `IEnumerator.MoveNext` has one there and at each `foreach` over a `List<T>`, and an `Add` that implements `ICollection<T>.Add` has one for each element of a `List<T>` initializer. The `Dispose` of a `foreach`, `DisposeAsync`, `GetAsyncEnumerator` and the methods of a query expression have no implicit rows.
 
 Rows sort by ordinal `path`, then `line` and `column`, then ordinal `targetId`, `project` and `kind`. This is the order of `find-references`. The page is a slice of that order.
 
@@ -380,7 +380,7 @@ On success, `command` is `find_references`. `result.references` is the page. Eac
 
 | Field | Type | Meaning |
 | --- | --- | --- |
-| `targetId` | string | The stored definition id of the method this use points at. |
+| `targetId` | string | The stored definition id of the method this use points at, or the queried `id` when that method is not in source. |
 | `kind` | string | `invocation` or `reference`. |
 | `project` | string | Solution-relative path of the project that contains the use. |
 | `path` | string | Solution-relative file of the use, with `/`. |
@@ -392,7 +392,7 @@ A method with no recorded uses succeeds with an empty page, so an empty page and
 Differences from the Angular edition's `find_references`:
 
 - `id` is a method id. References are indexed for ordinary and explicit-interface source methods only. A type, property or field id returns `unsupported_symbol_kind`. Overloads have separate ids, because a .NET id includes the parameter types.
-- `targetId` can differ from `id`. A method's rows include uses of its related definitions, so the rows of an interface method and of its implementation can be the same set, and each row names the definition that use resolved to.
+- `targetId` can differ from `id`. A method's rows include uses of its related definitions, so the rows of an interface method and of its implementation can be the same set, and each row names the definition that use resolved to. A related definition can be outside the source, and then the row names the queried `id`. So an override of `ToString` also has rows for calls such as `1.ToString()`.
 - `symbol_not_found` is new for references. The CLI `find-references` keeps `analysis_failed` for an unknown id.
 - `project` is a solution-relative `.csproj` path, not an `angular.json` project.
 - Where one project has several target frameworks, the rows of its contexts are unioned and coverage stays partial: `coverage.limitations` keeps `multi-targeting-not-fully-covered`.
