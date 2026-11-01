@@ -133,6 +133,7 @@ public sealed class McpFindReferencesTests(McpFindReferencesFixture fixture) : I
     [InlineData("M:Sample.InternalDispose.Dispose")]
     [InlineData("M:Sample.ProtectedInternalDispose.Dispose")]
     [InlineData("M:Sample.PrivateProtectedDispose.Dispose")]
+    [InlineData("M:Sample.ScopedDispose.Dispose", "scoped ScopedDispose typed", "scoped var inferred", "scoped // Alone on its line.", "using scoped ScopedDispose declared", "using (scoped ScopedDispose block", "ScopedDispose held")]
     public async Task AnImplicitUseIsAReferenceAtTheSyntaxThatCausesIt(string method, params string[] expected)
     {
         // Arrange
@@ -1254,6 +1255,37 @@ public sealed class McpFindReferencesFixture : IAsyncLifetime
         }
         """;
 
+    // A scoped local's row is on scoped, unless using comes first. Only the last three declarations have no row: two
+    // variables, no initializer, and a ref initializer. The type does not implement IDisposable, as in DisposeRule.
+    private const string ScopedRows = """
+        namespace Sample;
+        public ref struct ScopedDispose { public void Dispose() { } }
+        public static class ScopedRows
+        {
+            public static void Rows()
+            {
+                scoped ScopedDispose typed = new ScopedDispose();
+                scoped var inferred = new ScopedDispose();
+                scoped // Alone on its line.
+                ScopedDispose apart = new ScopedDispose();
+                using scoped ScopedDispose declared = new ScopedDispose();
+                using (scoped ScopedDispose block = new ScopedDispose()) { }
+                ScopedDispose held = new ScopedDispose();
+                scoped ScopedDispose first = new(), second = new();
+                scoped ScopedDispose unset;
+                unset = default;
+                scoped ref ScopedDispose alias = ref held;
+                _ = typed;
+                _ = inferred;
+                _ = apart;
+                _ = first;
+                _ = second;
+                _ = unset;
+                _ = alias;
+            }
+        }
+        """;
+
     private const string Chain = """
         namespace Sample;
         public sealed class Chain
@@ -1327,6 +1359,7 @@ public sealed class McpFindReferencesFixture : IAsyncLifetime
         await File.WriteAllTextAsync(Path.Combine(Root, "Library", "NoUsing.cs"), NoUsing);
         await File.WriteAllTextAsync(Path.Combine(Root, "Library", "OnlyAwaitUsing.cs"), OnlyAwaitUsing);
         await File.WriteAllTextAsync(Path.Combine(Root, "Library", "DisposeRule.cs"), DisposeRule);
+        await File.WriteAllTextAsync(Path.Combine(Root, "Library", "ScopedRows.cs"), ScopedRows);
         await File.WriteAllTextAsync(Path.Combine(Root, "Library", "Columns.cs"), Columns);
         await File.WriteAllTextAsync(Path.Combine(Root, "Library", "Chain.cs"), Chain);
         await IndexStore.SaveAsync(await SolutionAnalysis.CreateIndexAsync(Solution));
