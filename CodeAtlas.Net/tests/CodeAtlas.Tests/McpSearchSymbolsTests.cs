@@ -299,6 +299,7 @@ public sealed class McpSearchSymbolsTests(DocumentationCliContractFixture fixtur
     [InlineData("query", "\"\"", "query must not be empty.")]
     [InlineData("query", "\"   \"", "query must have 1-4096 characters and at least one searchable token.")]
     [InlineData("query", "\"the\"", "query must have 1-4096 characters and at least one searchable token.")]
+    [InlineData("query", "\"*:()\"", "query must have 1-4096 characters and at least one searchable token.")]
     [InlineData("query", UnpairedHigh, "query is required.")]
     [InlineData("query", UnpairedLow, "query is required.")]
     [InlineData("query", "\"\\ud83d\\ude00\"", "query must have 1-4096 characters and at least one searchable token.")]
@@ -307,11 +308,14 @@ public sealed class McpSearchSymbolsTests(DocumentationCliContractFixture fixtur
     [InlineData("mode", "\"fuzzy\"", "mode must be names or assisted.")]
     [InlineData("mode", UnpairedHigh, "mode must not be empty.")]
     [InlineData("kind", "\"\"", "kind must not be empty.")]
+    [InlineData("kind", "7", "kind must not be empty.")]
     [InlineData("kind", "\"component\"", "Unknown symbol kind.")]
     [InlineData("kind", UnpairedHigh, "kind must not be empty.")]
     [InlineData("project", "\"\"", "project must not be empty.")]
+    [InlineData("project", "7", "project must not be empty.")]
     [InlineData("project", UnpairedHigh, "project must not be empty.")]
     [InlineData("snapshotId", "\"\"", "snapshotId must not be empty.")]
+    [InlineData("snapshotId", "7", "snapshotId must not be empty.")]
     [InlineData("snapshotId", UnpairedHigh, "snapshotId must not be empty.")]
     [InlineData("offset", "-1", "offset must be a nonnegative integer.")]
     [InlineData("offset", "1.5", "offset must be a nonnegative integer.")]
@@ -319,6 +323,8 @@ public sealed class McpSearchSymbolsTests(DocumentationCliContractFixture fixtur
     [InlineData("offset", "1", "offset greater than zero requires snapshotId.")]
     [InlineData("limit", "0", "limit must be an integer from 1 through 1000.")]
     [InlineData("limit", "1001", "limit must be an integer from 1 through 1000.")]
+    [InlineData("limit", "1.5", "limit must be an integer from 1 through 1000.")]
+    [InlineData("limit", "\"10\"", "limit must be an integer from 1 through 1000.")]
     public async Task EachInvalidArgumentReturnsItsDocumentedMessage(string field, string? value, string message)
     {
         // Arrange
