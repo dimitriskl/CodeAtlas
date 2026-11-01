@@ -247,3 +247,22 @@ Local (Windows), Debug: restore passed, build 0 warnings after a full rebuild, .
 CI for `1cefa00` (run 41333278095): `build (windows-2025)`, `build (ubuntu-24.04)`, `install (windows-2025)` and `install (ubuntu-24.04)` passed. CRAP gate 1616 methods, 0 above 10, 0 exception problems.
 
 The group announcement stays unticked, with the maintainer. Probes ran in a scratch copy. No production code changed.
+
+### 2026-11-01 (Developer: addressed QA attempt 1)
+
+The version stays 0.00.64. The one change under `src/` is the text of the help line.
+
+1. Help, `src/CodeAtlas.Cli/Program.cs:58`. The line names `find_references`, in `tools/list` order. `HelpListsTheToolsTheServerReportsInTheSameOrder` runs `--help` and compares the sentence with the tools a server reports. Before the edit it failed at position 2 of the list. `RunCliText` returns a CLI run's raw output, because help is not JSON, and `RunCli` now parses that output.
+   - Other docs: none changed. README, PACKAGING, `scripts/package-smoke.py` and the PRD's tool table name the tool. `docs/USAGE.md` and `docs/USER-GUIDE.md` list no MCP tools. SQLITE-STORE lists the five tools the warm session answers, and leaves out `index` on purpose. The PRD's "four tools" line and the recap's tool table describe the state before this work, and neither is a current list.
+2. The two contract statements QA read from real rows now have tests.
+   - The `public` rule: `DisposeRule.cs` joins the fixture, with a `using` statement. The theory `AnImplicitUseIsAReferenceAtTheSyntaxThatCausesIt` gains a `public` `Dispose()` on an open, an `internal`, a private nested, a `static` and a generic shape, each with its row, and `private`, `protected`, `internal`, `protected internal` and `private protected`, each with none.
+   - Type parameters: `ATypeParameterHasNoDisposeRowWhateverItsConstraint` reads the rows of two `Dispose` methods that implement `IDisposable.Dispose`, for a type parameter constrained to `IDisposable` and to a class. It covers `using (resource)`, `using var`, a typed local and `var`.
+   - `scoped`: `ScopedRows.cs` joins the fixture, and the same theory reads its rows. They are on `scoped` for a typed local, a `var` local and the token alone on its line, and on `using` for a `using` declaration and statement. Two variables, no initializer and a `ref` initializer have none.
+   - Fixture mutation, on all of these at once in one run: every non-public `Dispose()` made `public`, `ToInterface` made non-generic over `Resource`, and the `Dispose()` of `ScopedDispose` made `internal`. 10 of 28 cases failed: the 5 non-public cases, the `scoped` case, the type parameter fact, and the `Resource`, `Ticker` and `Both` cases, whose lists gained the rows. The file was then restored.
+3. The two mixed commits `bb5c01f` and `7de76d6` stay as they are. History isn't rewritten on a pushed branch, so each keeps its two changes, as the QA entry records.
+
+The group announcement stays unticked.
+
+Local (Windows, Debug): build 0 warnings. .NET 898 of 898, 13 new, in 13 m 22 s. Python 145 OK. The `refresh-child.ready` flake did not occur.
+
+Not run: `qualify-package.py`, the CRAP gate and the package smoke. No method body changed under `src/`, and `build/crap-exceptions.json` is unchanged.
