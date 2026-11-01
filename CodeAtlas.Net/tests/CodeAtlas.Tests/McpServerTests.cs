@@ -257,6 +257,25 @@ public sealed class McpServerTests(IndexedSolution fixture) : IClassFixture<Inde
         Assert.Empty(found["result"]!["symbols"]!.AsArray());
     }
 
+    // Task #05: QA attempt 1. The help text names the tools by hand, so only a comparison with a server keeps it true.
+    [Fact]
+    public async Task HelpListsTheToolsTheServerReportsInTheSameOrder()
+    {
+        // Arrange
+        var solution = Path.Combine(fixture.Root, "Sample.slnx");
+        var listed = await Talk(solution, [Request(1, "tools/list")]);
+
+        // Act
+        var help = await RunCliText("--help");
+
+        // Assert
+        Assert.Equal(0, help.ExitCode);
+        var sentence = Regex.Match(help.Output, @"Its tools are (?<tools>[^.]+)\.");
+        Assert.True(sentence.Success, help.Output);
+        Assert.Equal(listed[0]["result"]!["tools"]!.AsArray().Select(tool => tool!["name"]!.GetValue<string>()),
+            sentence.Groups["tools"].Value.Split([", ", " and "], StringSplitOptions.None));
+    }
+
     // Task #04: the tools read strings through the same code, so an unpaired surrogate is refused alike.
     [Theory]
     [InlineData("find_symbol", "workspace", "workspace is required.")]
@@ -743,13 +762,18 @@ static class McpLines
 
     internal static async Task<CliResult> RunCli(params string[] arguments)
     {
+        var process = await RunCliText(arguments);
+        return new(process.ExitCode, JsonNode.Parse(process.ExitCode == 0 ? process.Output : process.Error)!.AsObject());
+    }
+
+    internal static async Task<ChildProcess.Result> RunCliText(params string[] arguments)
+    {
         var configuration = new DirectoryInfo(AppContext.BaseDirectory).Parent!.Name;
         var cli = Path.Combine(Repository(), "src", "CodeAtlas.Cli", "bin", configuration, "net10.0", "codeatlas.dll");
         var start = new ProcessStartInfo("dotnet") { RedirectStandardOutput = true, RedirectStandardError = true };
         start.ArgumentList.Add(cli);
         foreach (var argument in arguments) start.ArgumentList.Add(argument);
-        var process = await ChildProcess.RunAsync(start);
-        return new(process.ExitCode, JsonNode.Parse(process.ExitCode == 0 ? process.Output : process.Error)!.AsObject());
+        return await ChildProcess.RunAsync(start);
     }
 
     internal static string Repository()
