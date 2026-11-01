@@ -405,7 +405,7 @@ Errors keep the envelope. The tool result is an MCP error, with no `result` and 
 | Code | When | Message | `freshness`, `coverage` |
 | --- | --- | --- | --- |
 | `invalid_arguments` | See the next table. | See the next table. | null |
-| `symbol_not_found` | `id` is not a type, property, field or method of the published generation, or no generation is published and `snapshotId` was not supplied. A generation with no symbol catalog holds no types, properties or fields, so their ids are not found there. | `Symbol id was not found.` | null |
+| `symbol_not_found` | `id` is not a type, property, field or method of the published generation, or no generation is published and `snapshotId` was not supplied. A generation stores no constructors, accessors, operators, events or compiler-generated methods, so their ids are not found. A generation with no symbol catalog holds no types, properties or fields, so their ids are not found there. | `Symbol id was not found.` | null |
 | `unsupported_symbol_kind` | `id` is a type, property or field of the published generation. | `References support ordinary and explicit-interface source methods only.` | null |
 | `snapshot_mismatch` | `snapshotId` names another generation, or anything when no generation is published. Also at offset zero. A replaced generation is reported before staleness. | `The index was replaced. Start a new query at offset zero.` | null |
 | `stale_index` | A tracked input changed. This is reported before `id` is looked up. | `The saved index is stale.` | Set, with `changedFiles`. |
