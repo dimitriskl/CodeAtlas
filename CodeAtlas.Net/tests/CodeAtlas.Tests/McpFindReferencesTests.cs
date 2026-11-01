@@ -110,13 +110,14 @@ public sealed class McpFindReferencesTests(McpFindReferencesFixture fixture) : I
     [InlineData("M:Sample.Numbers.GetEnumerator", "foreach (var plain", "foreach (var chained")]
     [InlineData("M:Sample.Numbers.MoveNext", "foreach (var plain", "foreach (var chained")]
     [InlineData("M:Sample.Later.GetAwaiter", "await new Later()")]
-    [InlineData("M:Sample.Pair.Deconstruct(System.Int32@,System.Int32@)", "var (first", "(left, right) =")]
+    [InlineData("M:Sample.Pair.Deconstruct(System.Int32@,System.Int32@)", "var (first", "(left, right) =", "var (head", "var (each")]
     [InlineData("M:Sample.Bag.Add(System.Int32)", "5, 6 }", "6 }")]
     [InlineData("M:Sample.Resource.Dispose", "using (var block", "using var scoped", "var held", "using (held)", "var plain", "Resource typed", "var other", "var task", "object converted", "var derived", "var counted")]
     [InlineData("M:Sample.Ticker.Dispose", "using (var block", "using var scoped", "var held", "using (held)", "var plain", "Resource typed", "var other", "var task", "object converted", "var derived", "var counted")]
     [InlineData("M:Sample.Loose.Dispose", "var loose")]
-    [InlineData("M:Sample.Bag.GetEnumerator", "foreach (var viaArray")]
-    [InlineData("M:Sample.Walker.MoveNext", "foreach (var viaArray", "foreach (var viaList")]
+    [InlineData("M:Sample.Bag.GetEnumerator", "foreach (var (each", "foreach (var viaArray")]
+    [InlineData("M:Sample.Walker.MoveNext", "foreach (var (each", "foreach (var viaArray", "foreach (var viaList")]
+    [InlineData("M:Sample.Outer.Deconstruct(System.Int32@,Sample.Pair@)", "var (head")]
     [InlineData("M:Sample.Collected.Add(System.Int32)", "7 }")]
     [InlineData("M:Sample.Both.Dispose", "using (var block", "using var scoped", "var held", "using (held)", "var plain", "Resource typed", "var other", "var task", "object converted", "var derived", "var counted")]
     [InlineData("M:Sample.AsyncResource.DisposeAsync")]
@@ -1059,6 +1060,7 @@ public sealed class McpFindReferencesFixture : IAsyncLifetime
             public IAsyncEnumerator<int> GetAsyncEnumerator(CancellationToken cancellationToken = default) => throw new NotSupportedException();
         }
         public sealed class Pair { public void Deconstruct(out int first, out int second) { first = 1; second = 2; } }
+        public sealed class Outer { public void Deconstruct(out int first, out Pair second) { first = 1; second = new(); } }
         public sealed class Later { public TaskAwaiter GetAwaiter() => Task.CompletedTask.GetAwaiter(); }
         public sealed class Bag : IEnumerable
         {
@@ -1097,7 +1099,16 @@ public sealed class McpFindReferencesFixture : IAsyncLifetime
             public static async Task Wait() { await new Later(); }
             public static int Split() { var (first, second) = new Pair(); return first + second; }
             public static int Assign() { int left, right; (left, right) = new Pair(); return left + right; }
+            public static int Nested() { var (head, (near, far)) = new Outer(); return head + near + far; }
+            public static int SplitEach(Pair[] pairs)
+            {
+                var total = 0;
+                foreach (var (each, other) in pairs) { total += each + other; }
+                return total;
+            }
+            public static bool Pattern(Pair pair) => pair is Pair(var one, var two) && one == two;
             public static Bag Fill() => new Bag { 5, 6 };
+            public static Bag FillFromExpression() { Bag bag = [8]; return bag; }
             public static void ThroughInterfaces(int[] items, List<int> list)
             {
                 foreach (var viaArray in items) { _ = viaArray; }
