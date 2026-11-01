@@ -191,3 +191,59 @@ The not-blocking points of attempt 2 are unchanged: the `index.db` cases still r
 Local (Windows, Debug): build 0 warnings. `McpFindReferences`, `ProtocolEncoding` and `McpServerTests` classes: 188 of 188.
 
 Not run: the full .NET suite, Python tests, `qualify-package.py`, the CRAP gate and the package smoke. Only `McpFindReferencesTests.cs` and docs changed.
+
+### 2026-11-01 (QA attempt 1)
+
+Commit tested: `1cefa00`, against `d583a1b`. Real long-lived `mcp` processes, built from this commit, on scratch copies of the fixture, a scratch solution of the implicit shapes and an index of this solution, with the contract text as the expected value.
+
+Verdict: FAILED, one regression. Every acceptance criterion that QA can verify holds, and the tool's rows, errors and paging equal the contract. One contract sentence was false and is corrected in this commit. Two of the 15 commits carry two changes each.
+
+Failed:
+
+1. Regression, `src/CodeAtlas.Cli/Program.cs:58`: `codeatlas --help` says of `mcp`, "Its tools are find_symbol, search_symbols, index_status, coverage and index." The server has six tools, and `find_references` is the one left out. The line was true at `d583a1b`. Task 04 added its tool to this line in `ed53028`, this PR did not, task 06 does not cover it, and no test reads it. README, PACKAGING and SQLITE-STORE name the tool. Production code, so it is not changed here.
+2. Contract sentence, `docs/QUERY-CONTRACT.md`, "`Dispose` rows are not a list of disposable locals": "an accessible `Dispose()`" is false twice, on a real server, in a file with a `using` statement.
+   - A `Dispose()` must be declared `public`. `private` in its own class, `protected` in a derived class, and `internal`, `protected internal` and `private protected` in the same assembly have no row, though each can be called there. A `public` one on an `internal` type or a private nested type has a row, as have a `public static` one and a `public` generic one.
+   - A type parameter has no row in any form: `using (t)`, `using var a = new T();`, `T b = new T();` and `var c = t;`, with `T : IDisposable` and with `T : R` for a class `R` that has a `public` `Dispose()`. An interface type does have a row, its own `Dispose` or one inherited from `IDisposable`.
+   - Corrected here: `public`, and both added to the no-rows list. No test pins these two. The correction changes that one paragraph and no other sentence.
+3. Commit check, `git log 6be1dad..HEAD`: 13 of 15 are one change. `bb5c01f` widens the first token of a `Dispose` row and adds a `for` initializer to the no-rows list. `7de76d6` adds a fixture case and renames a test. All 15 state why, what and proof, and none has a name, a tool or assistant mention, or a trailer. Each contract commit comes before its test commit. History is not rewritten here.
+
+The `scoped` row, untested until now, is true. All on a real server, with the source text read at each row:
+
+- On `scoped`: `scoped Rs a = new Rs();`, `scoped var`, target-typed `new()`, a call, `default`, the token alone on the line before the type, and after a label, which is not the first token.
+- On `using`: `using scoped Rs u = new Rs();` and `using (scoped Rs s = new Rs()) { }`.
+- No row: two variables, no initializer, `scoped ref Rs r = ref x;`, a `for` initializer, and a file with no `using` statement. A file with only an `await using` has the row.
+- A `scoped` local of a ref struct that implements `IDisposable` is on every `Dispose` that implements it, with `targetId` naming that struct's.
+- No seam test pins this. It is a statement read from real rows, as the developer log says.
+
+Confirmed:
+
+- `tools/list`: `find_references` is third, with the documented input schema, its 7 inputs in order, `kinds` an array of strings, `workspace` and `id` required.
+- Fixture, one server, 166 checks: a method called in two files gives its rows in the documented order, 1-based, on the name. The 6 methods equal `find-references` field by field, with pagination. `kinds`, `project`, both together, `kinds` before the page is cut, 5 unknown project spellings as an empty page, pages of 1, 2, 3 and 1000 joined, offsets past the end to 2147483647, `nextOffset`, `null` optional inputs, extra arguments, `workspace` as a directory, file, relative path and trailing slash, an id not trimmed, and `limit` 1 and 1000.
+- Each `invalid_arguments` row, 58 bodies, with the message read from the contract, null `freshness` and `coverage`, and no pagination: types, unpaired surrogates, `1.0`, `1e2`, and booleans. `symbol_not_found` and `unsupported_symbol_kind` as documented.
+- The contract example equals a real run, apart from `checkedAtUtc` and `snapshotId`, key order included.
+- Store rows, real servers, cold and warm, 96 checks: `current.json`, `overview.md`, `warnings.txt` and `timings.json` held give the snapshot message, `index.db` held gives the database message, all with null `freshness` and `coverage`, and the server recovers. A tracked input held gives the input message with both set. `invalid_index` for a broken manifest and for a missing or truncated `index.db` or `overview.md`, `unsupported_index` for a future manifest, and `symbol_not_found` then `snapshot_mismatch` with no manifest.
+- A schema 1 generation in SQLite with no symbols: a method id has its 3 rows, a type id is `symbol_not_found`, and the CLI keeps `analysis_failed`.
+- `stale_index` with `changedFiles`, before the id lookup, and after a replaced generation is reported. Recovery when the edit is undone. A generation published by the `index` tool and by another process is served with no restart, and the old id is refused at offset 0 and above.
+- With every Roslyn and MSBuild assembly removed from a copy of the binaries: rows, every refusal, stale, recovery and a new generation. Hashes and times of the store are unchanged by queries.
+- The implicit-use table and paragraphs on the scratch solution of 5 projects: `foreach`, `await`, including one in a call chain, `Deconstruct` in each shape, `Add`, each `Dispose` shape and first token, each entry of the no-rows list, the interface-method paragraph, `targetId` outside the source, kinds in and out of a callee, a receiver before `?.`, `cref`, and columns after a tab, `ζ` and a surrogate pair in a CRLF file with a BOM. 85 methods equal the CLI field by field, and 49 type, property and field ids are `unsupported_symbol_kind`, including an indexer, an enum member, a nested type and a delegate. 20 ids of constructors, accessors, operators, events, record and delegate members are `symbol_not_found`.
+- Ties: a linked file gives rows at one position that sort by `project`, and a multi-target overload gives two that sort by `targetId`. Limit 1 pages join to the whole list. `coverage.limitations` keeps `multi-targeting-not-fully-covered`, and a `#if` in each target has its row.
+- Index of this solution, one server: all 1463 method ids in 32 s, no failure, 13617 rows, each in the documented order. 25 ids, the 10 busiest and 15 at random, equal `find-references` with pagination. 40 other symbols refused. Pages of 7 and 100 join to the list of the busiest id, 369 rows.
+- Other tools against `d583a1b`: 323 calls of `find_symbol`, `search_symbols`, `index_status`, `coverage`, `index` and their errors, on two solutions, with no index, published, stale and republished, are equal, ignoring ids, timings, paths and the version. Their `tools/list` entries are equal.
+- Packed tool: a Release package of this commit passes `package-smoke.py`, with the handshake.
+- Memory, index of this solution: 7000 calls, working set 119 to 126 MB. That window still rose, so a run of 40000 mixed calls followed: private bytes 72 MB after 50 calls, 109 at 15000, 111 at 30000, 103 at 40000. It levels off after warm-up. Exit 0 in 0.01 s on stdin close, empty stderr.
+
+Could not be produced:
+
+- `sqlite_unavailable` from a real library failure. The native library was corrupted in a copy of the binaries and in an installed package, and the server still loaded SQLite, so it resolves from elsewhere on this machine. The row is confirmed through `CODEATLAS_SIMULATE_SQLITE_UNAVAILABLE` on a real server, with the documented code, null `freshness` and `coverage`.
+
+Not failures, for the record:
+
+- An index under a long path fails with SQLite error 14, as noted in the task 04 QA: `index.db` was past 260 characters under a 114-character scratch path. The probes moved to a short path.
+- `Sig(int)` and `Sig(long)` in two targets give 1 and 2 rows, the multi-target quirk in attempt 1.
+- `index` on a copy with Roslyn removed is `-32603`. That is the probe's damage, not a case a package can reach.
+
+Local (Windows), Debug: restore passed, build 0 warnings after a full rebuild, .NET 885/885, Python 145 OK. The `refresh-child.ready` flake did not occur.
+
+CI for `1cefa00` (run 41333278095): `build (windows-2025)`, `build (ubuntu-24.04)`, `install (windows-2025)` and `install (ubuntu-24.04)` passed. CRAP gate 1616 methods, 0 above 10, 0 exception problems.
+
+The group announcement stays unticked, with the maintainer. Probes ran in a scratch copy. No production code changed.
