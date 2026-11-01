@@ -102,6 +102,68 @@ public sealed class McpFindReferencesTests(McpFindReferencesFixture fixture) : I
         Assert.Equal(new[] { SquareArea, InterfaceArea }, rows.Select(row => row["targetId"]!.GetValue<string>()));
     }
 
+    // Task #05: technical review attempt 1. An implicit use writes no name, so the source text at the row pins its
+    // position. One Dispose has rows for the disposable locals of every type. Rows sort by position.
+    [Theory]
+    [InlineData("M:Sample.Numbers.GetEnumerator", "foreach (var plain", "foreach (var chained")]
+    [InlineData("M:Sample.Numbers.MoveNext", "foreach (var plain", "foreach (var chained")]
+    [InlineData("M:Sample.Later.GetAwaiter", "await new Later()")]
+    [InlineData("M:Sample.Pair.Deconstruct(System.Int32@,System.Int32@)", "var (first", "(left, right) =")]
+    [InlineData("M:Sample.Bag.Add(System.Int32)", "5, 6 }", "6 }")]
+    [InlineData("M:Sample.Resource.Dispose", "using (var block", "using var scoped", "var held", "using (held)", "var plain", "Resource typed", "var other", "var task")]
+    [InlineData("M:Sample.Ticker.Dispose", "using (var block", "using var scoped", "var held", "using (held)", "var plain", "Resource typed", "var other", "var task")]
+    [InlineData("M:Sample.AsyncResource.DisposeAsync")]
+    [InlineData("M:Sample.AsyncNumbers.GetAsyncEnumerator(System.Threading.CancellationToken)")]
+    [InlineData("M:Sample.Words.Select(System.Func{System.Int32,System.Int32})")]
+    public async Task AnImplicitUseIsAReferenceAtTheSyntaxThatCausesIt(string method, params string[] expected)
+    {
+        // Arrange
+        var lines = new[] { Query(1, Library + "::" + method) };
+
+        // Act
+        var responses = await Talk(Solution, lines);
+
+        // Assert
+        var rows = Rows(responses[0]);
+        Assert.Equal(expected.Length, rows.Length);
+        for (var index = 0; index < rows.Length; index++)
+        {
+            Assert.Equal("reference", rows[index]["kind"]!.GetValue<string>());
+            Assert.StartsWith(expected[index], TextAt(rows[index]), StringComparison.Ordinal);
+        }
+    }
+
+    [Fact]
+    public async Task AnImplicitDisposeNamesTheTypeOfItsLocalOrTheQueriedMethodWhenThatTypeIsNotInSource()
+    {
+        // Arrange
+        var lines = new[] { Query(1, Library + "::M:Sample.Resource.Dispose") };
+
+        // Act
+        var responses = await Talk(Solution, lines);
+
+        // Assert
+        var targets = Rows(responses[0]).ToDictionary(TextAt, row => row["targetId"]!.GetValue<string>());
+        Assert.Equal(Library + "::M:Sample.OtherResource.Dispose", targets.Single(row => row.Key.StartsWith("var other", StringComparison.Ordinal)).Value);
+        Assert.Equal(Library + "::M:Sample.Resource.Dispose", targets.Single(row => row.Key.StartsWith("var task", StringComparison.Ordinal)).Value);
+        Assert.Equal(Library + "::M:Sample.Resource.Dispose", targets.Single(row => row.Key.StartsWith("var plain", StringComparison.Ordinal)).Value);
+    }
+
+    [Fact]
+    public async Task AColumnCountsUtf16CodeUnitsFromTheStartOfTheLine()
+    {
+        // Arrange
+        var lines = new[] { Query(1, Library + "::M:Sample.Columns.Target") };
+
+        // Act
+        var responses = await Talk(Solution, lines);
+
+        // Assert
+        var rows = Rows(responses[0]);
+        Assert.Equal(new[] { "Library/Columns.cs:7:2", "Library/Columns.cs:8:9", "Library/Columns.cs:9:10" }, rows.Select(Place));
+        Assert.All(rows, row => Assert.StartsWith("Target()", TextAt(row), StringComparison.Ordinal));
+    }
+
     [Fact]
     public async Task KindsAndProjectFiltersKeepOnlyMatchingRows()
     {
@@ -782,6 +844,12 @@ public sealed class McpFindReferencesTests(McpFindReferencesFixture fixture) : I
     private static string Place(JsonNode row) =>
         $"{row["path"]!.GetValue<string>()}:{row["line"]!.GetValue<int>()}:{row["column"]!.GetValue<int>()}";
 
+    private string TextAt(JsonNode row)
+    {
+        var source = File.ReadAllLines(Path.Combine(fixture.Root, row["path"]!.GetValue<string>()))[row["line"]!.GetValue<int>() - 1];
+        return source[(row["column"]!.GetValue<int>() - 1)..];
+    }
+
     private static string[] ToolNames(JsonObject response) =>
         response["result"]!["tools"]!.AsArray().Select(tool => tool!["name"]!.GetValue<string>()).ToArray();
 
@@ -841,6 +909,76 @@ public sealed class McpFindReferencesNoIndexTests
 /// queried method, and with a property and a field, for ids that have no references.</summary>
 public sealed class McpFindReferencesFixture : IAsyncLifetime
 {
+    private const string ImplicitUses = """
+        using System.Collections;
+        using System.Runtime.CompilerServices;
+
+        namespace Sample;
+        public sealed class Resource : IDisposable { public void Dispose() { } }
+        public sealed class OtherResource : IDisposable { public void Dispose() { } }
+        public sealed class AsyncResource : IAsyncDisposable { public ValueTask DisposeAsync() => default; }
+        public sealed class Numbers
+        {
+            public Numbers GetEnumerator() => this;
+            public bool MoveNext() => false;
+            public int Current => 0;
+        }
+        public struct Ticker : IDisposable
+        {
+            public bool MoveNext() => false;
+            public int Current => 0;
+            public void Dispose() { }
+        }
+        public sealed class Ticks { public Ticker GetEnumerator() => default; }
+        public sealed class AsyncNumbers : IAsyncEnumerable<int>
+        {
+            public IAsyncEnumerator<int> GetAsyncEnumerator(CancellationToken cancellationToken = default) => throw new NotSupportedException();
+        }
+        public sealed class Pair { public void Deconstruct(out int first, out int second) { first = 1; second = 2; } }
+        public sealed class Later { public TaskAwaiter GetAwaiter() => Task.CompletedTask.GetAwaiter(); }
+        public sealed class Bag : IEnumerable
+        {
+            public void Add(int value) { }
+            public IEnumerator GetEnumerator() => throw new NotSupportedException();
+        }
+        public sealed class Words
+        {
+            public Words Select(Func<int, int> map) { _ = map; return this; }
+        }
+        public sealed class Chained { public Chained Run() => this; }
+        public static class ImplicitUses
+        {
+            public static Chained Hold(Action run) { run(); return new(); }
+            public static void Loop() { foreach (var plain in new Numbers()) { _ = plain; } }
+            public static void LoopInAChain() => Hold(() => { foreach (var chained in new Numbers()) { _ = chained; } }).Run();
+            public static void LoopWithDispose() { foreach (var tick in new Ticks()) { _ = tick; } }
+            public static async Task Wait() { await new Later(); }
+            public static int Split() { var (first, second) = new Pair(); return first + second; }
+            public static int Assign() { int left, right; (left, right) = new Pair(); return left + right; }
+            public static Bag Fill() => new Bag { 5, 6 };
+            public static void Blocks() { using (var block = new Resource()) { _ = block; } }
+            public static void Scoped() { using var scoped = new Resource(); _ = scoped; }
+            public static void Held() { var held = new Resource(); using (held) { _ = held; } }
+            public static void NoUsing() { var plain = new Resource(); _ = plain; }
+            public static void Typed() { Resource typed = new Resource(); _ = typed; }
+            public static void TwoLocals() { Resource first = new(), second = new(); _ = first; _ = second; }
+            public static void AnotherType() { var other = new OtherResource(); _ = other; }
+            public static void MetadataType() { var task = Task.CompletedTask; _ = task; }
+            public static async Task AsyncScoped() { await using var scoped = new AsyncResource(); _ = scoped; }
+            public static async Task AsyncLoop() { await foreach (var number in new AsyncNumbers()) { _ = number; } }
+            public static Words Query() => from word in new Words() select word + 1;
+        }
+        """;
+
+    // Written with escapes so that each character before a name is plain to read: a tab on line 7, a character in
+    // the basic plane on line 8, and a surrogate pair on line 9.
+    private const string Columns =
+        "namespace Sample;\npublic static class Columns\n{\n    public static void Target() { }\n    public static void Caller()\n    {\n" +
+        "\tTarget();\n" +
+        "/* \u03b6 */ Target();\n" +
+        "/* \ud83d\ude00 */ Target();\n" +
+        "    }\n}\n";
+
     private readonly IndexedSolution isolated = new();
 
     public string Root => isolated.Root;
@@ -865,6 +1003,8 @@ public sealed class McpFindReferencesFixture : IAsyncLifetime
                 public static int Through(IShape shape) => shape.Area();
             }
             """);
+        await File.WriteAllTextAsync(Path.Combine(Root, "Library", "ImplicitUses.cs"), ImplicitUses);
+        await File.WriteAllTextAsync(Path.Combine(Root, "Library", "Columns.cs"), Columns);
         await IndexStore.SaveAsync(await SolutionAnalysis.CreateIndexAsync(Solution));
     }
 
