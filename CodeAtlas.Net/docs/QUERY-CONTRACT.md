@@ -202,6 +202,8 @@ Errors keep the envelope. The tool result is an MCP error, with no `result` and 
 | `snapshot_mismatch` | `snapshotId` names another generation, a view of descriptions that changed, or anything when no generation is published. Also at offset zero. A replaced generation is reported before staleness. | `The index was replaced. Start a new query at offset zero.` | null |
 | `stale_index` | A tracked input changed. | `The saved index is stale.` | Set, with `changedFiles`. |
 | `snapshot_io_failed` | A tracked input cannot be read. | `Snapshot inputs could not be verified. Publication was not committed; resolve the input access failure and retry.` | Set. |
+| `snapshot_io_failed` | `current.json` or a report file of the generation, such as `overview.md`, cannot be read. | `Cannot read the snapshot. Check its path and permissions, or rebuild it.` | null |
+| `snapshot_io_failed` | `index.db` cannot be read. | `Cannot read the index database. Check its path and permissions, or rebuild it.` | null |
 | `rebuild_required` | The generation has no symbol documentation or structural facts, or an older structural model. | `Rebuild to extract symbol documentation.`, `Rebuild to extract structural facts.` or `Rebuild with the supported structural-fact model.` | null |
 | `invalid_index`, `unsupported_index`, `sqlite_unavailable` | As in [Errors and profiling](#errors-and-profiling). | The store's message. | null |
 
@@ -406,6 +408,8 @@ Errors keep the envelope. The tool result is an MCP error, with no `result` and 
 | `snapshot_mismatch` | `snapshotId` names another generation, or anything when no generation is published. Also at offset zero. A replaced generation is reported before staleness. | `The index was replaced. Start a new query at offset zero.` | null |
 | `stale_index` | A tracked input changed. This is reported before `id` is looked up. | `The saved index is stale.` | Set, with `changedFiles`. |
 | `snapshot_io_failed` | A tracked input cannot be read. | `Snapshot inputs could not be verified. Publication was not committed; resolve the input access failure and retry.` | Set. |
+| `snapshot_io_failed` | `current.json` or a report file of the generation, such as `overview.md`, cannot be read. | `Cannot read the snapshot. Check its path and permissions, or rebuild it.` | null |
+| `snapshot_io_failed` | `index.db` cannot be read. | `Cannot read the index database. Check its path and permissions, or rebuild it.` | null |
 | `invalid_index`, `unsupported_index`, `sqlite_unavailable` | As in [Errors and profiling](#errors-and-profiling). | The store's message. | null |
 
 `invalid_arguments` messages:
