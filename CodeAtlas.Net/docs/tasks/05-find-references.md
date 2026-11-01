@@ -167,3 +167,27 @@ Not blocking:
 - Correction to attempt 1: the `install` jobs run `package-smoke.py` on the packed tool, and its log shows `find_references`. So CI does run the smoke. `--skip-smoke` applies to the `build` jobs only.
 
 CI at `c23b1dc`, run 41328828386: `build (ubuntu-24.04)` passed, 872 of 872, CRAP gate 1616 methods, 0 above 10, 0 exception problems, 7 better than recorded. `build (windows-2025)` passed, 872 of 872. `install (ubuntu-24.04)` and `install (windows-2025)` passed, smoke included. These stand in for the qualification, CRAP and smoke runs the developer did not make.
+
+### 2026-11-01 (Developer: addressed technical review attempt 2)
+
+Contract fixes only. No file under `src/` changed, and the version stays 0.00.64. Each change is one contract commit followed by one test commit.
+
+1. `Dispose` rows, `docs/QUERY-CONTRACT.md`. A file has them only with a `using` statement or declaration, `await using` included, `using` directive not. A row needs an expression or one variable with an initializer. The wording in the finding, "an initializer of a disposable type", was also too wide and too narrow on real rows, so the contract states the rule the rows follow: the initializer's own type, before conversion, has an accessible `Dispose()`. `object held = new Resource();` has a row, `var held = (object)new Resource();` has none, a type that is not `IDisposable` has one, and an explicit `Dispose` has none. The no-rows list adds `await using`, a `ref` initializer, a `null` literal, two variables and a `for` initializer. `targetId` follows the initializer's type, a base type's `Dispose` included.
+   - Tests: `AFileWithNoUsingStatementOrDeclarationHasNoDisposeRows` compares `NoUsing.cs`, which has a `using` directive and the name `Dispose`, with `OnlyAwaitUsing.cs`, which has the same local. The theory fixture gains each shape above, including `R n = null!;`. Adding a `using` to `NoUsing.cs` fails 5 cases, and removing the `await using` from `OnlyAwaitUsing.cs` fails 4, each list including the new test.
+2. `cref`. The `reference` sentence names a `cref` of a documentation comment, under the same rule as the others. `ACrefOfADocumentationCommentIsStoredOnTheNameByTheCalleeRule` pins one on a member as a `reference`, and one on a local function inside a lambda in a callee as an `invocation`. Neither needs `GenerateDocumentationFile`, which no project here sets.
+
+Read of the whole section against real rows. Other corrections, each with its own contract and test commits:
+
+- A receiver before `?.` is outside the callee, so `Zero` in `Wrap(Zero)?.Run()` is a `reference`. "Receiver chain included" read otherwise.
+- `targetId` is the queried `id` for any use of a definition outside the source, not only for `Dispose`. An override of `ToString` also has rows for `1.ToString()`. Implicit rows beyond a method's own type apply to any method that implements an interface method: `GetEnumerator`, `MoveNext` and `Add` as well as `Dispose`.
+- A nested deconstruction has its row on the first token of the outermost one. A positional pattern and a collection expression have no implicit rows.
+- `symbol_not_found` names constructors, accessors, operators, events and compiler-generated methods. Operators, events and a record's `Deconstruct` gain cases in the unknown-id theory.
+- The first tokens of a `Dispose` row are examples: a `scoped` local starts with `scoped`. This one is a scratch-solution row, not pinned by a test.
+
+What was read: a scratch solution of 3 projects and 105 methods, with each shape above and a project that does not reference the types, every id through a real server; all 104 ids at that stage equal `find-references` in rows and pagination. This solution: 1463 ids through a real server, no failure, 13617 rows, each id's total equal to `index.db` and in the documented order. Of 10227 distinct rows, 4994 are implicit and all are `reference`, and all 56 files with such a row contain a `using` statement or declaration. The contract example equals a real run on a copy of the fixture, apart from `checkedAtUtc` and `snapshotId`. Statements left as they were, and confirmed: `workspace` as `.`, a directory, a file and a relative file, `workspace must be the solution directory.` for another directory, extra arguments ignored, `find-references --type` refused, and an implicit use in a call chain as `reference`.
+
+The not-blocking points of attempt 2 are unchanged: the `index.db` cases still return early on Ubuntu, and the flake is item 6 of task 14. The group announcement stays unticked.
+
+Local (Windows, Debug): build 0 warnings. `McpFindReferences`, `ProtocolEncoding` and `McpServerTests` classes: 188 of 188.
+
+Not run: the full .NET suite, Python tests, `qualify-package.py`, the CRAP gate and the package smoke. Only `McpFindReferencesTests.cs` and docs changed.
