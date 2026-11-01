@@ -354,7 +354,19 @@ Rows come from the generation. The tool does not analyze source again. For the s
 - `invocation`: the method's name is the callee of an invocation expression, written in source.
 - `reference`: every other use, such as a method group passed as a value.
 
-`line` and `column` are 1-based and point at the method's name in the use. The method's own declaration is not a use.
+`line` and `column` are 1-based. `column` counts UTF-16 code units from the start of the line: a tab counts 1, a character such as `ζ` counts 1, and a surrogate pair counts 2. The method's own declaration is not a use.
+
+A use that writes the method's name points at the name. An implicit use writes no name, so it points at the syntax that causes it, and its row is a `reference`:
+
+| Method | Position |
+| --- | --- |
+| `GetEnumerator` and `MoveNext` of a `foreach` | The `foreach` keyword. |
+| `GetAwaiter` of an `await` | The `await` keyword. |
+| `Deconstruct` | The first token of the deconstruction: `var` in `var (a, b) = pair`, `(` in `(a, b) = pair`. |
+| `Add` of a collection initializer | The first token of the element. |
+| `Dispose` | The first token of a `using` statement, or of a local declaration with one variable of a disposable type: `using`, `var` or the type's name. The local needs no `using`, so `var output = Start();` has a row. |
+
+A `Dispose` that implements `IDisposable.Dispose` has these rows for the disposable locals of the whole solution, not only of its own type. `targetId` names the `Dispose` of the local's type when that is in source, and otherwise the queried `id`. The `Dispose` of a `foreach`, `DisposeAsync`, `GetAsyncEnumerator` and the methods of a query expression have no implicit rows.
 
 Rows sort by ordinal `path`, then `line` and `column`, then ordinal `targetId`, `project` and `kind`. This is the order of `find-references`. The page is a slice of that order.
 
@@ -368,8 +380,8 @@ On success, `command` is `find_references`. `result.references` is the page. Eac
 | `kind` | string | `invocation` or `reference`. |
 | `project` | string | Solution-relative path of the project that contains the use. |
 | `path` | string | Solution-relative file of the use, with `/`. |
-| `line` | number | 1-based line of the name. |
-| `column` | number | 1-based column of the name. |
+| `line` | number | 1-based line of the use. |
+| `column` | number | 1-based column of the use, in UTF-16 code units. |
 
 A method with no recorded uses succeeds with an empty page, so an empty page and `symbol_not_found` mean different things. Static references are not a runtime call graph, and an empty page does not prove that a method is unused outside the [coverage](#freshness-coverage-and-legacy-indexes).
 
