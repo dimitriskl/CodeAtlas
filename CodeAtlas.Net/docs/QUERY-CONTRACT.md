@@ -148,6 +148,8 @@ Input:
 
 Defaults are the CLI's. `kind` defaults to `method`, as `search-symbols` does, and not to every kind, as `find_symbol` does. For the same arguments the rows, their order and the fields of `result` are those of `search-symbols`. Other arguments are ignored; the CLI's `--type` and `--language` have no input here.
 
+For an optional input, JSON `null` means the same as omitting it, as in `find_symbol`, because many JSON clients send `null` for an unset optional field. A required input is refused when `null`. The `tools/list` schema keeps the plain types of the table above.
+
 `names` ranks names, signatures and containing-type names. `assisted` adds authored XML documentation, documentation one containing-type, implementation, override or invocation link away, call facts, and saved AI descriptions. It reads those descriptions from `.codeatlas/explanations/` as [explanations](EXPLANATIONS.md) describes: a stale, corrupt or old-generation entry is left out, and with no saved descriptions the search runs without them. Descriptions come from `describe` or `explain-import`, which this tool does not run.
 
 Filters do not change a score. The rarity and length statistics come from the whole selected kind, and `project` is applied to the matches. Rows sort production projects before test projects unless the query contains `test`, then ordinary symbols before interface contracts whose implementations also match, then by descending `score`, descending `matchedQueryTokens` and ordinal symbol id. The page is a slice of that order.
@@ -207,20 +209,20 @@ Errors keep the envelope. The tool result is an MCP error, with no `result` and 
 
 | When | Message |
 | --- | --- |
-| `workspace` is missing or not a string | `workspace is required.` |
+| `workspace` is missing, `null` or not a string | `workspace is required.` |
 | `workspace` is empty | `workspace must not be empty.` |
 | `workspace` is not the server's solution | `workspace must be the solution directory.` |
-| `query` is missing or not a string | `query is required.` |
+| `query` is missing, `null` or not a string | `query is required.` |
 | `query` is empty | `query must not be empty.` |
 | `query` is over 4096 characters, or has no searchable token (only spaces, punctuation or stop words) | `query must have 1-4096 characters and at least one searchable token.` |
-| `mode` is empty or not a string | `mode must not be empty.` |
+| `mode` is empty, or not a string and not `null` | `mode must not be empty.` |
 | `mode` is any other value | `mode must be names or assisted.` |
-| `kind` is empty or not a string | `kind must not be empty.` |
+| `kind` is empty, or not a string and not `null` | `kind must not be empty.` |
 | `kind` is any other value | `Unknown symbol kind.` |
-| `project` is empty or not a string | `project must not be empty.` |
-| `snapshotId` is empty or not a string | `snapshotId must not be empty.` |
-| `offset` is not a nonnegative integer | `offset must be a nonnegative integer.` |
-| `limit` is outside 1 through 1000, or not an integer | `limit must be an integer from 1 through 1000.` |
+| `project` is empty, or not a string and not `null` | `project must not be empty.` |
+| `snapshotId` is empty, or not a string and not `null` | `snapshotId must not be empty.` |
+| `offset` is not a nonnegative integer and not `null` | `offset must be a nonnegative integer.` |
+| `limit` is outside 1 through 1000, or not an integer and not `null` | `limit must be an integer from 1 through 1000.` |
 | `offset` is greater than zero with no `snapshotId` | `offset greater than zero requires snapshotId.` |
 
 A string with an unpaired surrogate, such as `"\ud800"`, counts as not a string, so it gets that field's "not a string" message above.
