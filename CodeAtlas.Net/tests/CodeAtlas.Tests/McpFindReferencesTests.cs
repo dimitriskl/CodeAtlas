@@ -22,6 +22,8 @@ public sealed class McpFindReferencesTests(McpFindReferencesFixture fixture) : I
     private const string LimitMessage = "limit must be an integer from 1 through 1000.";
     private const string KindsEmpty = "kinds must not be empty.";
     private const string KindUnknown = "Unknown reference kind.";
+    private const string SnapshotFailure = "Cannot read the snapshot. Check its path and permissions, or rebuild it.";
+    private const string DatabaseFailure = "Cannot read the index database. Check its path and permissions, or rebuild it.";
     private const string UnpairedHigh = "\"\\ud800\"";
 
     private string Solution => fixture.Solution;
@@ -554,6 +556,42 @@ public sealed class McpFindReferencesTests(McpFindReferencesFixture fixture) : I
         {
             held?.Dispose();
             await File.WriteAllBytesAsync(CalculatorFile, original);
+        }
+    }
+
+    // Task #05: technical review attempt 1. The store fails before freshness is known, so both are null. Line 0 holds
+    // the file before the server has loaded anything, and line 1 after a query has made the session warm.
+    [Theory]
+    [InlineData("current.json", 0, SnapshotFailure)]
+    [InlineData("current.json", 1, SnapshotFailure)]
+    [InlineData("overview.md", 0, SnapshotFailure)]
+    [InlineData("overview.md", 1, SnapshotFailure)]
+    [InlineData("index.db", 0, DatabaseFailure)]
+    [InlineData("index.db", 1, DatabaseFailure)]
+    public async Task AStoreFileThatCannotBeReadIsRefusedWithNoFreshnessOrCoverage(string file, int heldFromLine, string message)
+    {
+        // Arrange
+        // SQLite ignores the lock FileShare.None takes on Unix, so only Windows refuses the database this way.
+        if (file == "index.db" && !OperatingSystem.IsWindows()) return;
+        var generation = (await IndexStore.LoadSnapshotAsync(fixture.IndexPath)).GenerationDirectory!;
+        var path = file == "current.json" ? fixture.IndexPath : Path.Combine(generation, file);
+        FileStream? held = null;
+        var lines = new[] { Query(1, Calculate), Query(2, Calculate) };
+        try
+        {
+            // Act
+            var responses = await Talk(Solution, lines, beforeLine: index =>
+            {
+                if (index == heldFromLine) held = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.None);
+            });
+
+            // Assert
+            Assert.All(responses[heldFromLine..], response => AssertRefused(response, "snapshot_io_failed", message));
+            Assert.All(responses[..heldFromLine], response => Assert.Equal(3, Rows(response).Length));
+        }
+        finally
+        {
+            held?.Dispose();
         }
     }
 
