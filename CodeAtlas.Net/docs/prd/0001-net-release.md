@@ -100,13 +100,13 @@ Then prove the claim with one controlled benchmark. Run the same agent and model
 | `coverage` | exists | Unchanged. |
 | `index` | exists | Unchanged; publishing a generation makes the warm session reload. |
 | `search_symbols` | new | [Contract](../QUERY-CONTRACT.md#mcp-tool-search_symbols), written in task 04. |
-| `find_references` | new | Follows the Angular `find_references` contract (PR #8). |
+| `find_references` | new | [Contract](../QUERY-CONTRACT.md#mcp-tool-find_references), written in task 05. Follows the Angular `find_references` contract (PR #8). |
 
 ### Contract
 
 - Envelope fields stay as in QUERY-CONTRACT: `contractVersion`, `command`, `success`, `responseToolVersion`, `warningCount`, `freshness`, `coverage`, `pagination` and `error`. `contractVersion` stays 1. New tools add sections and do not change existing fields.
 - Pagination is the same for every result tool: `offset` (default 0), `limit` (default 100, 1–1000) and `snapshotId`. An offset above zero requires `snapshotId`. A supplied `snapshotId` must equal the published generation id. The exception is `search_symbols` in `assisted` mode with saved descriptions, which returns the generation id with a hash of those descriptions, as `search-symbols` does.
-- `find_references` inputs: `workspace`, `id`, `kinds[]`, `project`, `offset`, `limit` and `snapshotId`. Rows have `targetId`, `kind`, `project`, `path`, `line` and `column`, in that order. Rows are sorted by `path`, `line`, `column` and `kind`.
+- `find_references` inputs: `workspace`, `id`, `kinds[]`, `project`, `offset`, `limit` and `snapshotId`. Rows have `targetId`, `kind`, `project`, `path`, `line` and `column`, in that order. Rows are sorted by `path`, `line` and `column`, then `targetId`, `project` and `kind`, the order of `find-references`.
 - `find_references` errors: `symbol_not_found` (unknown id, `freshness` and `coverage` null), `snapshot_mismatch`, `stale_index` and `invalid_arguments`.
 - .NET mapping for `find_references`:
   - `id` is a .NET method id as returned by `find_symbol`.

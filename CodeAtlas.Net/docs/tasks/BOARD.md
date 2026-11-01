@@ -2,7 +2,7 @@
 
 Source: [PRD 0001](../prd/0001-net-release.md). Each task is a vertical slice for one coding session. Domnus reviews each PR technically, then QA reviews it against CODING_STANDARDS.md.
 
-01, 02, 03, 04 and 12 are merged. 05, 14, 15, 16 and 17 can start. 10, 11 and 13 stay deferred until after the release: macOS runs only for `v*` tags and manual runs, so macOS regressions surface only at the release.
+01, 02, 03, 04 and 12 are merged. 05 is in review. 14, 15, 16 and 17 can start. 10, 11 and 13 stay deferred until after the release: macOS runs only for `v*` tags and manual runs, so macOS regressions surface only at the release.
 
 | # | Task | Blocked by | Status |
 |---|---|---|---|
@@ -10,7 +10,7 @@ Source: [PRD 0001](../prd/0001-net-release.md). Each task is a vertical slice fo
 | 02 | [Standards checks in the build](02-standards-checks.md) | 01 | done (https://github.com/dimitriskl/CodeAtlas/pull/12) |
 | 03 | [MCP server answers from a warm index](03-mcp-warm-index.md) | 01 | done (https://github.com/dimitriskl/CodeAtlas/pull/14) |
 | 04 | [MCP tool search_symbols](04-search-symbols.md) | 03 | done (https://github.com/dimitriskl/CodeAtlas/pull/15) |
-| 05 | [MCP tool find_references](05-find-references.md) | 03 | ready |
+| 05 | [MCP tool find_references](05-find-references.md) | 03 | review (https://github.com/dimitriskl/CodeAtlas/pull/16) |
 | 06 | [Docs agree with the release](06-docs-agree.md) | 04, 05 | ready |
 | 07 | [Benchmark: real MCP mode and success-only statistics](07-benchmark-mcp-mode.md) | 05 | ready |
 | 08 | [Demo and tagged GitHub release](08-demo-release.md) | 06 | ready |
