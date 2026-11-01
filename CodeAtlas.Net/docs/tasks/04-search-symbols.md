@@ -122,3 +122,37 @@ Probes and mutations ran in a scratch copy of HEAD. No production code changed.
 ### 2026-11-01 (owner decision)
 
 Criterion reworded by the task owner: two or more words, because the evidence gate withholds one word found only in documentation, in the CLI too. The reviewer found that correct, not a defect. `WordsInAMethodsDocumentationRankThatMethodFirst` and `ASingleDocumentationWordIsWithheldNotGuessed` cover both. The surrogate failures outside tool arguments are filed as [task 17](17-mcp-protocol-surrogates.md).
+
+### 2026-11-01 (Technical review attempt 2)
+
+Commit reviewed: `bb20c11`, against `ef1cbd2`. Scope: `697fe17` contract, `be221e9` fix, `6965955` and `23637d4` tests, `513152c` and `bb20c11` docs.
+
+Verdict: CHANGES REQUESTED. QA may not start. The three items of attempt 1 are fixed and hold. One new item blocks, because a real query returns a wrong answer.
+
+Blocking:
+
+1. `src/CodeAtlas.Cli/Program.cs:80`: the server reads `Console.In`. On Windows that decodes stdin with the console code page, not UTF-8, and MCP stdio messages are UTF-8. Clients send non-ASCII text raw: a Node client using `JSON.stringify` and `spawn` shows it. So a real query with a non-ASCII word gets wrong tokens and a successful empty answer. This breaks "For the same arguments the rows ... are those of `search-symbols`" (QUERY-CONTRACT, MCP tool `search_symbols`).
+   - Proof, real server on a scratch copy of the fixture, with `ζεστό καφέ` from a method's documentation: the CLI returns `Sample.Brew.Prepare`. MCP with raw UTF-8 on code page 737 gives tokens `δ ε η ν φ`, on 437 gives four unrelated tokens, and both return `abstained-no-token-overlap` with no rows and no error. The same line on code page 65001, or with the text escaped as `\uXXXX`, returns the method. A workspace path with raw non-ASCII text is also misread: `find_symbol`, `search_symbols` and `index` refuse it with `workspace must be the solution directory.`
+   - Age: `find_symbol` does the same on `d2b2fc7` (`Größe` raw is empty, escaped is found), so the cause is older than this PR. As in item 2 of attempt 1, the published promise is new. The failure is silent, so an agent reads it as "not found". Ubuntu is not affected, and no test sends non-ASCII text.
+   - Fix: first state in the contract that MCP stdin is UTF-8 whatever the console code page. Then read a `StreamReader` over `Console.OpenStandardInput()` with `new UTF8Encoding(false)` instead of `Console.In`. Tried in the scratch copy: code page 737 then returns the method with the right tokens. Add a Windows real-process test with raw UTF-8 under a non-UTF-8 code page that fails before the edit. `live` on line 78 has the same reader and is not part of this item. The criterion's fixture test still passes, so its box stays ticked.
+
+Confirmed:
+
+- Item 1 of attempt 1: all 15 rows of the `invalid_arguments` table have a test with the documented message, in `EachInvalidArgumentReturnsItsDocumentedMessage` and, for over 4096 characters, `AQueryOverTheLengthLimitReturnsItsDocumentedMessage`. The mutation ignoring a non-string `project` now fails its `project` `7` row only.
+- Item 2, surrogate: `697fe17` precedes `be221e9`. Real servers, `d2b2fc7` and `bb20c11`, every string field of `find_symbol`, `index_status`, `coverage` and `index`: `-32603` with no envelope before, `invalid_arguments` with the envelope after, with the same message as the value `7`. `search_symbols` does the same. `limit` and `offset` with the surrogate gave their integer message before and after.
+- Other tools' contracts: they have no section of their own. The README says a failed tool call returns `isError: true` with the envelope and the process keeps reading, and the old `-32603` broke that, so the change agrees with it. The PRD keeps `-32603` for internal errors, and it still answers those.
+- Valid pairs, escaped as a pair: in `query` the pair is dropped by the tokenizer and the method ranks first. In `project` an empty page, in `snapshotId` `snapshot_mismatch`, in `mode` and `kind` their "any other value" message. A solution folder with an emoji in its name works for `find_symbol`, `search_symbols`, `index_status` and `coverage`.
+- Item 3, mutation reproduced: names mode accepting any view of the generation fails `OneServerRefusesAPageFromTheOtherModeOrAChangedDescription` only, 1 failed and 62 passed of 63 `McpSearch` tests. The same mutation in assisted mode fails that test and `AChangedSavedDescriptionRefusesAContinuationOfTheOldView`. Restored and built.
+- Task 17: the crash is older than this PR. Real servers on `d2b2fc7` (the tip of `codex/production-roadmap`) and `bb20c11` behave alike. A surrogate in `method` or a string `id` gives an unhandled `InvalidOperationException`, exit 3762504530 and no output, and `params.name` and `protocolVersion` give `-32603` and the server continues. This PR did not change it and added no new path to it.
+- `bb20c11`: the criterion matches the owner's decision. `WordsInAMethodsDocumentationRankThatMethodFirst` and `ASingleDocumentationWordIsWithheldNotGuessed` exist and pass. The CLI withholds one documentation word too (`glitter` on the scratch fixture: `abstained-insufficient-evidence`, 1 withheld). `BOARD.md` is right: 17 is listed after 04, and `ready` with an open blocker matches 06 to 09.
+- Commits: contract before behavior, why, what and proof in each, no names, tool or assistant mentions, no trailers. Version stays `0.00.63`. `build/crap-exceptions.json` is unchanged.
+- Local, scratch copy, Windows, Debug: build 0 warnings, 76 of 76 tests in `McpSearch` and `McpServerTests`. The full suite was not run locally.
+
+Non-blocking:
+
+- `bb20c11` holds two changes, the reworded criterion and task 17. Both are docs, so it stays as it is.
+- For whoever takes task 17, with no change to its scope: an unpaired surrogate in a top-level property name also ends the server, on `d2b2fc7` too. In a property name inside `arguments` it gives `-32603`.
+
+CI for the latest finished code commit `513152c` (run 41275016526; `bb20c11` changes docs only): `build (windows-2025)`, `build (ubuntu-24.04)`, `install (windows-2025)` and `install (ubuntu-24.04)` passed. CRAP gate on Ubuntu: 1598 methods, 0 above 10, 0 exception problems, 4 better than recorded.
+
+Probes and mutations ran in a scratch copy. No production code changed.
