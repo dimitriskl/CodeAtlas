@@ -4,6 +4,7 @@ using System.Net.Sockets;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using CodeAtlas.Cli;
 using CodeAtlas.Explanations;
 using Xunit;
 using static CodeAtlas.Tests.McpLines;
@@ -94,6 +95,48 @@ public sealed class McpSearchDescriptionTests(ExplanationCliContractFixture fixt
         Assert.Null(mismatch["freshness"]);
         Assert.Null(mismatch["coverage"]);
     }
+
+    [Fact]
+    public async Task OneServerRefusesAPageFromTheOtherModeOrAChangedDescription()
+    {
+        // Arrange
+        var (_, method, other) = await PublishAsync();
+        await ImportAsync(method, Description);
+        await ImportAsync(other, Description);
+        var host = McpHost.Start(fixture.Solution);
+        var names = await SnapshotIdAsync(host, Search(1, DescriptionWord, mode: "names", limit: 1));
+        var oldView = await SnapshotIdAsync(host, Search(2, DescriptionWord, limit: 1));
+        await ImportAsync(method, DescriptionWord + " revised transformation");
+        var view = await SnapshotIdAsync(host, Search(3, DescriptionWord, limit: 1));
+        var lines = new[]
+        {
+            Search(4, DescriptionWord, snapshotId: names),
+            Search(5, DescriptionWord, mode: "names", snapshotId: view),
+            Search(6, DescriptionWord, snapshotId: oldView),
+            Search(7, DescriptionWord, offset: 1, limit: 1, snapshotId: view),
+            Search(8, DescriptionWord, mode: "names", snapshotId: names)
+        };
+
+        // Act
+        var responses = await AskAsync(host, lines);
+
+        // Assert
+        Assert.NotEqual(oldView, view);
+        foreach (var refused in responses[..3])
+            Assert.Equal("snapshot_mismatch", Envelope(refused, isError: true)["error"]!["code"]!.GetValue<string>());
+        Assert.Equal(view, Envelope(responses[3], isError: false)["pagination"]!["snapshotId"]!.GetValue<string>());
+        Assert.Equal(names, Envelope(responses[4], isError: false)["pagination"]!["snapshotId"]!.GetValue<string>());
+    }
+
+    private static async Task<JsonObject[]> AskAsync(McpHost host, params string[] lines)
+    {
+        var responses = new List<JsonObject>();
+        foreach (var line in lines) responses.Add((await host.HandleLineAsync(line))!);
+        return [.. responses];
+    }
+
+    private static async Task<string> SnapshotIdAsync(McpHost host, string line) =>
+        Envelope((await AskAsync(host, line))[0], isError: false)["pagination"]!["snapshotId"]!.GetValue<string>();
 
     private async Task<(CodebaseIndex Index, DocumentedSymbol Method, DocumentedSymbol Other)> PublishAsync()
     {
