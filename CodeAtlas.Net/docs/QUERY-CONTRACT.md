@@ -366,9 +366,11 @@ A use that writes the method's name points at the name. An implicit use writes n
 | `GetAwaiter` of an `await` | The `await` keyword. |
 | `Deconstruct` | The first token of the deconstruction: `var` in `var (a, b) = pair`, `(` in `(a, b) = pair`. |
 | `Add` of a collection initializer | The first token of the element. |
-| `Dispose` | The first token of a `using` statement, or of a local declaration with one variable of a disposable type: `using`, `var` or the type's name. The local needs no `using`, so `var output = Start();` has a row. |
+| `Dispose` | The first token of a `using` statement or declaration, or of a local declaration: `using`, `var`, or the first token of the type. The next paragraph says which of these have a row. |
 
-A `Dispose` that implements `IDisposable.Dispose` has these rows for the disposable locals of the whole solution, not only of its own type. `targetId` names the `Dispose` of the local's type when that is in source, and otherwise the queried `id`. The `Dispose` of a `foreach`, `DisposeAsync`, `GetAsyncEnumerator` and the methods of a query expression have no implicit rows.
+`Dispose` rows are not a list of disposable locals. A file has them only if it contains a `using` statement or declaration somewhere; an `await using` counts, a `using` directive does not. Such a file has a row for each `using` statement with an expression, and for each `using` statement, `using` declaration or local declaration with one variable and an initializer, when the type of that expression or initializer has an accessible `Dispose()` with no parameters. That type need not implement `IDisposable`, and it is the type before any conversion to the local's type: `object held = new Resource();` has a row, and `var held = (object)new Resource();` has none. There is no row for a local with no initializer, or with a `null` literal or `ref` initializer, for two variables in one declaration, for an `await using`, or for a type that implements `Dispose` only explicitly.
+
+A `Dispose` that implements `IDisposable.Dispose` has these rows across the whole solution, not only for its own type. `targetId` names the `Dispose` that type resolves to when that is in source, a base type's included, and otherwise the queried `id`. The `Dispose` of a `foreach`, `DisposeAsync`, `GetAsyncEnumerator` and the methods of a query expression have no implicit rows.
 
 Rows sort by ordinal `path`, then `line` and `column`, then ordinal `targetId`, `project` and `kind`. This is the order of `find-references`. The page is a slice of that order.
 
