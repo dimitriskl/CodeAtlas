@@ -171,3 +171,34 @@ Probes and mutations ran in a scratch copy. No production code changed.
 - Limit, in the contract: a person typing into a terminal with a non-UTF-8 code page sends code-page bytes, so non-ASCII text there is now refused or misread. Protocol clients use pipes. Not tested.
 - Left as they are: task 17, the unticked group announcement. No version bump: 0.00.63. `build/crap-exceptions.json` is unchanged. Both new methods have complexity 1, and `Program.<Main>$` has no new branch.
 - Local (Windows), Debug: build 0 warnings, .NET 716/716, Python 145 OK. The CRAP gate was not run locally.
+
+### 2026-11-01 (Technical review attempt 3)
+
+Commit reviewed: `f15d3ac`, against `8d65310`. Scope: `3b98256` contract, `c6a6857` fix, `f15d3ac` docs.
+
+Verdict: APPROVED. QA may start. The blocking item of attempt 2 is fixed and holds. Nothing blocks.
+
+Confirmed on real processes, in a scratch copy with raw stdin bytes:
+
+- Item 1 of attempt 2: `ζεστό καφέ` through `search_symbols` and `Größe` through `find_symbol` return `Sample.Brew.Prepare` and `Sample.Brew.Größe`, the same as the CLI, on code pages 437, 737, 850, 932, 1252, 1253, 20127, 37, 1026, 65000 and 65001. Raw and escaped requests give the same bytes, apart from timestamps. The commit before the fix returns nothing on 437.
+- Stdout: strict UTF-8, no byte order mark. `😀` reads back as one character in Python, Node and PowerShell, in the outer line and in the envelope text.
+- `\uXXXX` is not a new format. Against `d2b2fc7` on 437, 1252 and 65001, ASCII requests and an escaped `Größe` differ only in the version and timestamps, plus `search_symbols` in `tools/list`. Against `3b98256` the bytes are identical. No existing test changed in these commits.
+- Invalid input on `mcp`, with the main cases repeated on `live`, next line answered and exit 0 each time: a byte order mark first, alone, split across three writes, with CRLF, doubled, on line 2, or cut short. `FF`, `FE`, `80`, `C0 AF`, `ED A0 80`, `F4 90 80 80`, `E2 82` and `F0 9F 98` in a string, in a key, before or after the value. Valid and truncated sequences across the reader's buffer at 1024, 2048 and 4096 bytes, and across two writes 250 ms apart. Lines up to 128 MB, same time as before the fix. A final line with no newline, including complete JSON followed by `E2 82`, is refused, not answered. NUL alone, in a string, before and after the value. The refused line never took the next one. `-32700` has `"id":null`, present, not absent.
+- Cancellation: Ctrl+Break on `mcp` and `live`, piped and at a console, behaves the same before and after the fix, so the change does not touch it.
+- One-shot commands: `--version`, `--help`, `find-symbol`, `search-symbols`, `index-status` and bad arguments match `3b98256` on 437, 1252, 65001 and 37, apart from timestamps. `ProtocolStreams` has only the two callers in `Program.cs`. No one-shot command reads `Console.In`.
+- Tests: 16 of 16 pass on the fix, and 15 of 16 fail with the new test file over `3b98256`. Replacing the marker with the default U+FFFD fails 7 of 16. `chcp` needs no setup on the runner, and a failed `chcp` skips the server and fails the test on the missing output file. `LC_ALL` is read by .NET as text, so no locale has to be installed. Nothing skips.
+- Commits: contract before behavior, one change each, why, what and proof, no names, tool or assistant mentions, no attribution trailers. Version stays `0.00.63`. `build/crap-exceptions.json` is unchanged.
+
+The `live` limit, measured by typing into a real console:
+
+- It is a real regression. `Größe` on 437 and 1252 and Greek text on 1253 worked before and now return `invalid_arguments`. Code page 65001 and `\uXXXX` escapes work everywhere, and the next line is unaffected.
+- It is an acceptable trade. The README describes `live` as a JSON line protocol and no document describes typing into it, so no documented workflow breaks. The failure is a refusal, not a wrong answer, and the contract states it. `StartMenu` and `AiSetup` use their own `Console` calls and are not affected.
+
+Non-blocking:
+
+- If interactive use matters later, `ProtocolStreams.OpenInput` could keep `Console.In` when `Console.IsInputRedirected` is false, which restores the old terminal behavior with no effect on clients.
+- `Assert.Null(refused["id"])` in `ProtocolEncodingTests.cs:132` also passes when `id` is missing. The server is correct. `ContainsKey` would pin it.
+
+CI for `f15d3ac` (run 41299500316): `build (windows-2025)`, `build (ubuntu-24.04)`, `install (windows-2025)` and `install (ubuntu-24.04)` passed. Both builds ran 716 of 716 tests, with the 16 of `ProtocolEncodingTests` passed and none skipped. CRAP gate on Ubuntu: 1601 methods, 0 above 10, 0 exception problems, 4 better than recorded.
+
+Probes and mutations ran in a scratch copy. No production code changed.
