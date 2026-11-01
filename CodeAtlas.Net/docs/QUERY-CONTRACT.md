@@ -203,7 +203,7 @@ Errors keep the envelope. The tool result is an MCP error, with no `result` and 
 | `stale_index` | A tracked input changed. | `The saved index is stale.` | Set, with `changedFiles`. |
 | `snapshot_io_failed` | A tracked input cannot be read. | `Snapshot inputs could not be verified. Publication was not committed; resolve the input access failure and retry.` | Set. |
 | `rebuild_required` | The generation has no symbol documentation or structural facts, or an older structural model. | `Rebuild to extract symbol documentation.`, `Rebuild to extract structural facts.` or `Rebuild with the supported structural-fact model.` | null |
-| `invalid_index`, `unsupported_index`, `sqlite_unavailable`, `analysis_failed` | As in [Errors and profiling](#errors-and-profiling). | The store's message. | null |
+| `invalid_index`, `unsupported_index`, `sqlite_unavailable` | As in [Errors and profiling](#errors-and-profiling). | The store's message. | null |
 
 `invalid_arguments` messages:
 
