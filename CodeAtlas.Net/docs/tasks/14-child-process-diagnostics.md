@@ -13,6 +13,7 @@ Follow-ups from the task 12 reviews:
 3. `ChildProcessTests.cs:43` would still pass after about 60 s if the drain went back to being unbounded. Start a `Stopwatch` in Arrange and assert the elapsed time is under 30 s.
 4. Add one sentence to `CODING_STANDARDS.md` saying the helper drains output for at most 10 s after the child exits.
 5. The writer-kill tests (`GenerationStoreTests.cs`, `RefreshReliabilityTests.cs`, through `PublicationChildProcess`) drop the vstest output when they fail, and a cleanup throw in `finally` can hide the first error. Include the captured output in the failure, and keep the first error.
+6. `PublicationChildProcess.cs:30` reads the checkpoint once, with `FileShare.Read`, right after `File.Move` by the writer, so Windows can refuse it with a sharing violation. `RefreshReliabilityTests.ActualProcessTerminationWithARefreshPayloadHasOnlyOldOrNewOutcomes("after")` failed this way on `refresh-child.ready` in task 05. Open it with `FileShare.Read | FileShare.Delete` and retry, as `GenerationStore.OpenPointerAsync` does.
 
 User stories: 21, 24. PRD: [Testing Decisions](../prd/0001-net-release.md#testing-decisions).
 

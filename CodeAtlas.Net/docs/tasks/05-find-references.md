@@ -130,3 +130,40 @@ The group announcement stays unticked.
 Local (Windows, Debug): build 0 warnings, Python 145 OK. .NET: 872 of 872, 22 new, on the second full run. The first full run on the same commit was 871 of 872: `RefreshReliabilityTests.ActualProcessTerminationWithARefreshPayloadHasOnlyOldOrNewOutcomes("after")` failed with an `IOException` sharing violation on `refresh-child.ready`. That is `PublicationChildProcess.WaitForCheckpointAsync` reading the file once, with no retry, as soon as `File.Exists` sees it. Neither the test nor the helper changed here, and this path has no MCP code. It is an existing flake, not fixed in this PR and not yet filed as a task.
 
 Not run: `qualify-package.py`, the CRAP gate and the package smoke. No file they measure under `src/` changed.
+
+### 2026-11-01 (Technical review attempt 2)
+
+Commit reviewed: `c23b1dc`, the 8 commits since `8a7fa85`. No file under `src/` changed, and the version stays 0.00.64.
+
+Verdict: CHANGES REQUESTED. QA may not start. The three findings of attempt 1 are fixed and pinned, but two sentences that the fix added are false on real rows. No production code has to change.
+
+The maintainer confirmed the PRD tie-order amendment on 2026-11-01, so the open point of difference 2 in attempt 1 is closed.
+
+Blocking:
+
+1. `docs/QUERY-CONTRACT.md:369,371`: "The local needs no `using`, so `var output = Start();` has a row" and "the disposable locals of the whole solution" are false. A `Dispose` row appears only in a file that contains a `using` statement or declaration somewhere. On a real server, `var v = new R();` has a row in a file with a `using` in another method, and in a file with only an `await using`. The same line in a file with neither has no row: the 14 rows of `R.Dispose` name 3 other files. A local with no initializer or a `null` initializer has no row (`R? n;`, `R n = null!;`), and neither has an `await using` of a type that is `IDisposable`. A client that reads these rows as the list of disposable locals misses some. The `ImplicitUses` fixture file has `using` statements, so `McpFindReferencesTests.cs:120` cannot see this. Fix: say "one variable and an initializer of a disposable type", say that only a file with a `using` has these rows and that they do not list every disposable local, and add `await using` to the shapes with no rows. Add a fixture file with no `using`, assert it has no `Dispose` row, and add `R n = null!;` to the fixture of that theory.
+2. `docs/QUERY-CONTRACT.md:357`: "This is an implicit use, or a method group or `nameof` outside every callee expression" leaves out a `cref` in a documentation comment, which is stored as a `reference` on the name. 5 positions on this solution do this, including `src/CodeAtlas.Core/IndexStore.cs:511:81`. Fix: add it to the sentence and pin one row beside `ANameInsideACalleeExpressionIsStoredAsAnInvocationEvenWhenNothingCallsIt`.
+
+The flake, not blocking, filed as item 6 of [task 14](14-child-process-diagnostics.md):
+
+- Cause: `tests/CodeAtlas.Tests/PublicationChildProcess.cs:30` reads the checkpoint once, with `FileShare.Read`, as soon as `File.Exists` sees the name. The writer has just renamed the file with `File.Move`, and Windows refuses an open that does not share delete during that moment. A race of rename against read gave 727 and 667 sharing violations in two runs of 3000 rounds with `File.ReadAllText`, and 0 and 0 with `FileShare.Read | FileShare.Delete`. The helper polls every 25 ms, so it hits this rarely.
+- Not new: the line came in with `d7ed3ce` on `codex/production-roadmap`, and this PR does not touch it or `RefreshReliabilityTests.cs`.
+- It can fail CI, on Windows only and rarely: `qualify-package.py` runs these tests twice, in `writer-process-tests` and `test`, with no retry. `GenerationStoreTests` uses the same helper.
+- Test code only. The one production reader of `current.json`, `GenerationStore.OpenPointerAsync`, shares delete and retries this window.
+
+Confirmed:
+
+- Rows of a real index of this solution, 13605 rows at 4892 distinct positions, and of a scratch solution of the implicit shapes, through `index.db` and a real MCP server. Every implicit row is a `reference`: 282 positions on `using` and 48 on `var`. `foreach` gives `foreach`, `Deconstruct` gives `var` or `(`, `foreach (var (a, b) in pairs)` gives `var`, `Add` gives the element, `{` included, and a qualified local type gives its first token. `targetId` is as stated.
+- `column`: a tab, `ζ` and a surrogate pair before a name gave 2, 9 and 10, in UTF-16 code units.
+- `invocation`: 25 positions are method groups in a chain, as in attempt 1, and `.Select(From).ToList()` at `McpHost.cs:304` is one.
+- `snapshot_io_failed`, real server, cold and warm, `find_references` and `search_symbols`: `current.json`, `overview.md`, `warnings.txt` and `timings.json` held give the snapshot message, `index.db` held gives the database message, all with null `freshness` and `coverage` and no pagination. A missing `overview.md` or `index.db` is `invalid_index`, which that table lists.
+- Seam tests, one mutation at a time on a private copy, 210 cases: an implicit row as `invocation` in a chain fails 2, an implicit row one column on fails 8, a column in code points fails 1, the classifier of task 18 fails 2, the snapshot message fails 5, the database message fails 3, and freshness and coverage set fails 9. Each failure list includes the new test for that statement. Baseline 210 of 210.
+- Task 18: the table, the 25 rows, `ScopedReferences.cs:105-107`, `McpHost.cs:273` and the `README.md` and `docs/USER-GUIDE.md` lines are right. `BOARD.md` is right. "ready" with an open blocker matches rows 06 and 07.
+- Commit hygiene: 8 commits, one change each, each contract commit before its test commit, why/what/proof, no names, tool mentions or trailers. `build/crap-exceptions.json` is unchanged.
+
+Not blocking:
+
+- The `index.db` cases do not skip visibly. `if (...) return;` at `McpFindReferencesTests.cs:575` and `McpSearchSymbolsTests.cs:299` reports them as passed on Ubuntu, in under 1 ms in the TRX, and xunit 2.9.3 has no runtime skip. The reason is right: `FileShare.None` is an advisory lock on Unix, and `immutable=1` makes SQLite take no locks. They ran on Windows CI, 1.5 to 2.8 s each, so the message is pinned there. They could run on Ubuntu: on WSL Ubuntu as a non-root user, a file with mode 0 stays visible and `immutable=1` gives `SQLITE_CANTOPEN` (14), which `Translate` maps to the same message. Use `File.SetUnixFileMode` in place of the held stream. Other OS-gated tests in this repository use the same `return`, so this is a follow-up, not part of this fix.
+- Correction to attempt 1: the `install` jobs run `package-smoke.py` on the packed tool, and its log shows `find_references`. So CI does run the smoke. `--skip-smoke` applies to the `build` jobs only.
+
+CI at `c23b1dc`, run 41328828386: `build (ubuntu-24.04)` passed, 872 of 872, CRAP gate 1616 methods, 0 above 10, 0 exception problems, 7 better than recorded. `build (windows-2025)` passed, 872 of 872. `install (ubuntu-24.04)` and `install (windows-2025)` passed, smoke included. These stand in for the qualification, CRAP and smoke runs the developer did not make.
