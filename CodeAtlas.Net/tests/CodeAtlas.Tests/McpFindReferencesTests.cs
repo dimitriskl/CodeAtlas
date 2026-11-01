@@ -205,6 +205,22 @@ public sealed class McpFindReferencesTests(McpFindReferencesFixture fixture) : I
         Assert.Equal(expected, stored);
     }
 
+    // Task #05: technical review attempt 2. A cref is on the name and follows the rule of every other written name,
+    // so the one inside a lambda that lies in a callee expression is stored as an invocation.
+    [Fact]
+    public async Task ACrefOfADocumentationCommentIsStoredOnTheNameByTheCalleeRule()
+    {
+        // Arrange
+        var lines = new[] { Query(1, Library + "::M:Sample.Chain.Documented") };
+
+        // Act
+        var responses = await Talk(Solution, lines);
+
+        // Assert
+        var stored = Rows(responses[0]).Select(row => $"{row["kind"]!.GetValue<string>()} {TextAt(row)}");
+        Assert.Equal(new[] { "reference Documented\"/>.</summary>", "invocation Documented\"/>.</summary>" }, stored);
+    }
+
     [Fact]
     public async Task KindsAndProjectFiltersKeepOnlyMatchingRows()
     {
@@ -1102,9 +1118,12 @@ public sealed class McpFindReferencesFixture : IAsyncLifetime
         {
             public static Chain Wrap(Func<int> value) { _ = value; return new(); }
             public static Chain Mark(string name) { _ = name; return new(); }
+            public static Chain Hold(Action run) { run(); return new(); }
             public Chain Run() => this;
             public static int Zero() => 0;
             public static void Target() { }
+            /// <summary>Named by <see cref="Documented"/>.</summary>
+            public static void Documented() { }
             public static void Uses()
             {
                 Wrap(Zero).Run();
@@ -1112,6 +1131,12 @@ public sealed class McpFindReferencesFixture : IAsyncLifetime
                 Zero();
                 Mark(nameof(Target)).Run();
                 Mark(nameof(Target));
+                Hold(() =>
+                {
+                    /// <summary>Named by <see cref="Documented"/>.</summary>
+                    void Local() { }
+                    Local();
+                }).Run();
             }
         }
         """;
