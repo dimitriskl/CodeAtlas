@@ -164,6 +164,24 @@ public sealed class McpFindReferencesTests(McpFindReferencesFixture fixture) : I
         Assert.All(rows, row => Assert.StartsWith("Target()", TextAt(row), StringComparison.Ordinal));
     }
 
+    // Task #05: technical review attempt 1. These rows pin what the index stores, not what a kind should mean:
+    // task 18 changes the classifier, and this test with it.
+    [Theory]
+    [InlineData("M:Sample.Chain.Zero", "Wrap(Zero).Run();", "invocation", "Wrap(Zero);", "reference", "Zero();", "invocation")]
+    [InlineData("M:Sample.Chain.Target", "Mark(nameof(Target)).Run();", "invocation", "Mark(nameof(Target));", "reference")]
+    public async Task ANameInsideACalleeExpressionIsStoredAsAnInvocationEvenWhenNothingCallsIt(string method, params string[] expected)
+    {
+        // Arrange
+        var lines = new[] { Query(1, Library + "::" + method) };
+
+        // Act
+        var responses = await Talk(Solution, lines);
+
+        // Assert
+        var stored = Rows(responses[0]).SelectMany(row => new[] { LineOf(row).Trim(), row["kind"]!.GetValue<string>() });
+        Assert.Equal(expected, stored);
+    }
+
     [Fact]
     public async Task KindsAndProjectFiltersKeepOnlyMatchingRows()
     {
@@ -844,11 +862,10 @@ public sealed class McpFindReferencesTests(McpFindReferencesFixture fixture) : I
     private static string Place(JsonNode row) =>
         $"{row["path"]!.GetValue<string>()}:{row["line"]!.GetValue<int>()}:{row["column"]!.GetValue<int>()}";
 
-    private string TextAt(JsonNode row)
-    {
-        var source = File.ReadAllLines(Path.Combine(fixture.Root, row["path"]!.GetValue<string>()))[row["line"]!.GetValue<int>() - 1];
-        return source[(row["column"]!.GetValue<int>() - 1)..];
-    }
+    private string LineOf(JsonNode row) =>
+        File.ReadAllLines(Path.Combine(fixture.Root, row["path"]!.GetValue<string>()))[row["line"]!.GetValue<int>() - 1];
+
+    private string TextAt(JsonNode row) => LineOf(row)[(row["column"]!.GetValue<int>() - 1)..];
 
     private static string[] ToolNames(JsonObject response) =>
         response["result"]!["tools"]!.AsArray().Select(tool => tool!["name"]!.GetValue<string>()).ToArray();
@@ -970,6 +987,26 @@ public sealed class McpFindReferencesFixture : IAsyncLifetime
         }
         """;
 
+    private const string Chain = """
+        namespace Sample;
+        public sealed class Chain
+        {
+            public static Chain Wrap(Func<int> value) { _ = value; return new(); }
+            public static Chain Mark(string name) { _ = name; return new(); }
+            public Chain Run() => this;
+            public static int Zero() => 0;
+            public static void Target() { }
+            public static void Uses()
+            {
+                Wrap(Zero).Run();
+                Wrap(Zero);
+                Zero();
+                Mark(nameof(Target)).Run();
+                Mark(nameof(Target));
+            }
+        }
+        """;
+
     // Written with escapes so that each character before a name is plain to read: a tab on line 7, a character in
     // the basic plane on line 8, and a surrogate pair on line 9.
     private const string Columns =
@@ -1005,6 +1042,7 @@ public sealed class McpFindReferencesFixture : IAsyncLifetime
             """);
         await File.WriteAllTextAsync(Path.Combine(Root, "Library", "ImplicitUses.cs"), ImplicitUses);
         await File.WriteAllTextAsync(Path.Combine(Root, "Library", "Columns.cs"), Columns);
+        await File.WriteAllTextAsync(Path.Combine(Root, "Library", "Chain.cs"), Chain);
         await IndexStore.SaveAsync(await SolutionAnalysis.CreateIndexAsync(Solution));
     }
 
