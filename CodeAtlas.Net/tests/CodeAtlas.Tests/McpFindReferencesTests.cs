@@ -105,7 +105,7 @@ public sealed class McpFindReferencesTests(McpFindReferencesFixture fixture) : I
     }
 
     // Task #05: technical review attempt 1. An implicit use writes no name, so the source text at the row pins its
-    // position. One Dispose has rows for the disposable locals of every type. Rows sort by position.
+    // position. One Dispose has the Dispose rows of every type. Rows sort by position.
     [Theory]
     [InlineData("M:Sample.Numbers.GetEnumerator", "foreach (var plain", "foreach (var chained")]
     [InlineData("M:Sample.Numbers.MoveNext", "foreach (var plain", "foreach (var chained")]
@@ -142,7 +142,7 @@ public sealed class McpFindReferencesTests(McpFindReferencesFixture fixture) : I
     }
 
     [Fact]
-    public async Task AnImplicitDisposeNamesTheTypeOfItsLocalOrTheQueriedMethodWhenThatTypeIsNotInSource()
+    public async Task AnImplicitDisposeNamesTheDisposeOfItsInitializersTypeOrTheQueriedMethodWhenThatIsNotInSource()
     {
         // Arrange
         var lines = new[] { Query(1, Library + "::M:Sample.Resource.Dispose") };
@@ -1126,6 +1126,7 @@ public sealed class McpFindReferencesFixture : IAsyncLifetime
             public static void TwoLocals() { Resource first = new(), second = new(); _ = first; _ = second; }
             public static void AnotherType() { var other = new OtherResource(); _ = other; }
             public static void MetadataType() { var task = Task.CompletedTask; _ = task; }
+            public static void ForInitializer() { for (var loop = new Resource(); ;) { _ = loop; break; } }
             public static void TwoInOneUsing() { using (Resource one = new(), two = new()) { _ = one; _ = two; } }
             public static void NoInitializer() { Resource? unset; unset = null; _ = unset; }
             public static void NullInitializer() { Resource nothing = null!; _ = nothing; }
