@@ -112,8 +112,10 @@ public sealed class McpFindReferencesTests(McpFindReferencesFixture fixture) : I
     [InlineData("M:Sample.Later.GetAwaiter", "await new Later()")]
     [InlineData("M:Sample.Pair.Deconstruct(System.Int32@,System.Int32@)", "var (first", "(left, right) =")]
     [InlineData("M:Sample.Bag.Add(System.Int32)", "5, 6 }", "6 }")]
-    [InlineData("M:Sample.Resource.Dispose", "using (var block", "using var scoped", "var held", "using (held)", "var plain", "Resource typed", "var other", "var task")]
-    [InlineData("M:Sample.Ticker.Dispose", "using (var block", "using var scoped", "var held", "using (held)", "var plain", "Resource typed", "var other", "var task")]
+    [InlineData("M:Sample.Resource.Dispose", "using (var block", "using var scoped", "var held", "using (held)", "var plain", "Resource typed", "var other", "var task", "object converted", "var derived", "var counted")]
+    [InlineData("M:Sample.Ticker.Dispose", "using (var block", "using var scoped", "var held", "using (held)", "var plain", "Resource typed", "var other", "var task", "object converted", "var derived", "var counted")]
+    [InlineData("M:Sample.Loose.Dispose", "var loose")]
+    [InlineData("M:Sample.Both.Dispose", "using (var block", "using var scoped", "var held", "using (held)", "var plain", "Resource typed", "var other", "var task", "object converted", "var derived", "var counted")]
     [InlineData("M:Sample.AsyncResource.DisposeAsync")]
     [InlineData("M:Sample.AsyncNumbers.GetAsyncEnumerator(System.Threading.CancellationToken)")]
     [InlineData("M:Sample.Words.Select(System.Func{System.Int32,System.Int32})")]
@@ -149,6 +151,25 @@ public sealed class McpFindReferencesTests(McpFindReferencesFixture fixture) : I
         Assert.Equal(Library + "::M:Sample.OtherResource.Dispose", targets.Single(row => row.Key.StartsWith("var other", StringComparison.Ordinal)).Value);
         Assert.Equal(Library + "::M:Sample.Resource.Dispose", targets.Single(row => row.Key.StartsWith("var task", StringComparison.Ordinal)).Value);
         Assert.Equal(Library + "::M:Sample.Resource.Dispose", targets.Single(row => row.Key.StartsWith("var plain", StringComparison.Ordinal)).Value);
+        Assert.Equal(Library + "::M:Sample.Resource.Dispose", targets.Single(row => row.Key.StartsWith("object converted", StringComparison.Ordinal)).Value);
+        Assert.Equal(Library + "::M:Sample.Parent.Dispose", targets.Single(row => row.Key.StartsWith("var derived", StringComparison.Ordinal)).Value);
+    }
+
+    // Task #05: technical review attempt 2. NoUsing.cs has the same local as OnlyAwaitUsing.cs, a using directive and
+    // the name Dispose, so nothing but the missing using statement keeps it out of these rows.
+    [Fact]
+    public async Task AFileWithNoUsingStatementOrDeclarationHasNoDisposeRows()
+    {
+        // Arrange
+        var lines = new[] { Query(1, Library + "::M:Sample.Resource.Dispose") };
+
+        // Act
+        var responses = await Talk(Solution, lines);
+
+        // Assert
+        var rows = Rows(responses[0]);
+        Assert.Equal(new[] { "Library/ImplicitUses.cs", "Library/OnlyAwaitUsing.cs" }, rows.Select(row => row["path"]!.GetValue<string>()).Distinct());
+        Assert.Equal("var counted = new Resource();", TextAt(rows.Single(row => row["path"]!.GetValue<string>() == "Library/OnlyAwaitUsing.cs")));
     }
 
     [Fact]
@@ -972,6 +993,16 @@ public sealed class McpFindReferencesFixture : IAsyncLifetime
         public sealed class Resource : IDisposable { public void Dispose() { } }
         public sealed class OtherResource : IDisposable { public void Dispose() { } }
         public sealed class AsyncResource : IAsyncDisposable { public ValueTask DisposeAsync() => default; }
+        public class Parent : IDisposable { public void Dispose() { } }
+        public sealed class Child : Parent { }
+        public sealed class Quiet : IDisposable { void IDisposable.Dispose() { } }
+        public sealed class Loose { public void Dispose() { } }
+        public sealed class Called { public void Dispose() { } }
+        public sealed class Both : IDisposable, IAsyncDisposable
+        {
+            public void Dispose() { }
+            public ValueTask DisposeAsync() => default;
+        }
         public sealed class Numbers
         {
             public Numbers GetEnumerator() => this;
@@ -1019,9 +1050,49 @@ public sealed class McpFindReferencesFixture : IAsyncLifetime
             public static void TwoLocals() { Resource first = new(), second = new(); _ = first; _ = second; }
             public static void AnotherType() { var other = new OtherResource(); _ = other; }
             public static void MetadataType() { var task = Task.CompletedTask; _ = task; }
+            public static void TwoInOneUsing() { using (Resource one = new(), two = new()) { _ = one; _ = two; } }
+            public static void NoInitializer() { Resource? unset; unset = null; _ = unset; }
+            public static void NullInitializer() { Resource nothing = null!; _ = nothing; }
+            public static void RefInitializer(Resource[] items) { ref var item = ref items[0]; _ = item; }
+            public static void ConvertedLocal() { object converted = new Resource(); _ = converted; }
+            public static void ConvertedFirst() { var cast = (object)new Resource(); _ = cast; }
+            public static void Inherited() { var derived = new Child(); _ = derived; }
+            public static void ExplicitOnly() { var quiet = new Quiet(); using (quiet) { _ = quiet; } }
+            public static void NotDisposable() { var loose = new Loose(); _ = loose; }
             public static async Task AsyncScoped() { await using var scoped = new AsyncResource(); _ = scoped; }
             public static async Task AsyncLoop() { await foreach (var number in new AsyncNumbers()) { _ = number; } }
             public static Words Query() => from word in new Words() select word + 1;
+        }
+        """;
+
+    // No using statement or declaration, so the local has no Dispose row. The directive and the name do not count.
+    private const string NoUsing = """
+        using System.Text;
+
+        namespace Sample;
+        public static class NoUsing
+        {
+            public static string Run()
+            {
+                var counted = new Resource();
+                new Called().Dispose();
+                return new StringBuilder().Append(counted).ToString();
+            }
+        }
+        """;
+
+    // An await using counts for the file, so the plain local has a row. The await using itself has none.
+    private const string OnlyAwaitUsing = """
+        namespace Sample;
+        public static class OnlyAwaitUsing
+        {
+            public static async Task Run()
+            {
+                var counted = new Resource();
+                _ = counted;
+                await using var both = new Both();
+                _ = both;
+            }
         }
         """;
 
@@ -1079,6 +1150,8 @@ public sealed class McpFindReferencesFixture : IAsyncLifetime
             }
             """);
         await File.WriteAllTextAsync(Path.Combine(Root, "Library", "ImplicitUses.cs"), ImplicitUses);
+        await File.WriteAllTextAsync(Path.Combine(Root, "Library", "NoUsing.cs"), NoUsing);
+        await File.WriteAllTextAsync(Path.Combine(Root, "Library", "OnlyAwaitUsing.cs"), OnlyAwaitUsing);
         await File.WriteAllTextAsync(Path.Combine(Root, "Library", "Columns.cs"), Columns);
         await File.WriteAllTextAsync(Path.Combine(Root, "Library", "Chain.cs"), Chain);
         await IndexStore.SaveAsync(await SolutionAnalysis.CreateIndexAsync(Solution));
