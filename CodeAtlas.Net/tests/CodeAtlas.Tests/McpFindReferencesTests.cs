@@ -115,6 +115,9 @@ public sealed class McpFindReferencesTests(McpFindReferencesFixture fixture) : I
     [InlineData("M:Sample.Resource.Dispose", "using (var block", "using var scoped", "var held", "using (held)", "var plain", "Resource typed", "var other", "var task", "object converted", "var derived", "var counted")]
     [InlineData("M:Sample.Ticker.Dispose", "using (var block", "using var scoped", "var held", "using (held)", "var plain", "Resource typed", "var other", "var task", "object converted", "var derived", "var counted")]
     [InlineData("M:Sample.Loose.Dispose", "var loose")]
+    [InlineData("M:Sample.Bag.GetEnumerator", "foreach (var viaArray")]
+    [InlineData("M:Sample.Walker.MoveNext", "foreach (var viaArray", "foreach (var viaList")]
+    [InlineData("M:Sample.Collected.Add(System.Int32)", "7 }")]
     [InlineData("M:Sample.Both.Dispose", "using (var block", "using var scoped", "var held", "using (held)", "var plain", "Resource typed", "var other", "var task", "object converted", "var derived", "var counted")]
     [InlineData("M:Sample.AsyncResource.DisposeAsync")]
     [InlineData("M:Sample.AsyncNumbers.GetAsyncEnumerator(System.Threading.CancellationToken)")]
@@ -153,6 +156,25 @@ public sealed class McpFindReferencesTests(McpFindReferencesFixture fixture) : I
         Assert.Equal(Library + "::M:Sample.Resource.Dispose", targets.Single(row => row.Key.StartsWith("var plain", StringComparison.Ordinal)).Value);
         Assert.Equal(Library + "::M:Sample.Resource.Dispose", targets.Single(row => row.Key.StartsWith("object converted", StringComparison.Ordinal)).Value);
         Assert.Equal(Library + "::M:Sample.Parent.Dispose", targets.Single(row => row.Key.StartsWith("var derived", StringComparison.Ordinal)).Value);
+    }
+
+    // Task #05: technical review attempt 2. The foreach rows resolve to IEnumerator.MoveNext and the calls to ToString
+    // outside the source, so no stored definition exists for them and the row falls back to the queried id.
+    [Theory]
+    [InlineData("M:Sample.Walker.MoveNext", "foreach (var viaArray")]
+    [InlineData("M:Sample.Square.ToString", "ToString() ?? \"\";", "ToString();")]
+    public async Task AUseOfARelatedDefinitionOutsideTheSourceNamesTheQueriedId(string method, params string[] expected)
+    {
+        // Arrange
+        var lines = new[] { Query(1, Library + "::" + method) };
+
+        // Act
+        var responses = await Talk(Solution, lines);
+
+        // Assert
+        var rows = Rows(responses[0]);
+        Assert.All(rows, row => Assert.Equal(Library + "::" + method, row["targetId"]!.GetValue<string>()));
+        Assert.All(expected, text => Assert.Contains(rows, row => TextAt(row).StartsWith(text, StringComparison.Ordinal)));
     }
 
     // Task #05: technical review attempt 2. NoUsing.cs has the same local as OnlyAwaitUsing.cs, a using directive and
@@ -1043,6 +1065,24 @@ public sealed class McpFindReferencesFixture : IAsyncLifetime
             public void Add(int value) { }
             public IEnumerator GetEnumerator() => throw new NotSupportedException();
         }
+        public sealed class Walker : IEnumerator
+        {
+            public object Current => 0;
+            public bool MoveNext() => false;
+            public void Reset() { }
+        }
+        public abstract class Collected : ICollection<int>
+        {
+            public abstract int Count { get; }
+            public abstract bool IsReadOnly { get; }
+            public void Add(int item) { }
+            public abstract void Clear();
+            public abstract bool Contains(int item);
+            public abstract void CopyTo(int[] array, int arrayIndex);
+            public abstract bool Remove(int item);
+            public abstract IEnumerator<int> GetEnumerator();
+            IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
+        }
         public sealed class Words
         {
             public Words Select(Func<int, int> map) { _ = map; return this; }
@@ -1058,6 +1098,12 @@ public sealed class McpFindReferencesFixture : IAsyncLifetime
             public static int Split() { var (first, second) = new Pair(); return first + second; }
             public static int Assign() { int left, right; (left, right) = new Pair(); return left + right; }
             public static Bag Fill() => new Bag { 5, 6 };
+            public static void ThroughInterfaces(int[] items, List<int> list)
+            {
+                foreach (var viaArray in items) { _ = viaArray; }
+                foreach (var viaList in list) { _ = viaList; }
+                _ = new List<int> { 7 };
+            }
             public static void Blocks() { using (var block = new Resource()) { _ = block; } }
             public static void Scoped() { using var scoped = new Resource(); _ = scoped; }
             public static void Held() { var held = new Resource(); using (held) { _ = held; } }
@@ -1168,11 +1214,14 @@ public sealed class McpFindReferencesFixture : IAsyncLifetime
                 public const int Corners = 4;
                 public int Sides { get; set; }
                 public int Area() => 1;
+                public override string ToString() => "square";
             }
             public static class Shapes
             {
                 public static int Direct(Square square) => square.Area();
                 public static int Through(IShape shape) => shape.Area();
+                public static string Text(object value) => value.ToString() ?? "";
+                public static string Number() => 1.ToString();
             }
             """);
         await File.WriteAllTextAsync(Path.Combine(Root, "Library", "ImplicitUses.cs"), ImplicitUses);
