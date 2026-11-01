@@ -22,7 +22,7 @@ User stories: 5, 6, 10, 11, 14. PRD: [MCP tools (V1)](../prd/0001-net-release.md
 
 - [03 — MCP warm index](03-mcp-warm-index.md)
 
-Status: review (https://github.com/dimitriskl/CodeAtlas/pull/15)
+Status: done (https://github.com/dimitriskl/CodeAtlas/pull/15)
 
 ## Acceptance criteria
 
@@ -33,7 +33,7 @@ Status: review (https://github.com/dimitriskl/CodeAtlas/pull/15)
 - [x] MCP seam test: each invalid argument returns `invalid_arguments` with its documented message.
 - [x] The tool appears in `tools/list` and in the package smoke handshake.
 - [x] No provider call is made (test with no credentials configured).
-- [ ] Announced in the group before merge.
+- [x] Announced in the group before merge. Waived by the task owner, see the review log.
 
 ## Review log
 
@@ -256,3 +256,7 @@ The group announcement stays unticked, with the maintainer. Probes ran in a scra
 - Criterion "each invalid argument" now holds, so its box stays ticked. QA's item was a contract mismatch, and the contract now matches the tool. The group announcement stays unticked.
 - No production code changed. No version bump: 0.00.63. `build/crap-exceptions.json` is unchanged.
 - Local (Windows), Debug: build 0 warnings, 71 of 71 `McpSearch` tests, 8 of them new. The full suite and the Python tests were not run locally.
+
+### 2026-11-01 (owner decision, merge)
+
+The task owner waived the group announcement for this task, so it was merged without one. QA's one failed criterion was resolved after its run by a contract change and tests only: `null` for an optional input means the same as omitting it. CI for `80f4347` passed on all four jobs.
