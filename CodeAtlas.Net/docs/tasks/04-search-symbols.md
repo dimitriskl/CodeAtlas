@@ -22,17 +22,241 @@ User stories: 5, 6, 10, 11, 14. PRD: [MCP tools (V1)](../prd/0001-net-release.md
 
 - [03 — MCP warm index](03-mcp-warm-index.md)
 
-Status: ready
+Status: done (https://github.com/dimitriskl/CodeAtlas/pull/15)
 
 ## Acceptance criteria
 
-- [ ] The `search_symbols` contract section exists, with an input table, an output row table, an error table and one example.
-- [ ] MCP seam test: a query for a word in a method's documentation ranks that method first on the fixture.
-- [ ] MCP seam test: the rows match the CLI `search-symbols` rows for the same fixture and arguments.
-- [ ] MCP seam test: `kind` and `project` filters, paging with `snapshotId`, `snapshot_mismatch` and `stale_index`.
-- [ ] MCP seam test: each invalid argument returns `invalid_arguments` with its documented message.
-- [ ] The tool appears in `tools/list` and in the package smoke handshake.
-- [ ] No provider call is made (test with no credentials configured).
-- [ ] Announced in the group before merge.
+- [x] The `search_symbols` contract section exists, with an input table, an output row table, an error table and one example.
+- [x] MCP seam test: a query of two or more words from a method's documentation ranks that method first on the fixture. One word found only in documentation is withheld by the evidence gate, in the CLI too.
+- [x] MCP seam test: the rows match the CLI `search-symbols` rows for the same fixture and arguments.
+- [x] MCP seam test: `kind` and `project` filters, paging with `snapshotId`, `snapshot_mismatch` and `stale_index`.
+- [x] MCP seam test: each invalid argument returns `invalid_arguments` with its documented message.
+- [x] The tool appears in `tools/list` and in the package smoke handshake.
+- [x] No provider call is made (test with no credentials configured).
+- [x] Announced in the group before merge. Waived by the task owner, see the review log.
 
 ## Review log
+
+### 2026-11-01 (Developer)
+
+- Design: `McpHost.SearchSymbolsAsync` takes the snapshot and freshness from `WarmIndexSession`, then calls `PurposeSnapshotQueries.SearchAsync` with `verifyFreshness: false`, as `LiveIndexSession` does. The rows and `result` fields are serialized from the same records as `search-symbols`, so there is no second ranking or shape. No Roslyn load, no credential read, no provider client on this path. Contract: [MCP tool `search_symbols`](../QUERY-CONTRACT.md#mcp-tool-search_symbols).
+- Criterion left unticked, a decision for the task owner: "a query for a word". One word found only in documentation does not pass the existing evidence gate: a one-token query needs the token in an identity field or a saved description. The CLI abstains the same way. Changing that would be a second ranking, so it is not changed. `WordsInAMethodsDocumentationRankThatMethodFirst` uses three words from the documentation, and `ASingleDocumentationWordIsWithheldNotGuessed` pins the one-word abstention. The contract states both.
+- Criterion left to the maintainer: "Announced in the group before merge". The section to announce is `MCP tool search_symbols` in `docs/QUERY-CONTRACT.md`.
+- Beyond the brief, existing tests: `McpServerTests` asserts the exact tool list in two places, so adding a tool cannot keep them unchanged. Those two lines gain `search_symbols`, and nothing else in the file changed. The tool sits after `find_symbol`, the PRD's order, so the tests that read the first and last tool still hold.
+- Deviation from the PRD: `snapshotId` is not always the generation id. In `assisted` mode with saved descriptions the search returns `<generation id>:ai:<hash>`, as the CLI does, so a page cannot continue over changed descriptions. A check against the generation id alone, like `find_symbol`'s, would refuse the token the same tool returned. `PurposeSnapshotQueries.BelongsTo` compares the generation first, so a replaced generation is reported before staleness as in `find_symbol`, and the search compares the view. The PRD line is amended.
+- Contract choices: `kind` defaults to `method`, the CLI's default and not `find_symbol`'s. With no published index the tool succeeds empty like `find_symbol`, with the new `decision` value `abstained-no-index`, which the CLI cannot produce because it requires an index. The CLI's `--type` and `--language` have no input, because the task does not list them.
+- `PurposeSearch.Validate` throws `ArgumentException` worded for CLI options, which MCP turns into an internal error. `ReadSearch` refuses each of those values first, including a query of only stop words.
+- CRAP: a fifth arm in `CallAsync`'s switch would have raised a listed method, so the switch moved to `InvokeAsync`. `Refusal` replaces the stale and I/O branches of `find_symbol` and `coverage`. `build/crap-exceptions.json` is unchanged; `CallAsync` and `FindSymbolAsync` no longer have a body above 10, and their pins stay for task 15.
+- The handshake is in `scripts/package-smoke.py`, which `qualify-package.py` copies and runs. It now lists the tool and also calls it on the installed package.
+- The Angular `find_references` section is not on `angular/main`. It was read from `origin/task/06-invocation-references-find-references`.
+- "No provider call": `AssistedReadsSavedDescriptionsWithNoCredentialsAndCallsNoProvider` runs a real `codeatlas mcp` process with every `CODEATLAS_AI_*` and `*_API_KEY` variable removed, and with a model and an endpoint set to a local listener. The saved description is found, the listener has no connection, and every file under `.codeatlas` keeps its bytes. It cannot clear the OS keychain, but nothing on this path reads it. `ChildProcess.RunAsync` gains an optional `input`, because it closed standard input at once.
+- Test first: 46 of the new tests failed before the production edit, all of them. Mutations, each applied, built, run against the search tests, then restored; each failed exactly one test: search's own freshness check left on (`ASecondSearchIsServedWarmWithoutHashingUnchangedInputsAgain`), exact generation match only (`AssistedPagesContinueWithTheSnapshotIdTheyReturned`), no generation check (`AReplacedSnapshotIdIsReportedBeforeStaleness`).
+- Not tested through MCP: the `rebuild_required`, `invalid_index`, `unsupported_index`, `sqlite_unavailable` and `analysis_failed` rows of the error table. They use the `KnownFailure` path the other tools share.
+- Local (Windows), `qualify-package.py --crap-gate`, Release: build passed, .NET 677/677, Python 145 OK, package manifest and installed-tool smoke passed. CRAP gate on Windows coverage: 1597 methods, 0 above 10, 0 exception problems. The gate's own scores come from Ubuntu in CI.
+
+### 2026-11-01 (Technical review attempt 1)
+
+Commit reviewed: `2600489`, against `d2b2fc7`. Scope: `e24dcd1` contract, `ed53028` behavior, `29d5cf7` docs, `2600489` bump.
+
+Verdict: CHANGES REQUESTED. QA may not start. Ranking, paging and freshness behave as contracted. Three items below need work, and the one-word criterion needs the maintainer.
+
+Blocking:
+
+1. `tests/CodeAtlas.Tests/McpSearchSymbolsTests.cs:303,305,306,311`: the criterion "each invalid argument" is ticked, but four rows are half tested and one case of a fifth is missing. All are reachable: each gave its documented message on a real server. Add these rows, and untick the criterion until they pass:
+   - `kind` `7`: `kind must not be empty.`
+   - `project` `7`: `project must not be empty.`
+   - `snapshotId` `7`: `snapshotId must not be empty.`
+   - `limit` `1.5` and `"10"`: `limit must be an integer from 1 through 1000.`
+   - `query` `"*:()"`: `query must have 1-4096 characters and at least one searchable token.`
+   Proof of the gap: a mutation that ignores a non-string `project` leaves all 48 search tests green.
+2. `src/CodeAtlas.Cli/McpHost.cs:516,525`: a string with an unpaired surrogate (`"\ud800"`) in `query`, `workspace`, `project` or `snapshotId` returns JSON-RPC `-32603`, with no envelope. `TryGetValue<string>` throws `InvalidOperationException`, which `KnownFailure` does not map. This breaks "Errors keep the envelope" (QUERY-CONTRACT, MCP tool `search_symbols`). The server survives. The helpers are older and `find_symbol` does the same, but this contract is new. Fix: first state in the contract that such a value counts as not a string, then treat that exception as not a string in `Text` and `OptionalText`, and add a test row.
+3. `tests/CodeAtlas.Tests/McpSearchDescriptionTests.cs`: no test covers a names-mode id used for assisted paging or the reverse, and each changed-description test starts a new server. The behavior is right (see item 4 below), but a mutation that lets names mode accept any view of the generation leaves all 48 green. Add one test on one `McpHost`, through `HandleLineAsync`: a names id in assisted mode with saved descriptions, an assisted id in names mode, and a description changed between pages. Each returns `snapshot_mismatch`.
+
+Criterion for the maintainer, not decided here: "a query for a word in a method's documentation ranks that method first".
+
+- Cause confirmed through the CLI and MCP, same result on both. On the fixture, `written`, `author` and `description` give `abstained-insufficient-evidence`, with 1, 2 and 1 withheld. `written` is in one method only, so even a unique word abstains. `written description` and `author written description` rank `Describe` first. On this repository's index, `idle` abstains with 10 withheld.
+- It is the gate's correct abstention, not a defect. `src/CodeAtlas.Core/PurposeSearch.cs:126-128` has required an identity field or a saved description for a one-token query since `031b957`, the policy is published in `evidencePolicy`, and the task says to build over the existing search. The result reports what it withheld.
+- User stories: 5 needs a free-text query for a known purpose. That works with two or more words, and one distinctive documentation word does not, so the limit is real but the story holds. Stories 6, 10, 11 and 14 do not depend on it.
+- `WordsInAMethodsDocumentationRankThatMethodFirst` proves something else, so the box stays unticked.
+- Choice A, the smallest honest one: reword the criterion to two or more words from a method's documentation. The existing test then satisfies it, the contract already says so, and no code changes.
+- Choice B: keep the wording and open a task to change the gate in Core. That changes `rankingVersion`, `evidencePolicy` and the CLI's results, so it needs its contract first and a new ranking evaluation, and this PR waits or ships without the criterion.
+
+Confirmed:
+
+- Item 3, existing tests: the two `McpServerTests` lines add only `search_symbols`. Without it those two tests fail. The only other existing test file changed is `ChildProcess.cs`, whose optional `input` leaves the default path as it was. 170 tests in the classes that use it passed locally. `build/` is unchanged.
+- Item 4, assisted `snapshotId`: `<generation id>:ai:<hash>` comes from the one `SearchAsync`, so it is the CLI's token. Probes on one warm server: own token continues. Generation id in assisted mode with saved descriptions, assisted token in names mode, tampered hash, another generation's prefix, a changed description and removed descriptions each return `snapshot_mismatch`. With no saved descriptions both modes return the bare generation id and accept it, because there is no view to tell apart. The contract and the PRD state the token. `e24dcd1` precedes `ed53028`.
+- Item 5, editions: every changed path is under `CodeAtlas.Net/`. The contract uses .NET ids and error codes, and takes only the layout of the Angular section.
+- MCP rows equal CLI rows: 10 argument sets on an index of this solution (1371 methods, 330 types), comparing rows, order, `result` fields and pagination. 0 differences. Pages joined equal the whole list. `PurposeSnapshotQueries.SearchAsync` is the only ranking path. `coverage` differs from the CLI's exactly as `find_symbol`'s does.
+- No provider: nothing on the path references `AiProviderClient`, `AiConfiguration`, `AiSettings` or `CredentialStore`, `Program.cs` dispatches `mcp` before any of them, and no `HttpClient` or keychain call is reachable from it. A real server with keys set in the environment, an endpoint on a local listener and a saved description found the description, and the listener had no connection.
+- Warm session, real server: 31-41 ms per call. `stale_index` with `changedFiles` and no pagination or result. A generation published by another process is picked up, and the old id gives `snapshot_mismatch`, before staleness too. Only `index` reaches `SolutionAnalysis`.
+- Hostile input, one server throughout: 4096 characters 38 ms, 4097 refused. 1022 distinct tokens 1.4 s. `limit` 2147483647 and 99999999999 and `offset` -1 and 99999999999 refused. `offset` 2147483647 is an empty page. Control characters alone are refused, and mixed with words they are ignored. SQL and FTS text is plain words: `Postings` binds parameters and FTS is not used. `symbols` was intact afterwards.
+- `tools/list` and `scripts/package-smoke.py` list the tool, and the smoke calls it.
+- Tests: 48 of 48 fail on the production code of `d2b2fc7`. Mutations that drop the refusal, change the `kind` or `mode` default, or drop `project` each fail tests. The two that survive are in items 1 and 3.
+- Local (Windows): build 0 warnings, 93/93 MCP tests, Python 145 OK. The full suite was not run locally.
+- Commits: one change each, in the right order, with why, what and proof, and no names, tool mentions or trailers. Board, task 03 and task 04 status are right.
+
+Non-blocking:
+
+- The developer entry and `ed53028` say 46 new tests. There are 48.
+- The contract example shows `responseToolVersion` `0.00.63` and a check at 19:03:48Z. `Version.props` was `0.00.62` at that commit, and the commit is at 19:04:58Z, so a server with the tool ran before the contract commit. The commit order meets the rule; the working order cannot be shown. Correct the sentence "from a real run" if the version was edited by hand.
+- `thee` folds to a stop word, so it succeeds with empty `queryTokens` instead of being refused. The CLI does the same.
+- `limit` `1.0` is refused, as in `find_symbol`.
+- The `rebuild_required`, `invalid_index`, `unsupported_index`, `sqlite_unavailable` and `analysis_failed` rows are not invalid arguments, so that criterion does not require them.
+- 1022 tokens block the one-at-a-time server for 1.4 s here and grow with the solution. The 4096 cap bounds it, and the CLI costs the same.
+
+CI for this HEAD (run 41272356188), still running at this entry: `build (ubuntu-24.04)` passed, and that job runs the full tests and the CRAP gate, which fails it on a method above 10. `build (windows-2025)` is pending, and the install jobs have not started. `build/crap-exceptions.json` is unchanged. The Ubuntu log with the gate's counts is not readable until the run ends.
+
+Probes and mutations ran in a scratch copy of HEAD. No production code changed.
+
+### 2026-11-01 (Developer: addressed technical review attempt 1)
+
+- Item 1: rows added for `kind`, `project` and `snapshotId` `7`, `limit` `1.5` and `"10"`, and `query` `"*:()"`. All six gave their documented message at once, so no contract message changed. The criterion "each invalid argument" stays ticked, because the rows pass.
+- Item 2, contract first: `697fe17` says an unpaired surrogate counts as not a string. `Text` and `OptionalText` now read through `McpHost.StringOrNull`, the only place that catches the `InvalidOperationException`. The 15 surrogate rows failed before the edit with `-32603` and no envelope, and pass after it. A valid pair (`"😀"`) stays a string and gets the no-token message.
+- Other tools: `find_symbol`, `index_status`, `coverage` and `index` read their strings through the same two methods and had the same failure, so the one change fixes them. `AnUnpairedSurrogateInAStringArgumentKeepsTheEnvelope` covers each string field. They use the messages they already had for a non-string value. Their contracts are unchanged.
+- Not changed, outside tool arguments, seen on a real server: a surrogate in `params.name` or `protocolVersion` returns `-32603`. In `method` or a string `id` it ends the server with an unhandled exception: `HandleLineAsync` reads `method` outside its `try`, and `ServeAsync` writes `id` back. This needs its own decision and test.
+- `McpLines.RawTool` puts raw JSON into the finished line, because `JsonNode` refuses to write an unpaired surrogate. `EachInvalidArgumentReturnsItsDocumentedMessage` now uses it for every row with a value.
+- Item 3: `OneServerRefusesAPageFromTheOtherModeOrAChangedDescription` runs on one `McpHost` through `HandleLineAsync`. A names id in assisted mode, an assisted id in names mode and a description changed between pages each return `snapshot_mismatch`, and each mode's own current id continues. Mutation applied, built and restored: names mode accepting any view of the generation in `PurposeSnapshotQueries.SearchAsync` fails this test only, and the other 62 `McpSearch` tests pass.
+- Left as they are: the one-word documentation criterion, the evidence gate and the group announcement, which are the maintainer's. No version bump: 0.00.63. `build/crap-exceptions.json` is unchanged. `StringOrNull` has complexity 3 and both outcomes are tested.
+- Local (Windows), Debug: build 0 warnings, .NET 700/700, Python 145 OK. The CRAP gate was not run locally.
+
+### 2026-11-01 (owner decision)
+
+Criterion reworded by the task owner: two or more words, because the evidence gate withholds one word found only in documentation, in the CLI too. The reviewer found that correct, not a defect. `WordsInAMethodsDocumentationRankThatMethodFirst` and `ASingleDocumentationWordIsWithheldNotGuessed` cover both. The surrogate failures outside tool arguments are filed as [task 17](17-mcp-protocol-surrogates.md).
+
+### 2026-11-01 (Technical review attempt 2)
+
+Commit reviewed: `bb20c11`, against `ef1cbd2`. Scope: `697fe17` contract, `be221e9` fix, `6965955` and `23637d4` tests, `513152c` and `bb20c11` docs.
+
+Verdict: CHANGES REQUESTED. QA may not start. The three items of attempt 1 are fixed and hold. One new item blocks, because a real query returns a wrong answer.
+
+Blocking:
+
+1. `src/CodeAtlas.Cli/Program.cs:80`: the server reads `Console.In`. On Windows that decodes stdin with the console code page, not UTF-8, and MCP stdio messages are UTF-8. Clients send non-ASCII text raw: a Node client using `JSON.stringify` and `spawn` shows it. So a real query with a non-ASCII word gets wrong tokens and a successful empty answer. This breaks "For the same arguments the rows ... are those of `search-symbols`" (QUERY-CONTRACT, MCP tool `search_symbols`).
+   - Proof, real server on a scratch copy of the fixture, with `ζεστό καφέ` from a method's documentation: the CLI returns `Sample.Brew.Prepare`. MCP with raw UTF-8 on code page 737 gives tokens `δ ε η ν φ`, on 437 gives four unrelated tokens, and both return `abstained-no-token-overlap` with no rows and no error. The same line on code page 65001, or with the text escaped as `\uXXXX`, returns the method. A workspace path with raw non-ASCII text is also misread: `find_symbol`, `search_symbols` and `index` refuse it with `workspace must be the solution directory.`
+   - Age: `find_symbol` does the same on `d2b2fc7` (`Größe` raw is empty, escaped is found), so the cause is older than this PR. As in item 2 of attempt 1, the published promise is new. The failure is silent, so an agent reads it as "not found". Ubuntu is not affected, and no test sends non-ASCII text.
+   - Fix: first state in the contract that MCP stdin is UTF-8 whatever the console code page. Then read a `StreamReader` over `Console.OpenStandardInput()` with `new UTF8Encoding(false)` instead of `Console.In`. Tried in the scratch copy: code page 737 then returns the method with the right tokens. Add a Windows real-process test with raw UTF-8 under a non-UTF-8 code page that fails before the edit. `live` on line 78 has the same reader and is not part of this item. The criterion's fixture test still passes, so its box stays ticked.
+
+Confirmed:
+
+- Item 1 of attempt 1: all 15 rows of the `invalid_arguments` table have a test with the documented message, in `EachInvalidArgumentReturnsItsDocumentedMessage` and, for over 4096 characters, `AQueryOverTheLengthLimitReturnsItsDocumentedMessage`. The mutation ignoring a non-string `project` now fails its `project` `7` row only.
+- Item 2, surrogate: `697fe17` precedes `be221e9`. Real servers, `d2b2fc7` and `bb20c11`, every string field of `find_symbol`, `index_status`, `coverage` and `index`: `-32603` with no envelope before, `invalid_arguments` with the envelope after, with the same message as the value `7`. `search_symbols` does the same. `limit` and `offset` with the surrogate gave their integer message before and after.
+- Other tools' contracts: they have no section of their own. The README says a failed tool call returns `isError: true` with the envelope and the process keeps reading, and the old `-32603` broke that, so the change agrees with it. The PRD keeps `-32603` for internal errors, and it still answers those.
+- Valid pairs, escaped as a pair: in `query` the pair is dropped by the tokenizer and the method ranks first. In `project` an empty page, in `snapshotId` `snapshot_mismatch`, in `mode` and `kind` their "any other value" message. A solution folder with an emoji in its name works for `find_symbol`, `search_symbols`, `index_status` and `coverage`.
+- Item 3, mutation reproduced: names mode accepting any view of the generation fails `OneServerRefusesAPageFromTheOtherModeOrAChangedDescription` only, 1 failed and 62 passed of 63 `McpSearch` tests. The same mutation in assisted mode fails that test and `AChangedSavedDescriptionRefusesAContinuationOfTheOldView`. Restored and built.
+- Task 17: the crash is older than this PR. Real servers on `d2b2fc7` (the tip of `codex/production-roadmap`) and `bb20c11` behave alike. A surrogate in `method` or a string `id` gives an unhandled `InvalidOperationException`, exit 3762504530 and no output, and `params.name` and `protocolVersion` give `-32603` and the server continues. This PR did not change it and added no new path to it.
+- `bb20c11`: the criterion matches the owner's decision. `WordsInAMethodsDocumentationRankThatMethodFirst` and `ASingleDocumentationWordIsWithheldNotGuessed` exist and pass. The CLI withholds one documentation word too (`glitter` on the scratch fixture: `abstained-insufficient-evidence`, 1 withheld). `BOARD.md` is right: 17 is listed after 04, and `ready` with an open blocker matches 06 to 09.
+- Commits: contract before behavior, why, what and proof in each, no names, tool or assistant mentions, no trailers. Version stays `0.00.63`. `build/crap-exceptions.json` is unchanged.
+- Local, scratch copy, Windows, Debug: build 0 warnings, 76 of 76 tests in `McpSearch` and `McpServerTests`. The full suite was not run locally.
+
+Non-blocking:
+
+- `bb20c11` holds two changes, the reworded criterion and task 17. Both are docs, so it stays as it is.
+- For whoever takes task 17, with no change to its scope: an unpaired surrogate in a top-level property name also ends the server, on `d2b2fc7` too. In a property name inside `arguments` it gives `-32603`.
+
+CI for the latest finished code commit `513152c` (run 41275016526; `bb20c11` changes docs only): `build (windows-2025)`, `build (ubuntu-24.04)`, `install (windows-2025)` and `install (ubuntu-24.04)` passed. CRAP gate on Ubuntu: 1598 methods, 0 above 10, 0 exception problems, 4 better than recorded.
+
+Probes and mutations ran in a scratch copy. No production code changed.
+
+### 2026-11-01 (Developer: addressed technical review attempt 2)
+
+- Contract first: `3b98256` adds "Encoding of `mcp` and `live`" to QUERY-CONTRACT. The fix is the commit after it.
+- Stdin: `ProtocolStreams` opens it as UTF-8, and `Program.cs` passes it to both hosts. On Windows `ζεστό καφέ` now returns `Sample.Brew.Prepare` with the right tokens on code pages 437, 737, 932, 1252, 20127, 50220, 37, 1026, 65000 and 65001, with the same response length on each. `Größe` through `find_symbol` and a raw workspace path work too.
+- Stdout was affected, which attempt 2 did not cover. The JSON writer escapes non-ASCII text, so no non-ASCII byte is written on 437 or 737. But `Console.Out` encoded those ASCII bytes with the code page: 37 and 1026 gave EBCDIC and 65000 gave UTF-7, and none was UTF-8. `ProtocolStreams` writes UTF-8 with no byte order mark, flushed per line. The escaping stays, so a non-ASCII result leaves as `\uXXXX`, not as raw multi-byte UTF-8.
+- `live` had the same failure and has the same fix and tests.
+- Invalid bytes: a line is refused whole, `-32700` on `mcp` and `invalid_arguments` on `live`, and the next line is answered. The review's `new UTF8Encoding(false)` would replace them with U+FFFD, which parses and is searched as a successful wrong answer, so it was not used. It also has no preamble, so a leading byte order mark would stay in the first line. U+0000 did not work as the marker: a decoder fallback treats it as the end of the replacement and drops the byte, which the tests caught. The marker is U+0001.
+- Tests: `ProtocolEncodingTests`, 16 cases. Each child inherits its encoding, stdin is written byte for byte, and stdout is read back from a file, because the reader in `ChildProcess` would consume a byte order mark. On the old code 15 of 16 fail on Windows, and the 65001 case passes.
+- Ubuntu: the same tests set `LC_ALL` in place of `chcp`, so they run there and are not skipped. Run in a throwaway WSL Ubuntu 24.04 copy with SDK 10.0.403: 13 of 16 fail on the old code and 16 pass on the fix. The default UTF-8 locale was never affected, but ISO-8859-1 and UTF-16 charsets were. ISO-8859-7 passes on the old code there, because .NET has no such charset without an extra provider and falls back to UTF-8.
+- Mutations in that copy: stdout with a byte order mark, and stdout without per-line flushing, each fail all 16.
+- Real client: a process that waits for each answer and splits a request inside a multi-byte character across two writes gets the right answer each time, then exit 0.
+- Limit, in the contract: a person typing into a terminal with a non-UTF-8 code page sends code-page bytes, so non-ASCII text there is now refused or misread. Protocol clients use pipes. Not tested.
+- Left as they are: task 17, the unticked group announcement. No version bump: 0.00.63. `build/crap-exceptions.json` is unchanged. Both new methods have complexity 1, and `Program.<Main>$` has no new branch.
+- Local (Windows), Debug: build 0 warnings, .NET 716/716, Python 145 OK. The CRAP gate was not run locally.
+
+### 2026-11-01 (Technical review attempt 3)
+
+Commit reviewed: `f15d3ac`, against `8d65310`. Scope: `3b98256` contract, `c6a6857` fix, `f15d3ac` docs.
+
+Verdict: APPROVED. QA may start. The blocking item of attempt 2 is fixed and holds. Nothing blocks.
+
+Confirmed on real processes, in a scratch copy with raw stdin bytes:
+
+- Item 1 of attempt 2: `ζεστό καφέ` through `search_symbols` and `Größe` through `find_symbol` return `Sample.Brew.Prepare` and `Sample.Brew.Größe`, the same as the CLI, on code pages 437, 737, 850, 932, 1252, 1253, 20127, 37, 1026, 65000 and 65001. Raw and escaped requests give the same bytes, apart from timestamps. The commit before the fix returns nothing on 437.
+- Stdout: strict UTF-8, no byte order mark. `😀` reads back as one character in Python, Node and PowerShell, in the outer line and in the envelope text.
+- `\uXXXX` is not a new format. Against `d2b2fc7` on 437, 1252 and 65001, ASCII requests and an escaped `Größe` differ only in the version and timestamps, plus `search_symbols` in `tools/list`. Against `3b98256` the bytes are identical. No existing test changed in these commits.
+- Invalid input on `mcp`, with the main cases repeated on `live`, next line answered and exit 0 each time: a byte order mark first, alone, split across three writes, with CRLF, doubled, on line 2, or cut short. `FF`, `FE`, `80`, `C0 AF`, `ED A0 80`, `F4 90 80 80`, `E2 82` and `F0 9F 98` in a string, in a key, before or after the value. Valid and truncated sequences across the reader's buffer at 1024, 2048 and 4096 bytes, and across two writes 250 ms apart. Lines up to 128 MB, same time as before the fix. A final line with no newline, including complete JSON followed by `E2 82`, is refused, not answered. NUL alone, in a string, before and after the value. The refused line never took the next one. `-32700` has `"id":null`, present, not absent.
+- Cancellation: Ctrl+Break on `mcp` and `live`, piped and at a console, behaves the same before and after the fix, so the change does not touch it.
+- One-shot commands: `--version`, `--help`, `find-symbol`, `search-symbols`, `index-status` and bad arguments match `3b98256` on 437, 1252, 65001 and 37, apart from timestamps. `ProtocolStreams` has only the two callers in `Program.cs`. No one-shot command reads `Console.In`.
+- Tests: 16 of 16 pass on the fix, and 15 of 16 fail with the new test file over `3b98256`. Replacing the marker with the default U+FFFD fails 7 of 16. `chcp` needs no setup on the runner, and a failed `chcp` skips the server and fails the test on the missing output file. `LC_ALL` is read by .NET as text, so no locale has to be installed. Nothing skips.
+- Commits: contract before behavior, one change each, why, what and proof, no names, tool or assistant mentions, no attribution trailers. Version stays `0.00.63`. `build/crap-exceptions.json` is unchanged.
+
+The `live` limit, measured by typing into a real console:
+
+- It is a real regression. `Größe` on 437 and 1252 and Greek text on 1253 worked before and now return `invalid_arguments`. Code page 65001 and `\uXXXX` escapes work everywhere, and the next line is unaffected.
+- It is an acceptable trade. The README describes `live` as a JSON line protocol and no document describes typing into it, so no documented workflow breaks. The failure is a refusal, not a wrong answer, and the contract states it. `StartMenu` and `AiSetup` use their own `Console` calls and are not affected.
+
+Non-blocking:
+
+- If interactive use matters later, `ProtocolStreams.OpenInput` could keep `Console.In` when `Console.IsInputRedirected` is false, which restores the old terminal behavior with no effect on clients.
+- `Assert.Null(refused["id"])` in `ProtocolEncodingTests.cs:132` also passes when `id` is missing. The server is correct. `ContainsKey` would pin it.
+
+CI for `f15d3ac` (run 41299500316): `build (windows-2025)`, `build (ubuntu-24.04)`, `install (windows-2025)` and `install (ubuntu-24.04)` passed. Both builds ran 716 of 716 tests, with the 16 of `ProtocolEncodingTests` passed and none skipped. CRAP gate on Ubuntu: 1601 methods, 0 above 10, 0 exception problems, 4 better than recorded.
+
+Probes and mutations ran in a scratch copy. No production code changed.
+
+### 2026-11-01 (QA attempt 1)
+
+Commit tested: `571fa8f`, against `d2b2fc7`. Real long-lived `mcp` processes, built from this commit, on scratch copies of the fixture, with the contract text as the expected value.
+
+Verdict: FAILED, one criterion. Nothing else failed, and no regression was found.
+
+Failed:
+
+1. Criterion "each invalid argument returns `invalid_arguments` with its documented message". JSON `null` is not a string or an integer, so the contract's error table refuses it, but `search_symbols` treats it as an omitted argument and succeeds. `"mode": null`, `"kind": null`, `"project": null`, `"snapshotId": null`, `"offset": null` and `"limit": null` each return `success: true` with the default. The expected messages are `mode must not be empty.`, `kind must not be empty.`, `project must not be empty.`, `snapshotId must not be empty.`, `offset must be a nonnegative integer.` and `limit must be an integer from 1 through 1000.` `workspace` and `query` with `null` do get their documented message. The rows returned are the defaults' rows, so no answer is wrong. It is not a regression: `find_symbol` does the same on `d2b2fc7` and on this commit. No test sends `null` for an optional field. The owner chooses: state in the contract that `null` counts as omitted, or refuse it in `OptionalText` and `OptionalInt`.
+
+Could not be produced:
+
+- `analysis_failed` through `search_symbols`. No plain `AnalysisException` is reachable on that path. Damaged stores gave `invalid_index`, and the `index` tool on broken source gave `analysis_failed` with the envelope. So the row is unverified for this tool, and it is not counted as a failure.
+
+Confirmed:
+
+- `tools/list`: `search_symbols` is second, with the 8 documented inputs and types, `workspace` and `query` required. The schemas of the other 4 tools are unchanged.
+- Rows against the CLI, field by field, including key order, `pagination` and every `result` field: 233 argument sets on the fixture (564 rows), 84 with saved descriptions, 176 on an index of this solution (10660 rows), 0 differences.
+- Ranking: `silver glitter tray` and `glitter tray` rank the documented method first in `assisted`, and `names` returns nothing. `glitter`, `lavender` and `whistles` abstain with the same `withheldWeakMatches` as the CLI.
+- Filters and order: each `kind`, `project` exact match, unknown project an empty page, scores unchanged by a filter, production before tests unless the query says `test`, the implementation before its interface, then score, matched tokens and ordinal id.
+- Defaults and paging: `assisted`, `method`, `100`, `0`. Pages joined equal the whole list. Offset at the last row, past the end and 2147483647, limit 1 and 1000, query of 4096 characters, with no trimming at 4097, all as documented.
+- All 15 `invalid_arguments` rows, 62 of 69 cases: types, surrogates and boundaries, each with the exact message, null `freshness` and `coverage`, and no `result` or pagination. Of the other 7 cases, 6 are item 1. The last, `workspace` `" "`, succeeds because Windows trims it to the current directory, which is the solution, so it is not counted.
+- `snapshot_mismatch`: foreign id, prefix, suffix, invented view, offset zero and past zero, no index, and before staleness. `stale_index`: edit, new file, with `changedFiles`, and reverting serves again. `snapshot_io_failed`: tracked input held exclusively, cold and warm, then recovery. `rebuild_required`: all three messages, on tampered generations. `invalid_index`: truncated, garbage, dropped tables, bad JSON, warm damage. `unsupported_index`: manifest and schema. `sqlite_unavailable`: same message and diagnostics as the CLI, through the test variable, because deleting the bundled library falls back to the system one. The server kept reading after each, and exit codes were 0.
+- A generation published by another process and by the `index` tool is served with no restart, and the old id is refused.
+- `assisted` paging: own token continues, also in the CLI. A description changed, corrupted or removed between pages refuses the old token. A names id cannot page `assisted`, or the reverse. Old-generation descriptions are left out. Searches change no file under `.codeatlas`.
+- No provider: with no credentials, and with a fake key, model and an endpoint at `10.255.255.1:9`, over `http` and `https`, 60 calls each found the saved description. No TCP connection in `netstat` on the first two, 0 connections to a proxy set in the environment, `System.Net.Sockets.dll` not loaded on the `https` run, empty stderr, no prompt. `System.Net.Http.dll` loads at startup, on `d2b2fc7` too. Control: `describe` with the same settings gave `SYN_SENT` to that address, a `CONNECT` to the proxy, and a connection to a local listener. The OS keychain was not observed directly.
+- Raw UTF-8 on stdin: 225 query and argument sets on code pages 437, 1252, 1253, 737 and 65001 equal the CLI, and raw equals escaped apart from `checkedAtUtc`. A non-ASCII `workspace` and `project` work on 437, 1252, 1253 and 65001. Control: `d2b2fc7` on 437 finds nothing for raw `Größe`.
+- The contract example gives the documented shape and values, apart from `checkedAtUtc` and `snapshotId`.
+- Existing tools against `d2b2fc7`, 47 calls on code pages 65001, 437 and 1252 covering `initialize`, `find_symbol`, `index_status`, `coverage`, `index` and their errors, ignoring ids, timestamps and versions. Differences, all expected from this PR: `search_symbols` in `tools/list` and now answered; a surrogate string gives an envelope with `invalid_arguments`, not `-32603`; raw non-ASCII is read correctly on 437 and 1252; a line with an invalid UTF-8 byte gives `-32700` with a null `id`, where `d2b2fc7` answered it.
+- Packed tool: `package-smoke.py` passed all 17 steps on an installed package, with the `mcp` handshake.
+- Memory: 6000 calls, working set 114 MB at call 500, 110 MB at the end, private bytes 76 MB and 70 MB, handles 262 throughout, 0 errors. Exit 0 in 0.01 s on stdin close, process gone, empty stderr.
+
+Not failures, for the record:
+
+- A held `current.json` or `index.db` gives `snapshot_io_failed` with the store's message and null `freshness`, with the envelope. The contract's row covers tracked inputs only.
+- An index under a long path fails with SQLite error 14 from `index`, with the envelope. It is outside this task. It was seen under a 100-character scratch path, and is not traced further.
+
+Local (Windows), Debug: restore passed, build 0 warnings, .NET 716/716, Python 145 OK.
+
+CI for `571fa8f` (run 41301551789): `build (windows-2025)`, `build (ubuntu-24.04)`, `install (windows-2025)` and `install (ubuntu-24.04)` passed.
+
+The group announcement stays unticked, with the maintainer. Probes ran in a scratch copy. No production code changed.
+
+### 2026-11-01 (Developer: addressed QA attempt 1)
+
+- Owner decision: keep the behavior and correct the contract. For an optional input, `null` means the same as omitting it, as in `find_symbol`, because many JSON clients send `null` for an unset optional field. A required input stays refused.
+- Contract, `fec12b2`: the input section states the rule. The `invalid_arguments` rows of `mode`, `kind`, `project`, `snapshotId`, `offset` and `limit` exclude `null`, and the `workspace` and `query` rows name it. The `tools/list` schema keeps its plain types, which the contract says.
+- Test, `19da1db`: `NullForAnOptionalInputReturnsTheSameRowsAsOmittingIt` sends each of the six as a literal `null` and compares `result` and `pagination` with the omitted request on one server. `null` for `query` and `workspace` are new rows of `EachInvalidArgumentReturnsItsDocumentedMessage`. The rows there with no value omit the field.
+- Real server at `f260e01`: `null` for `query` gives `invalid_arguments` with `query is required.`, `null` for `workspace` gives `workspace is required.`, and the next line is answered, exit 0.
+- `analysis_failed`, `0d445eb`: removed from this tool's error table, because it cannot occur. In `McpHost` the code comes only from the `AnalysisException` arm of `KnownFailure`, and the subclasses are matched first with their own codes. Every plain `AnalysisException` is thrown in solution loading, catalog building, reference search, live editing or the benchmark overlay. `SearchSymbolsAsync` uses `WarmIndexSession`, the snapshot store, freshness hashing, saved descriptions and `PurposeSearch`, none of which reach those throws. An unmapped exception gives JSON-RPC `-32603`, not this code. This is from reading the code; no run can show an absence.
+- Criterion "each invalid argument" now holds, so its box stays ticked. QA's item was a contract mismatch, and the contract now matches the tool. The group announcement stays unticked.
+- No production code changed. No version bump: 0.00.63. `build/crap-exceptions.json` is unchanged.
+- Local (Windows), Debug: build 0 warnings, 71 of 71 `McpSearch` tests, 8 of them new. The full suite and the Python tests were not run locally.
+
+### 2026-11-01 (owner decision, merge)
+
+The task owner waived the group announcement for this task, so it was merged without one. QA's one failed criterion was resolved after its run by a contract change and tests only: `null` for an optional input means the same as omitting it. CI for `80f4347` passed on all four jobs.

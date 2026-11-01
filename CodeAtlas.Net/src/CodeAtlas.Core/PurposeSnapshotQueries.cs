@@ -4,6 +4,13 @@ namespace CodeAtlas;
 
 public static class PurposeSnapshotQueries
 {
+    private const string DescriptionView = ":ai:";
+
+    /// <summary>Whether a search continuation names this generation: its id, or its id with a view of
+    /// saved descriptions. Whether that view is still current is decided by the search itself.</summary>
+    internal static bool BelongsTo(string snapshotId, string generationId) =>
+        snapshotId == generationId || snapshotId.StartsWith(generationId + DescriptionView, StringComparison.Ordinal);
+
     public static async Task<SearchResult> SearchAsync(LoadedSnapshot snapshot, string query,
         string mode, string kind, QueryRequest request, string language = "csharp",
         CancellationToken cancellationToken = default, bool verifyFreshness = true)
@@ -35,7 +42,7 @@ public static class PurposeSnapshotQueries
                 var entryHash = Explanations.ExplanationContract.Hash(new { SymbolId = entry.Key, Explanation = entry.Value });
                 hash.AppendData(Convert.FromHexString(entryHash));
             }
-            viewToken += ":ai:" + Convert.ToHexString(hash.GetHashAndReset());
+            viewToken += DescriptionView + Convert.ToHexString(hash.GetHashAndReset());
         }
         using var corpus = rows.SearchCorpus();
         return PurposeSearch.Search(corpus, query, mode, kind, request,

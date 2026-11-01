@@ -158,7 +158,7 @@ Cold load was 26.2 s, including that one freshness check. The excluded search wa
 
 ## Warm MCP session
 
-`codeatlas mcp --solution <path>` answers `find_symbol`, `index_status` and `coverage` through one `WarmIndexSession`. It does not load the Roslyn solution. File stamps are the `InputStamps` class that `LiveIndexSession` also uses. Answers, errors and the JSON contract are those of the full check it replaces.
+`codeatlas mcp --solution <path>` answers `find_symbol`, `search_symbols`, `index_status` and `coverage` through one `WarmIndexSession`. It does not load the Roslyn solution. File stamps are the `InputStamps` class that `LiveIndexSession` also uses. Answers, errors and the JSON contract are those of the full check it replaces.
 
 The first query of a generation reads the header, stamps the tracked files and directories, then runs the full freshness check. The stamps come first, so an edit made during the hashing moves a stamp and the next query sees it. Each later query:
 

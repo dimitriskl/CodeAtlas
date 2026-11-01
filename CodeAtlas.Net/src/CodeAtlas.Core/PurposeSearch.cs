@@ -380,6 +380,12 @@ public static class PurposeSearch
             RankingVersion, mode, "C#", coverage, queryTokens, queryTokens, EvidencePolicy,
             decision, withheld, [limitation, "Empty matches do not establish absence outside the supported loaded C# snapshot."]);
 
+    /// <summary>The empty answer when no generation is published: the shape of an abstention, with
+    /// no snapshot to continue.</summary>
+    internal static SearchResult NoIndex(string query, string mode, QueryRequest request) =>
+        Abstain(request, null, StructuralCoverage.Current, mode, SearchTokens(query), "abstained-no-index", 0,
+            "No index is published for this solution. Run index, then search again.");
+
     private static SearchField DocField(string name, double weight, DocumentationSection section, StructuralFact? fact) =>
         Field(name, weight, section.Text, section.Evidence.SourceSymbolId,
             section.Evidence.Location, fact?.Kind, section.Evidence, fact?.Evidence, "xml:" + section.Tag);
