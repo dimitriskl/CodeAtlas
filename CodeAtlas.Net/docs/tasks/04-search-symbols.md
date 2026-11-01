@@ -202,3 +202,46 @@ Non-blocking:
 CI for `f15d3ac` (run 41299500316): `build (windows-2025)`, `build (ubuntu-24.04)`, `install (windows-2025)` and `install (ubuntu-24.04)` passed. Both builds ran 716 of 716 tests, with the 16 of `ProtocolEncodingTests` passed and none skipped. CRAP gate on Ubuntu: 1601 methods, 0 above 10, 0 exception problems, 4 better than recorded.
 
 Probes and mutations ran in a scratch copy. No production code changed.
+
+### 2026-11-01 (QA attempt 1)
+
+Commit tested: `571fa8f`, against `d2b2fc7`. Real long-lived `mcp` processes, built from this commit, on scratch copies of the fixture, with the contract text as the expected value.
+
+Verdict: FAILED, one criterion. Nothing else failed, and no regression was found.
+
+Failed:
+
+1. Criterion "each invalid argument returns `invalid_arguments` with its documented message". JSON `null` is not a string or an integer, so the contract's error table refuses it, but `search_symbols` treats it as an omitted argument and succeeds. `"mode": null`, `"kind": null`, `"project": null`, `"snapshotId": null`, `"offset": null` and `"limit": null` each return `success: true` with the default. The expected messages are `mode must not be empty.`, `kind must not be empty.`, `project must not be empty.`, `snapshotId must not be empty.`, `offset must be a nonnegative integer.` and `limit must be an integer from 1 through 1000.` `workspace` and `query` with `null` do get their documented message. The rows returned are the defaults' rows, so no answer is wrong. It is not a regression: `find_symbol` does the same on `d2b2fc7` and on this commit. No test sends `null` for an optional field. The owner chooses: state in the contract that `null` counts as omitted, or refuse it in `OptionalText` and `OptionalInt`.
+
+Could not be produced:
+
+- `analysis_failed` through `search_symbols`. No plain `AnalysisException` is reachable on that path. Damaged stores gave `invalid_index`, and the `index` tool on broken source gave `analysis_failed` with the envelope. So the row is unverified for this tool, and it is not counted as a failure.
+
+Confirmed:
+
+- `tools/list`: `search_symbols` is second, with the 8 documented inputs and types, `workspace` and `query` required. The schemas of the other 4 tools are unchanged.
+- Rows against the CLI, field by field, including key order, `pagination` and every `result` field: 233 argument sets on the fixture (564 rows), 84 with saved descriptions, 176 on an index of this solution (10660 rows), 0 differences.
+- Ranking: `silver glitter tray` and `glitter tray` rank the documented method first in `assisted`, and `names` returns nothing. `glitter`, `lavender` and `whistles` abstain with the same `withheldWeakMatches` as the CLI.
+- Filters and order: each `kind`, `project` exact match, unknown project an empty page, scores unchanged by a filter, production before tests unless the query says `test`, the implementation before its interface, then score, matched tokens and ordinal id.
+- Defaults and paging: `assisted`, `method`, `100`, `0`. Pages joined equal the whole list. Offset at the last row, past the end and 2147483647, limit 1 and 1000, query of 4096 characters, with no trimming at 4097, all as documented.
+- All 15 `invalid_arguments` rows, 62 of 69 cases: types, surrogates and boundaries, each with the exact message, null `freshness` and `coverage`, and no `result` or pagination. Of the other 7 cases, 6 are item 1. The last, `workspace` `" "`, succeeds because Windows trims it to the current directory, which is the solution, so it is not counted.
+- `snapshot_mismatch`: foreign id, prefix, suffix, invented view, offset zero and past zero, no index, and before staleness. `stale_index`: edit, new file, with `changedFiles`, and reverting serves again. `snapshot_io_failed`: tracked input held exclusively, cold and warm, then recovery. `rebuild_required`: all three messages, on tampered generations. `invalid_index`: truncated, garbage, dropped tables, bad JSON, warm damage. `unsupported_index`: manifest and schema. `sqlite_unavailable`: same message and diagnostics as the CLI, through the test variable, because deleting the bundled library falls back to the system one. The server kept reading after each, and exit codes were 0.
+- A generation published by another process and by the `index` tool is served with no restart, and the old id is refused.
+- `assisted` paging: own token continues, also in the CLI. A description changed, corrupted or removed between pages refuses the old token. A names id cannot page `assisted`, or the reverse. Old-generation descriptions are left out. Searches change no file under `.codeatlas`.
+- No provider: with no credentials, and with a fake key, model and an endpoint at `10.255.255.1:9`, over `http` and `https`, 60 calls each found the saved description. No TCP connection in `netstat` on the first two, 0 connections to a proxy set in the environment, `System.Net.Sockets.dll` not loaded on the `https` run, empty stderr, no prompt. `System.Net.Http.dll` loads at startup, on `d2b2fc7` too. Control: `describe` with the same settings gave `SYN_SENT` to that address, a `CONNECT` to the proxy, and a connection to a local listener. The OS keychain was not observed directly.
+- Raw UTF-8 on stdin: 225 query and argument sets on code pages 437, 1252, 1253, 737 and 65001 equal the CLI, and raw equals escaped apart from `checkedAtUtc`. A non-ASCII `workspace` and `project` work on 437, 1252, 1253 and 65001. Control: `d2b2fc7` on 437 finds nothing for raw `Größe`.
+- The contract example gives the documented shape and values, apart from `checkedAtUtc` and `snapshotId`.
+- Existing tools against `d2b2fc7`, 47 calls on code pages 65001, 437 and 1252 covering `initialize`, `find_symbol`, `index_status`, `coverage`, `index` and their errors, ignoring ids, timestamps and versions. Differences, all expected from this PR: `search_symbols` in `tools/list` and now answered; a surrogate string gives an envelope with `invalid_arguments`, not `-32603`; raw non-ASCII is read correctly on 437 and 1252; a line with an invalid UTF-8 byte gives `-32700` with a null `id`, where `d2b2fc7` answered it.
+- Packed tool: `package-smoke.py` passed all 17 steps on an installed package, with the `mcp` handshake.
+- Memory: 6000 calls, working set 114 MB at call 500, 110 MB at the end, private bytes 76 MB and 70 MB, handles 262 throughout, 0 errors. Exit 0 in 0.01 s on stdin close, process gone, empty stderr.
+
+Not failures, for the record:
+
+- A held `current.json` or `index.db` gives `snapshot_io_failed` with the store's message and null `freshness`, with the envelope. The contract's row covers tracked inputs only.
+- An index under a long path fails with SQLite error 14 from `index`, with the envelope. It is outside this task. It was seen under a 100-character scratch path, and is not traced further.
+
+Local (Windows), Debug: restore passed, build 0 warnings, .NET 716/716, Python 145 OK.
+
+CI for `571fa8f` (run 41301551789): `build (windows-2025)`, `build (ubuntu-24.04)`, `install (windows-2025)` and `install (ubuntu-24.04)` passed.
+
+The group announcement stays unticked, with the maintainer. Probes ran in a scratch copy. No production code changed.
