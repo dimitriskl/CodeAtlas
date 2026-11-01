@@ -19,7 +19,7 @@ User stories: 2, 3, 4, 15. PRD: [Modules](../prd/0001-net-release.md#modules).
 
 - [01 — CI green](01-ci-green.md)
 
-Status: review (https://github.com/dimitriskl/CodeAtlas/pull/14)
+Status: done (https://github.com/dimitriskl/CodeAtlas/pull/14)
 
 ## Acceptance criteria
 
