@@ -322,6 +322,9 @@ public sealed class McpFindReferencesTests(McpFindReferencesFixture fixture) : I
     [InlineData("\ud83d\ude00")]
     [InlineData("Library/Library.csproj::M:Sample.Square.#ctor")]
     [InlineData("Library/Library.csproj::M:Sample.Square.get_Sides")]
+    [InlineData("Library/Library.csproj::M:Sample.Square.op_Addition(Sample.Square,Sample.Square)")]
+    [InlineData("Library/Library.csproj::E:Sample.Square.Changed")]
+    [InlineData("Library/Library.csproj::M:Sample.Point.Deconstruct(System.Int32@)")]
     public async Task AnUnknownIdReturnsSymbolNotFoundWithNoFreshnessCoverageOrPagination(string id)
     {
         // Arrange
@@ -1226,7 +1229,10 @@ public sealed class McpFindReferencesFixture : IAsyncLifetime
                 public int Sides { get; set; }
                 public int Area() => 1;
                 public override string ToString() => "square";
+                public static Square operator +(Square left, Square right) => right == left ? left : right;
+                public event Action? Changed { add { } remove { } }
             }
+            public record Point(int X);
             public static class Shapes
             {
                 public static int Direct(Square square) => square.Area();
