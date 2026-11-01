@@ -202,6 +202,8 @@ Errors keep the envelope. The tool result is an MCP error, with no `result` and 
 | `snapshot_mismatch` | `snapshotId` names another generation, a view of descriptions that changed, or anything when no generation is published. Also at offset zero. A replaced generation is reported before staleness. | `The index was replaced. Start a new query at offset zero.` | null |
 | `stale_index` | A tracked input changed. | `The saved index is stale.` | Set, with `changedFiles`. |
 | `snapshot_io_failed` | A tracked input cannot be read. | `Snapshot inputs could not be verified. Publication was not committed; resolve the input access failure and retry.` | Set. |
+| `snapshot_io_failed` | `current.json` or a report file of the generation, such as `overview.md`, cannot be read. | `Cannot read the snapshot. Check its path and permissions, or rebuild it.` | null |
+| `snapshot_io_failed` | `index.db` cannot be read. | `Cannot read the index database. Check its path and permissions, or rebuild it.` | null |
 | `rebuild_required` | The generation has no symbol documentation or structural facts, or an older structural model. | `Rebuild to extract symbol documentation.`, `Rebuild to extract structural facts.` or `Rebuild with the supported structural-fact model.` | null |
 | `invalid_index`, `unsupported_index`, `sqlite_unavailable` | As in [Errors and profiling](#errors-and-profiling). | The store's message. | null |
 
@@ -327,6 +329,182 @@ The call is `workspace` `.`, `query` `LocalCaller`, `mode` `names` and `limit` `
       "exclusions": ["constructor-and-accessor-bodies", "..."],
       "runtimeCallGraph": false
     }
+  }
+}
+```
+
+## MCP tool `find_references`
+
+Read-only. It returns the reference rows of the published generation, the rows behind `find-references`, from the warm session, with no Roslyn or MSBuild load. It writes nothing and it does not call an AI provider.
+
+Input:
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `workspace` | string, required | The server's solution directory or solution file. Relative paths resolve from the server's current directory. |
+| `id` | string, required | A method id from `find_symbol`, copied unchanged. Not trimmed. |
+| `kinds` | string array, optional | Reference kinds to keep: `invocation`, `reference` or both. Omit to keep both. |
+| `project` | string, optional | Exact solution-relative path of the referencing project, with `/`. An unknown project is an empty page. |
+| `offset` | integer, optional | First row of the page. Default `0`. |
+| `limit` | integer, optional | Page size. Default `100`. Must be from `1` through `1000`. |
+| `snapshotId` | string, optional | `pagination.snapshotId` from a previous page, copied unchanged. Required when `offset` is greater than zero. |
+
+For an optional input, JSON `null` means the same as omitting it. A required input is refused when `null`. Other arguments are ignored; the CLI's `--type` has no input here, and `find-references` refuses it too.
+
+Rows come from the generation. The tool does not analyze source again. For the same `id` and `project` the rows and their order are those of `find-references`, and `kinds` removes rows before the page is cut.
+
+- `invocation`: the use writes the method's name, and the name lies inside the callee expression of an invocation, receiver chain included. This is usually a call of the method, but not always: in `Wrap(Zero).Run()` the method group `Zero` is inside the callee `Wrap(Zero).Run`, and in `Mark(nameof(Target)).Run()` nothing calls `Target`. Both are stored as `invocation`, so a row of this kind does not prove a call. A receiver before `?.` is outside the callee expression, so `Zero` in `Wrap(Zero)?.Run()` is a `reference`.
+- `reference`: every other use. This is an implicit use, or a method group, a `nameof` or a `cref` of a documentation comment outside every callee expression, such as `Zero` in `Wrap(Zero)`.
+
+`line` and `column` are 1-based. `column` counts UTF-16 code units from the start of the line: a tab counts 1, a character such as `ζ` counts 1, and a surrogate pair counts 2. The method's own declaration is not a use.
+
+A use that writes the method's name points at the name. An implicit use writes no name, so it points at the syntax that causes it, and its row is a `reference`:
+
+| Method | Position |
+| --- | --- |
+| `GetEnumerator` and `MoveNext` of a `foreach` | The `foreach` keyword. |
+| `GetAwaiter` of an `await` | The `await` keyword. |
+| `Deconstruct` | The first token of the deconstruction: `var` in `var (a, b) = pair`, `(` in `(a, b) = pair`. A nested deconstruction has no position of its own: its row is on the first token of the outermost one. |
+| `Add` of a collection initializer | The first token of the element. |
+| `Dispose` | The first token of the `using` statement or local declaration, such as `using`, `var`, `scoped` or the first token of the type. The next paragraph says which of these have a row. |
+
+`Dispose` rows are not a list of disposable locals. A file has them only if it contains a `using` statement or declaration somewhere; an `await using` counts, a `using` directive does not. Such a file has a row for each `using` statement with an expression, and for each `using` statement, `using` declaration or local declaration with one variable and an initializer, when the type of that expression or initializer has a `public` `Dispose()` with no parameters. That type need not implement `IDisposable`, and it is the type before any conversion to the local's type: `object held = new Resource();` has a row, and `var held = (object)new Resource();` has none. There is no row for a local with no initializer, or with a `null` literal or `ref` initializer, for two variables in one declaration, for a `for` initializer, for an `await using`, for a type that implements `Dispose` only explicitly, for a `Dispose()` that is not `public`, even where the use can call it, or for a type parameter, whatever its constraints.
+
+A method that implements an interface method has that interface method's implicit rows across the whole solution, not only those of its own type. A `Dispose` that implements `IDisposable.Dispose` has the `Dispose` rows of every type, and `targetId` names the `Dispose` that type resolves to when that is in source, a base type's included, and otherwise the queried `id`. A `GetEnumerator` that implements `IEnumerable.GetEnumerator` has a row at each `foreach` over an array, a `MoveNext` that implements `IEnumerator.MoveNext` has one there and at each `foreach` over a `List<T>`, and an `Add` that implements `ICollection<T>.Add` has one for each element of a `List<T>` initializer. The `Dispose` of a `foreach`, `DisposeAsync`, `GetAsyncEnumerator`, the `Deconstruct` of a positional pattern, the `Add` of a collection expression and the methods of a query expression have no implicit rows.
+
+Rows sort by ordinal `path`, then `line` and `column`, then ordinal `targetId`, `project` and `kind`. This is the order of `find-references`. The page is a slice of that order.
+
+Pagination is the envelope's. `snapshotId` is the generation id, and `continuationSupported` is true whenever a generation is loaded. `nextOffset` is `offset + returned` when `hasMore` is true, and null otherwise. An offset past the last match succeeds with `returned` 0, the real `total`, `hasMore` false and `nextOffset` null.
+
+On success, `command` is `find_references`. `result.references` is the page. Each row has these fields, in this order:
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `targetId` | string | The stored definition id of the method this use points at, or the queried `id` when that method is not in source. |
+| `kind` | string | `invocation` or `reference`. |
+| `project` | string | Solution-relative path of the project that contains the use. |
+| `path` | string | Solution-relative file of the use, with `/`. |
+| `line` | number | 1-based line of the use. |
+| `column` | number | 1-based column of the use, in UTF-16 code units. |
+
+A method with no recorded uses succeeds with an empty page, so an empty page and `symbol_not_found` mean different things. Static references are not a runtime call graph, and an empty page does not prove that a method is unused outside the [coverage](#freshness-coverage-and-legacy-indexes).
+
+Differences from the Angular edition's `find_references`:
+
+- `id` is a method id. References are indexed for ordinary and explicit-interface source methods only. A type, property or field id returns `unsupported_symbol_kind`. Overloads have separate ids, because a .NET id includes the parameter types.
+- `targetId` can differ from `id`. A method's rows include uses of its related definitions, so the rows of an interface method and of its implementation can be the same set, and each row names the definition that use resolved to. A related definition can be outside the source, and then the row names the queried `id`. So an override of `ToString` also has rows for calls such as `1.ToString()`.
+- `symbol_not_found` is new for references. The CLI `find-references` keeps `analysis_failed` for an unknown id.
+- `project` is a solution-relative `.csproj` path, not an `angular.json` project.
+- Where one project has several target frameworks, the rows of its contexts are unioned and coverage stays partial: `coverage.limitations` keeps `multi-targeting-not-fully-covered`.
+- `kinds` accepts `invocation` and `reference` only. Any other value is refused, because this edition has no other kinds. `coverage.referenceSymbolKinds` here lists the method kinds that have references, not row kinds.
+- Rows at one position sort by `targetId` and `project` before `kind`, to keep the `find-references` order.
+- JSON `null` for an optional input means the same as omitting it.
+
+Errors keep the envelope. The tool result is an MCP error, with no `result` and no pagination, and the server keeps reading.
+
+| Code | When | Message | `freshness`, `coverage` |
+| --- | --- | --- | --- |
+| `invalid_arguments` | See the next table. | See the next table. | null |
+| `symbol_not_found` | `id` is not a type, property, field or method of the published generation, or no generation is published and `snapshotId` was not supplied. A generation stores no constructors, accessors, operators, events or compiler-generated methods, so their ids are not found. A generation with no symbol catalog holds no types, properties or fields, so their ids are not found there. | `Symbol id was not found.` | null |
+| `unsupported_symbol_kind` | `id` is a type, property or field of the published generation. | `References support ordinary and explicit-interface source methods only.` | null |
+| `snapshot_mismatch` | `snapshotId` names another generation, or anything when no generation is published. Also at offset zero. A replaced generation is reported before staleness. | `The index was replaced. Start a new query at offset zero.` | null |
+| `stale_index` | A tracked input changed. This is reported before `id` is looked up. | `The saved index is stale.` | Set, with `changedFiles`. |
+| `snapshot_io_failed` | A tracked input cannot be read. | `Snapshot inputs could not be verified. Publication was not committed; resolve the input access failure and retry.` | Set. |
+| `snapshot_io_failed` | `current.json` or a report file of the generation, such as `overview.md`, cannot be read. | `Cannot read the snapshot. Check its path and permissions, or rebuild it.` | null |
+| `snapshot_io_failed` | `index.db` cannot be read. | `Cannot read the index database. Check its path and permissions, or rebuild it.` | null |
+| `invalid_index`, `unsupported_index`, `sqlite_unavailable` | As in [Errors and profiling](#errors-and-profiling). | The store's message. | null |
+
+`invalid_arguments` messages:
+
+| When | Message |
+| --- | --- |
+| `workspace` is missing, `null` or not a string | `workspace is required.` |
+| `workspace` is empty | `workspace must not be empty.` |
+| `workspace` is not the server's solution | `workspace must be the solution directory.` |
+| `id` is missing, `null` or not a string | `id is required.` |
+| `id` is empty | `id must not be empty.` |
+| `kinds` is an empty array, or not an array and not `null` | `kinds must not be empty.` |
+| A `kinds` entry is anything but `invocation` or `reference`, including empty, `null` or not a string | `Unknown reference kind.` |
+| `project` is empty, or not a string and not `null` | `project must not be empty.` |
+| `snapshotId` is empty, or not a string and not `null` | `snapshotId must not be empty.` |
+| `offset` is not an integer from `0` through `2147483647`, and not `null` | `offset must be a nonnegative integer.` |
+| `limit` is outside 1 through 1000, or not an integer and not `null` | `limit must be an integer from 1 through 1000.` |
+| `offset` is greater than zero with no `snapshotId` | `offset greater than zero requires snapshotId.` |
+
+A string with an unpaired surrogate, such as `"\ud800"`, counts as not a string, so it gets that field's "not a string" message above. A number written with a fraction or an exponent, such as `1.0` or `1e2`, is not an integer here.
+
+### Example: `find_references`
+
+The call is `workspace` `.` and `id` `Library/Library.csproj::M:Sample.Calculator.Calculate(System.Int32)` against `tests/Fixtures/Sample.slnx`. The rows are those of `find-references` on that fixture: `Calculate(int)` is called in two files and passed as a method group in one. `checkedAtUtc` is the time of the check and `snapshotId` is the published generation id. `responseToolVersion` is the version this tool ships in. This fixture's input coverage is partial, so `freshness.state` is `unknown`.
+
+```json
+{
+  "contractVersion": 1,
+  "command": "find_references",
+  "success": true,
+  "responseToolVersion": "0.00.64",
+  "warningCount": 0,
+  "freshness": {
+    "state": "unknown",
+    "checkedAtUtc": "2026-11-01T15:02:34.237Z",
+    "isStale": false,
+    "changedFiles": [],
+    "scope": "tracked-input-content-hashes",
+    "inputCoverage": {
+      "status": "partial",
+      "scope": "supported-csharp-source-static-relations/v1",
+      "issueCount": 6,
+      "reasonCodes": ["build_inputs_unverified", "dynamic_build_inputs_unverified", "evaluation_context_replayed", "source_generators_partial"]
+    },
+    "diagnostics": []
+  },
+  "coverage": {
+    "language": "C#",
+    "symbols": ["source-types", "ordinary-source-methods", "explicit-interface-source-methods", "source-properties", "source-fields"],
+    "references": "static-source-references-with-related-definition-identity",
+    "referenceSymbolKinds": ["ordinary-source-methods", "explicit-interface-source-methods"],
+    "templateCoverage": "unknown",
+    "runtimeCallGraph": false,
+    "exclusions": ["constructors", "property-accessors", "local-functions", "metadata-only-methods", "reflection", "dependency-injection-resolution", "complete-virtual-dispatch"],
+    "limitations": ["source-generator-inputs-not-fully-covered", "multi-targeting-not-fully-covered"]
+  },
+  "pagination": {
+    "offset": 0,
+    "limit": 100,
+    "returned": 3,
+    "total": 3,
+    "hasMore": false,
+    "nextOffset": null,
+    "snapshotId": "69b06e0042ca406183ffaed9b7c3233b",
+    "continuationSupported": true
+  },
+  "result": {
+    "references": [
+      {
+        "targetId": "Library/Library.csproj::M:Sample.Calculator.Calculate(System.Int32)",
+        "kind": "invocation",
+        "project": "Caller/Caller.csproj",
+        "path": "Caller/Consumer.cs",
+        "line": 7,
+        "column": 47
+      },
+      {
+        "targetId": "Library/Library.csproj::M:Sample.Calculator.Calculate(System.Int32)",
+        "kind": "reference",
+        "project": "Caller/Caller.csproj",
+        "path": "Caller/Consumer.cs",
+        "line": 9,
+        "column": 58
+      },
+      {
+        "targetId": "Library/Library.csproj::M:Sample.Calculator.Calculate(System.Int32)",
+        "kind": "invocation",
+        "project": "Library/Library.csproj",
+        "path": "Library/Calculator.cs",
+        "line": 7,
+        "column": 40
+      }
+    ]
   }
 }
 ```

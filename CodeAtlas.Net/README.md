@@ -1,6 +1,6 @@
 # CodeAtlas .NET
 
-Version: **0.00.63**
+Version: **0.00.64**
 
 See [version history](docs/VERSION.md) for what is implemented and the versioning rules. `Version.props` is the build's version source. Run `dotnet run --project src/CodeAtlas.Cli --no-build -- --version` to check the built CLI.
 
@@ -95,7 +95,7 @@ The original live queries remain available: replace `--index <index.json>` with 
 
 `live --solution <path.sln>` keeps that solution loaded and reads one JSON object from each stdin line. It writes one JSON object per line to stdout, using the same response envelope as the other commands. A malformed line or an unknown path is an error object (`success: false`) and the process keeps reading. No file watcher is started.
 
-`mcp --solution <path.sln>` reads MCP JSON-RPC messages, one JSON object per stdin line, and writes one JSON object per line. It exposes `find_symbol`, `search_symbols`, `index_status`, `coverage`, and `index` for that solution. `search_symbols` ranks the saved index as `search-symbols` does and never calls an AI provider ([contract](docs/QUERY-CONTRACT.md#mcp-tool-search_symbols)). `index` builds and publishes a generation through the same path as `codeatlas index`. The process keeps the published snapshot between calls: it checks freshness in full once per generation, compares file and directory stamps after that, and reloads when `current.json` names a new generation ([limits](docs/SQLITE-STORE.md#warm-mcp-session)). `index_status` reports a stale generation. `coverage` refuses one. Omitting `workspace` from `coverage` reads no index. Omitting `workspace` from `index` publishes the session solution when the current directory is that solution. A failed tool call returns `isError: true` with the query envelope in the text content, and the process keeps reading.
+`mcp --solution <path.sln>` reads MCP JSON-RPC messages, one JSON object per stdin line, and writes one JSON object per line. It exposes `find_symbol`, `search_symbols`, `find_references`, `index_status`, `coverage`, and `index` for that solution. `search_symbols` ranks the saved index as `search-symbols` does and never calls an AI provider ([contract](docs/QUERY-CONTRACT.md#mcp-tool-search_symbols)). `find_references` returns the rows of `find-references` for a method id from `find_symbol` ([contract](docs/QUERY-CONTRACT.md#mcp-tool-find_references)). `index` builds and publishes a generation through the same path as `codeatlas index`. The process keeps the published snapshot between calls: it checks freshness in full once per generation, compares file and directory stamps after that, and reloads when `current.json` names a new generation ([limits](docs/SQLITE-STORE.md#warm-mcp-session)). `index_status` reports a stale generation. `coverage` refuses one. Omitting `workspace` from `coverage` reads no index. Omitting `workspace` from `index` publishes the session solution when the current directory is that solution. A failed tool call returns `isError: true` with the query envelope in the text content, and the process keeps reading.
 
 ```json
 {"command":"edit","path":"Library/Calculator.cs","text":"full file text"}

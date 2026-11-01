@@ -254,12 +254,20 @@ public static class IndexStore
     public static IReadOnlyList<SourceReference> FindReferences(CodebaseIndex index, string id) =>
         FindReferences(new MemorySnapshotRows(index), index.SchemaVersion, id);
 
-    internal static IReadOnlyList<SourceReference> FindReferences(ISnapshotRows rows, int schemaVersion, string id)
+    internal static IReadOnlyList<SourceReference> FindReferences(ISnapshotRows rows, int schemaVersion, string id) =>
+        TryFindReferences(rows, schemaVersion, id)
+        ?? throw new AnalysisException("Method ID not found in the index. Use an ID returned by find-symbol.");
+
+    /// <summary>The stored references of a method, or null for an id the generation does not hold.</summary>
+    /// <exception cref="QueryException">The id is a symbol of a kind that has no references.</exception>
+    // Task #05: MCP tool find_references. The CLI words an unknown id as a failure and MCP as symbol_not_found,
+    // so the lookup reports it by value and each caller chooses its error.
+    internal static IReadOnlyList<SourceReference>? TryFindReferences(ISnapshotRows rows, int schemaVersion, string id)
     {
         if (rows.ReferencesOf(id) is { } references) return references;
         if (schemaVersion >= 2 && rows.Symbol(id) is { Kind: not "method" })
             throw new QueryException("unsupported_symbol_kind", "References support ordinary and explicit-interface source methods only.");
-        throw new AnalysisException("Method ID not found in the index. Use an ID returned by find-symbol.");
+        return null;
     }
 
     public static async Task SaveAsync(CodebaseIndex index, CancellationToken cancellationToken = default) =>

@@ -13,6 +13,19 @@ public static class SnapshotQueries
     public static QueryPage<SourceReference> FindReferences(LoadedSnapshot snapshot, string id, QueryRequest request) =>
         QueryPaging.References(IndexStore.FindReferences(snapshot.Rows, snapshot.Index.SchemaVersion, id), request, snapshot.Index.IndexId);
 
+    /// <summary>
+    /// One page of a method's references, the rows of <see cref="FindReferences"/>, keeping only the given
+    /// kinds when there are any. Null for an id the generation does not hold.
+    /// </summary>
+    // Task #05: MCP tool find_references. The kinds leave before paging, so totals and offsets count kept rows.
+    internal static QueryPage<SourceReference>? TryFindReferences(LoadedSnapshot snapshot, string id, QueryRequest request, string[]? kinds)
+    {
+        var references = IndexStore.TryFindReferences(snapshot.Rows, snapshot.Index.SchemaVersion, id);
+        if (references is null) return null;
+        return QueryPaging.References(kinds is null ? references : references.Where(reference => kinds.Contains(reference.Kind)),
+            request, snapshot.Index.IndexId);
+    }
+
     public static QueryPage<DocumentedSymbol> FindSymbols(LoadedSnapshot snapshot, string name, string kind, QueryRequest request) =>
         DocumentationQueries.FindSymbols(DocumentationSnapshotQueries.RequireCoverage(snapshot).SymbolsNamed(name, kind),
             name, kind, request, snapshot.Index.IndexId);

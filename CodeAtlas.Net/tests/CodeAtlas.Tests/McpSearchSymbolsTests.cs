@@ -288,6 +288,43 @@ public sealed class McpSearchSymbolsTests(DocumentationCliContractFixture fixtur
         }
     }
 
+    // Task #05: technical review attempt 1. The store fails before freshness is known, so both are null.
+    [Theory]
+    [InlineData("current.json", "Cannot read the snapshot. Check its path and permissions, or rebuild it.")]
+    [InlineData("index.db", "Cannot read the index database. Check its path and permissions, or rebuild it.")]
+    public async Task AStoreFileThatCannotBeReadIsRefusedWithNoFreshnessOrCoverage(string file, string message)
+    {
+        // Arrange
+        // SQLite ignores the lock FileShare.None takes on Unix, so only Windows refuses the database this way.
+        if (file == "index.db" && !OperatingSystem.IsWindows()) return;
+        var generation = (await IndexStore.LoadSnapshotAsync(fixture.IndexPath)).GenerationDirectory!;
+        var path = file == "current.json" ? fixture.IndexPath : Path.Combine(generation, file);
+        FileStream? held = null;
+        var lines = new[] { Search(1, DocumentedWords), Search(2, DocumentedWords) };
+        try
+        {
+            // Act
+            var responses = await Talk(Solution, lines, beforeLine: index =>
+            {
+                if (index == 1) held = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.None);
+            });
+
+            // Assert
+            Envelope(responses[0], isError: false);
+            var failed = Envelope(responses[1], isError: true);
+            Assert.Equal("search_symbols", failed["command"]!.GetValue<string>());
+            Assert.Equal("snapshot_io_failed", failed["error"]!["code"]!.GetValue<string>());
+            Assert.Equal(message, failed["error"]!["message"]!.GetValue<string>());
+            Assert.Null(failed["freshness"]);
+            Assert.Null(failed["coverage"]);
+            Assert.False(failed.ContainsKey("pagination"));
+        }
+        finally
+        {
+            held?.Dispose();
+        }
+    }
+
     [Theory]
     [InlineData("workspace", null, "workspace is required.")]
     [InlineData("workspace", "7", "workspace is required.")]
@@ -393,7 +430,7 @@ public sealed class McpSearchSymbolsTests(DocumentationCliContractFixture fixtur
         var responses = await Talk(Solution, lines);
 
         // Assert
-        Assert.Equal(new[] { "find_symbol", "search_symbols", "index_status", "coverage", "index" }, ToolNames(responses[0]));
+        Assert.Equal(new[] { "find_symbol", "search_symbols", "find_references", "index_status", "coverage", "index" }, ToolNames(responses[0]));
         var tool = responses[0]["result"]!["tools"]!.AsArray().Single(item => item!["name"]!.GetValue<string>() == "search_symbols")!;
         Assert.Equal(new[] { "workspace", "query" }, tool["inputSchema"]!["required"]!.AsArray().Select(item => item!.GetValue<string>()));
         Assert.Equal(new[] { "workspace", "query", "mode", "kind", "project", "offset", "limit", "snapshotId" },
