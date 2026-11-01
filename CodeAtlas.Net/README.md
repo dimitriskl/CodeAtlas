@@ -1,6 +1,6 @@
 # CodeAtlas .NET
 
-Version: **0.00.63**
+Version: **0.00.64**
 
 See [version history](docs/VERSION.md) for what is implemented and the versioning rules. `Version.props` is the build's version source. Run `dotnet run --project src/CodeAtlas.Cli --no-build -- --version` to check the built CLI.
 
