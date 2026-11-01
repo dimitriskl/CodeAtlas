@@ -53,6 +53,29 @@ public sealed class ProtocolEncodingTests(ProtocolEncodingFixture fixture) : ICl
         Assert.Equal(NameId, found["id"]!.GetValue<string>());
     }
 
+    // Task #05: MCP tool find_references. The id reaches the store intact raw and escaped, and leaves in a row.
+    [Theory]
+    [InlineData("437", "en_US.ISO-8859-1")]
+    [InlineData("737", "el_GR.ISO-8859-7")]
+    [InlineData("65001", "en_US.UTF-8")]
+    public async Task McpFindsTheReferencesOfANonAsciiIdUnderEveryInheritedEncoding(string codePage, string locale)
+    {
+        // Arrange
+        var query = Tool(1, "find_references", new JsonObject { ["workspace"] = fixture.Root, ["id"] = NameId });
+        byte[] input = [.. Lines(query), .. Encoding.ASCII.GetBytes(query), .. NewLine];
+
+        // Act
+        var server = await RunAsync("mcp", fixture.Solution, input, codePage, locale);
+
+        // Assert
+        var responses = Responses(server);
+        Assert.Equal(2, responses.Length);
+        var raw = Assert.Single(Envelope(responses[0], isError: false)["result"]!["references"]!.AsArray())!;
+        Assert.Equal(NameId, raw["targetId"]!.GetValue<string>());
+        Assert.Equal("Library/Brew.cs", raw["path"]!.GetValue<string>());
+        Assert.True(JsonNode.DeepEquals(raw, Envelope(responses[1], isError: false)["result"]!["references"]![0]));
+    }
+
     [Theory]
     [InlineData("737", "el_GR.ISO-8859-7")]
     [InlineData("65000", "en_US.UTF-16")]
@@ -250,6 +273,7 @@ public sealed class ProtocolEncodingFixture : IAsyncLifetime
                 /// <summary>Φτιάχνει ζεστό καφέ για το πρωινό.</summary>
                 public static int Prepare() => 1;
                 public static int Größe() => 2;
+                public static int Measure() => Größe();
             }
             """);
         await IndexStore.SaveAsync(await SolutionAnalysis.CreateIndexAsync(Solution));

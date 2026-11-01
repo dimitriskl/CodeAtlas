@@ -393,7 +393,7 @@ public sealed class McpSearchSymbolsTests(DocumentationCliContractFixture fixtur
         var responses = await Talk(Solution, lines);
 
         // Assert
-        Assert.Equal(new[] { "find_symbol", "search_symbols", "index_status", "coverage", "index" }, ToolNames(responses[0]));
+        Assert.Equal(new[] { "find_symbol", "search_symbols", "find_references", "index_status", "coverage", "index" }, ToolNames(responses[0]));
         var tool = responses[0]["result"]!["tools"]!.AsArray().Single(item => item!["name"]!.GetValue<string>() == "search_symbols")!;
         Assert.Equal(new[] { "workspace", "query" }, tool["inputSchema"]!["required"]!.AsArray().Select(item => item!.GetValue<string>()));
         Assert.Equal(new[] { "workspace", "query", "mode", "kind", "project", "offset", "limit", "snapshotId" },

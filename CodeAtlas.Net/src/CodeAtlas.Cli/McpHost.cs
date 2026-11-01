@@ -13,6 +13,7 @@ internal sealed class McpHost
 {
     private const string Protocol = "2025-06-18";
     private const string IoFailure = "Snapshot inputs could not be verified. Publication was not committed; resolve the input access failure and retry.";
+    private const string ArrayType = "array";
     private static readonly JsonSerializerOptions Json = new() { PropertyNamingPolicy = JsonNamingPolicy.CamelCase };
     private static readonly StringComparer Paths = OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal;
 
@@ -113,6 +114,7 @@ internal sealed class McpHost
         {
             "find_symbol" => FindSymbolAsync(arguments, cancellationToken),
             "search_symbols" => SearchSymbolsAsync(arguments, cancellationToken),
+            "find_references" => FindReferencesAsync(arguments, cancellationToken),
             "index_status" => IndexStatusAsync(arguments, cancellationToken),
             "coverage" => CoverageAsync(arguments, cancellationToken),
             "index" => IndexAsync(arguments, cancellationToken),
@@ -142,7 +144,7 @@ internal sealed class McpHost
                 ? SymbolSuccess(NoIndexFreshness(), Coverage(catalog: true, noIndex: true), Page(0, query.Offset, query.Limit, 0, null, false), [], 0)
                 : Mismatch("find_symbol");
         var (snapshot, freshness) = await warm.CurrentAsync(cancellationToken);
-        if (query.SnapshotId is not null && !string.Equals(query.SnapshotId, snapshot.Index.IndexId, StringComparison.Ordinal))
+        if (IsReplaced(query.SnapshotId, snapshot))
             return Mismatch("find_symbol");
         var coverage = Coverage(snapshot.Index.SchemaVersion >= 2, noIndex: false);
         if (Refusal("find_symbol", snapshot, freshness, coverage) is { } refusal) return refusal;
@@ -174,6 +176,26 @@ internal sealed class McpHost
         var found = await PurposeSnapshotQueries.SearchAsync(snapshot, search.Text, search.Mode, search.Kind, search.Request,
             cancellationToken: cancellationToken, verifyFreshness: false);
         return SearchSuccess(Freshness(freshness), coverage, found, snapshot.Index.Warnings.Length);
+    }
+
+    // Task #05: MCP tool find_references. The rows are those of find-references, read from the warm session,
+    // which has checked freshness. The comparison here is the only snapshot check, because the request below
+    // always names the loaded generation: a replaced generation has to be reported before staleness.
+    private async Task<JsonObject> FindReferencesAsync(JsonObject arguments, CancellationToken cancellationToken)
+    {
+        var query = ReadReferences(arguments);
+        RequireWorkspace(query.Workspace);
+        var page = query.Page;
+        if (!File.Exists(Manifest))
+            return page.SnapshotId is null ? SymbolNotFound() : Mismatch("find_references");
+        var (snapshot, freshness) = await warm.CurrentAsync(cancellationToken);
+        if (IsReplaced(page.SnapshotId, snapshot))
+            return Mismatch("find_references");
+        var coverage = Coverage(snapshot.Index.SchemaVersion >= 2, noIndex: false);
+        if (Refusal("find_references", snapshot, freshness, coverage) is { } refusal) return refusal;
+        var request = new QueryRequest(page.Project, null, page.Limit, page.Offset, snapshot.Index.IndexId);
+        var found = SnapshotQueries.TryFindReferences(snapshot, query.Id, request, query.Kinds);
+        return found is null ? SymbolNotFound() : ReferenceSuccess(Freshness(freshness), coverage, found, snapshot.Index.Warnings.Length);
     }
 
     private async Task<JsonObject> IndexStatusAsync(JsonObject arguments, CancellationToken cancellationToken)
@@ -220,13 +242,38 @@ internal sealed class McpHost
         var kind = OptionalText(arguments, "kind", "kind must not be empty.");
         if (kind is not null && kind is not ("method" or "type" or "property" or "field" or "all"))
             throw new QueryException("invalid_arguments", "Unknown symbol kind.");
+        var page = ReadPage(arguments);
+        return new(workspace, name, kind, page.Project, page.Offset, page.Limit, page.SnapshotId);
+    }
+
+    private static PageQuery ReadPage(JsonObject arguments)
+    {
         var project = OptionalText(arguments, "project", "project must not be empty.");
         var offset = OptionalInt(arguments, "offset", 0, "offset must be a nonnegative integer.", 0, int.MaxValue);
         var limit = OptionalInt(arguments, "limit", 100, "limit must be an integer from 1 through 1000.", 1, QueryRequest.MaximumLimit);
         var snapshot = OptionalText(arguments, "snapshotId", "snapshotId must not be empty.");
         if (offset > 0 && snapshot is null)
             throw new QueryException("invalid_arguments", "offset greater than zero requires snapshotId.");
-        return new(workspace, name, kind, project, offset, limit, snapshot);
+        return new(project, offset, limit, snapshot);
+    }
+
+    private static ReferenceQuery ReadReferences(JsonObject arguments)
+    {
+        var workspace = Text(arguments, "workspace", "workspace is required.", "workspace must not be empty.");
+        var id = Text(arguments, "id", "id is required.", "id must not be empty.");
+        return new(workspace, id, ReadKinds(arguments), ReadPage(arguments));
+    }
+
+    // A missing property and JSON null both read as null here, and both mean every kind.
+    private static string[]? ReadKinds(JsonObject arguments)
+    {
+        if (arguments["kinds"] is null) return null;
+        if (arguments["kinds"] is not JsonArray { Count: > 0 } kinds)
+            throw new QueryException("invalid_arguments", "kinds must not be empty.");
+        var names = kinds.Select(StringOrNull).ToArray();
+        if (names.Any(name => name is not ("invocation" or "reference")))
+            throw new QueryException("invalid_arguments", "Unknown reference kind.");
+        return names!;
     }
 
     // PurposeSearch.Validate words its checks for CLI options and throws ArgumentException, an internal
@@ -278,6 +325,15 @@ internal sealed class McpHost
             offset = next;
         }
     }
+
+    private static bool IsReplaced(string? snapshotId, LoadedSnapshot snapshot) =>
+        snapshotId is not null && !string.Equals(snapshotId, snapshot.Index.IndexId, StringComparison.Ordinal);
+
+    private static JsonObject SymbolNotFound() => Failure("find_references", "symbol_not_found", "Symbol id was not found.", []);
+
+    private static JsonObject ReferenceSuccess(JsonObject freshness, JsonObject coverage, QueryPage<SourceReference> found, int warningCount) =>
+        Envelope("find_references", true, warningCount, freshness, coverage, JsonSerializer.SerializeToNode(found.Pagination, Json)!.AsObject(),
+            new JsonObject { ["references"] = References(found.Items) }, error: null);
 
     private static JsonObject SymbolSuccess(JsonObject freshness, JsonObject coverage, JsonObject pagination,
         IReadOnlyList<SymbolRow> symbols, int warningCount) =>
@@ -423,6 +479,22 @@ internal sealed class McpHost
         return symbols;
     }
 
+    private static JsonArray References(IEnumerable<SourceReference> rows)
+    {
+        var references = new JsonArray();
+        foreach (var row in rows)
+            references.Add(new JsonObject
+            {
+                ["targetId"] = row.DefinitionId,
+                ["kind"] = row.Kind,
+                ["project"] = row.Project,
+                ["path"] = row.Location.File,
+                ["line"] = row.Location.Line,
+                ["column"] = row.Location.Column
+            });
+        return references;
+    }
+
     private static JsonObject Freshness(IndexFreshness freshness)
     {
         var reasons = freshness.Coverage.Issues.Select(issue => issue.Code).Distinct(StringComparer.Ordinal).Order(StringComparer.Ordinal);
@@ -489,6 +561,9 @@ internal sealed class McpHost
             Schema("search_symbols", "Rank symbols by words from their purpose, documentation or names. Reads the published index and saved AI descriptions; it never calls a provider.",
                 ["workspace", "query", "mode", "kind", "project", "offset", "limit", "snapshotId"], ["workspace", "query"],
                 ["string", "string", "string", "string", "string", "integer", "integer", "string"]),
+            Schema("find_references", "Find the uses of a method by the id from find_symbol, with optional reference-kind and project filters. Reads the published index.",
+                ["workspace", "id", "kinds", "project", "offset", "limit", "snapshotId"], ["workspace", "id"],
+                ["string", "string", ArrayType, "string", "integer", "integer", "string"]),
             Schema("index_status", "Read the published generation and whether its tracked inputs still match.",
                 ["workspace"], ["workspace"], ["string"]),
             Schema("coverage", "Read the analysis boundary. Omit workspace when no index should be read.",
@@ -503,12 +578,20 @@ internal sealed class McpHost
     {
         var fields = new JsonObject();
         for (var i = 0; i < properties.Length; i++)
-            fields[properties[i]] = new JsonObject { ["type"] = types[i] };
+            fields[properties[i]] = Field(types[i]);
         var requiredNames = new JsonArray();
         foreach (var item in required) requiredNames.Add(item);
         var schema = new JsonObject { ["type"] = "object", ["properties"] = fields };
         if (required.Length > 0) schema["required"] = requiredNames;
         return new JsonObject { ["name"] = name, ["description"] = description, ["inputSchema"] = schema };
+    }
+
+    // Every array input holds strings. A client needs items to build a value for it.
+    private static JsonObject Field(string type)
+    {
+        var field = new JsonObject { ["type"] = type };
+        if (type == ArrayType) field["items"] = new JsonObject { ["type"] = "string" };
+        return field;
     }
 
     private static string Text(JsonObject arguments, string name, string missing, string empty)
@@ -614,6 +697,10 @@ internal sealed class McpHost
     private sealed record SymbolQuery(string Workspace, string Name, string? Kind, string? Project, int Offset, int Limit, string? SnapshotId);
 
     private sealed record SearchQuery(string Workspace, string Text, string Mode, string Kind, QueryRequest Request);
+
+    private sealed record PageQuery(string? Project, int Offset, int Limit, string? SnapshotId);
+
+    private sealed record ReferenceQuery(string Workspace, string Id, string[]? Kinds, PageQuery Page);
 
     private sealed record SymbolRow(string Id, string Kind, string Name, string QualifiedName, string Project, string Path,
         int Line, int Column, string Signature, bool HasSignature);

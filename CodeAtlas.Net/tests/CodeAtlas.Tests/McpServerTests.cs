@@ -217,7 +217,7 @@ public sealed class McpServerTests(IndexedSolution fixture) : IClassFixture<Inde
             Assert.NotNull(staleCoverage["coverage"]);
             Assert.False(staleCoverage.ContainsKey("pagination"));
             Assert.False(staleCoverage.ContainsKey("result"));
-            Assert.Equal(new[] { "find_symbol", "search_symbols", "index_status", "coverage", "index" },
+            Assert.Equal(new[] { "find_symbol", "search_symbols", "find_references", "index_status", "coverage", "index" },
                 responses[5]["result"]!["tools"]!.AsArray().Select(tool => tool!["name"]!.GetValue<string>()));
         }
         finally
@@ -573,7 +573,7 @@ public sealed class McpIndexCommandTests
             Assert.False(busy.ContainsKey("pagination"));
             Assert.False(busy.ContainsKey("result"));
             Assert.Equal(generation, Envelope(responses[4], false)["result"]!["generationId"]!.GetValue<string>());
-            Assert.Equal(new[] { "find_symbol", "search_symbols", "index_status", "coverage", "index" },
+            Assert.Equal(new[] { "find_symbol", "search_symbols", "find_references", "index_status", "coverage", "index" },
                 responses[5]["result"]!["tools"]!.AsArray().Select(tool => tool!["name"]!.GetValue<string>()));
         }
         finally
