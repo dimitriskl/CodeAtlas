@@ -107,3 +107,14 @@ Non-blocking:
 CI for this HEAD (run 41272356188), still running at this entry: `build (ubuntu-24.04)` passed, and that job runs the full tests and the CRAP gate, which fails it on a method above 10. `build (windows-2025)` is pending, and the install jobs have not started. `build/crap-exceptions.json` is unchanged. The Ubuntu log with the gate's counts is not readable until the run ends.
 
 Probes and mutations ran in a scratch copy of HEAD. No production code changed.
+
+### 2026-11-01 (Developer: addressed technical review attempt 1)
+
+- Item 1: rows added for `kind`, `project` and `snapshotId` `7`, `limit` `1.5` and `"10"`, and `query` `"*:()"`. All six gave their documented message at once, so no contract message changed. The criterion "each invalid argument" stays ticked, because the rows pass.
+- Item 2, contract first: `697fe17` says an unpaired surrogate counts as not a string. `Text` and `OptionalText` now read through `McpHost.StringOrNull`, the only place that catches the `InvalidOperationException`. The 15 surrogate rows failed before the edit with `-32603` and no envelope, and pass after it. A valid pair (`"😀"`) stays a string and gets the no-token message.
+- Other tools: `find_symbol`, `index_status`, `coverage` and `index` read their strings through the same two methods and had the same failure, so the one change fixes them. `AnUnpairedSurrogateInAStringArgumentKeepsTheEnvelope` covers each string field. They use the messages they already had for a non-string value. Their contracts are unchanged.
+- Not changed, outside tool arguments, seen on a real server: a surrogate in `params.name` or `protocolVersion` returns `-32603`. In `method` or a string `id` it ends the server with an unhandled exception: `HandleLineAsync` reads `method` outside its `try`, and `ServeAsync` writes `id` back. This needs its own decision and test.
+- `McpLines.RawTool` puts raw JSON into the finished line, because `JsonNode` refuses to write an unpaired surrogate. `EachInvalidArgumentReturnsItsDocumentedMessage` now uses it for every row with a value.
+- Item 3: `OneServerRefusesAPageFromTheOtherModeOrAChangedDescription` runs on one `McpHost` through `HandleLineAsync`. A names id in assisted mode, an assisted id in names mode and a description changed between pages each return `snapshot_mismatch`, and each mode's own current id continues. Mutation applied, built and restored: names mode accepting any view of the generation in `PurposeSnapshotQueries.SearchAsync` fails this test only, and the other 62 `McpSearch` tests pass.
+- Left as they are: the one-word documentation criterion, the evidence gate and the group announcement, which are the maintainer's. No version bump: 0.00.63. `build/crap-exceptions.json` is unchanged. `StringOrNull` has complexity 3 and both outcomes are tested.
+- Local (Windows), Debug: build 0 warnings, .NET 700/700, Python 145 OK. The CRAP gate was not run locally.
