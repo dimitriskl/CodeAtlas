@@ -190,7 +190,7 @@ public sealed class McpFindReferencesTests(McpFindReferencesFixture fixture) : I
     // Task #05: technical review attempt 1. These rows pin what the index stores, not what a kind should mean:
     // task 18 changes the classifier, and this test with it.
     [Theory]
-    [InlineData("M:Sample.Chain.Zero", "Wrap(Zero).Run();", "invocation", "Wrap(Zero);", "reference", "Zero();", "invocation")]
+    [InlineData("M:Sample.Chain.Zero", "Wrap(Zero).Run();", "invocation", "Wrap(Zero);", "reference", "Wrap(Zero)?.Run();", "reference", "Zero();", "invocation")]
     [InlineData("M:Sample.Chain.Target", "Mark(nameof(Target)).Run();", "invocation", "Mark(nameof(Target));", "reference")]
     public async Task ANameInsideACalleeExpressionIsStoredAsAnInvocationEvenWhenNothingCallsIt(string method, params string[] expected)
     {
@@ -1128,6 +1128,7 @@ public sealed class McpFindReferencesFixture : IAsyncLifetime
             {
                 Wrap(Zero).Run();
                 Wrap(Zero);
+                Wrap(Zero)?.Run();
                 Zero();
                 Mark(nameof(Target)).Run();
                 Mark(nameof(Target));
