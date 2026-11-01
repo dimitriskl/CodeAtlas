@@ -245,3 +245,14 @@ Local (Windows), Debug: restore passed, build 0 warnings, .NET 716/716, Python 1
 CI for `571fa8f` (run 41301551789): `build (windows-2025)`, `build (ubuntu-24.04)`, `install (windows-2025)` and `install (ubuntu-24.04)` passed.
 
 The group announcement stays unticked, with the maintainer. Probes ran in a scratch copy. No production code changed.
+
+### 2026-11-01 (Developer: addressed QA attempt 1)
+
+- Owner decision: keep the behavior and correct the contract. For an optional input, `null` means the same as omitting it, as in `find_symbol`, because many JSON clients send `null` for an unset optional field. A required input stays refused.
+- Contract, `fec12b2`: the input section states the rule. The `invalid_arguments` rows of `mode`, `kind`, `project`, `snapshotId`, `offset` and `limit` exclude `null`, and the `workspace` and `query` rows name it. The `tools/list` schema keeps its plain types, which the contract says.
+- Test, `19da1db`: `NullForAnOptionalInputReturnsTheSameRowsAsOmittingIt` sends each of the six as a literal `null` and compares `result` and `pagination` with the omitted request on one server. `null` for `query` and `workspace` are new rows of `EachInvalidArgumentReturnsItsDocumentedMessage`. The rows there with no value omit the field.
+- Real server at `f260e01`: `null` for `query` gives `invalid_arguments` with `query is required.`, `null` for `workspace` gives `workspace is required.`, and the next line is answered, exit 0.
+- `analysis_failed`, `0d445eb`: removed from this tool's error table, because it cannot occur. In `McpHost` the code comes only from the `AnalysisException` arm of `KnownFailure`, and the subclasses are matched first with their own codes. Every plain `AnalysisException` is thrown in solution loading, catalog building, reference search, live editing or the benchmark overlay. `SearchSymbolsAsync` uses `WarmIndexSession`, the snapshot store, freshness hashing, saved descriptions and `PurposeSearch`, none of which reach those throws. An unmapped exception gives JSON-RPC `-32603`, not this code. This is from reading the code; no run can show an absence.
+- Criterion "each invalid argument" now holds, so its box stays ticked. QA's item was a contract mismatch, and the contract now matches the tool. The group announcement stays unticked.
+- No production code changed. No version bump: 0.00.63. `build/crap-exceptions.json` is unchanged.
+- Local (Windows), Debug: build 0 warnings, 71 of 71 `McpSearch` tests, 8 of them new. The full suite and the Python tests were not run locally.
