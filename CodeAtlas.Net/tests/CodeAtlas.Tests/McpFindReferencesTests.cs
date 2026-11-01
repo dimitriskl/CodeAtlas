@@ -123,6 +123,16 @@ public sealed class McpFindReferencesTests(McpFindReferencesFixture fixture) : I
     [InlineData("M:Sample.AsyncResource.DisposeAsync")]
     [InlineData("M:Sample.AsyncNumbers.GetAsyncEnumerator(System.Threading.CancellationToken)")]
     [InlineData("M:Sample.Words.Select(System.Func{System.Int32,System.Int32})")]
+    [InlineData("M:Sample.OpenDispose.Dispose", "var open")]
+    [InlineData("M:Sample.InternalTypeDispose.Dispose", "var internalType")]
+    [InlineData("M:Sample.DisposeRule.Nested.Dispose", "var nested")]
+    [InlineData("M:Sample.StaticDispose.Dispose", "var shared")]
+    [InlineData("M:Sample.GenericDispose.Dispose``1", "var generic")]
+    [InlineData("M:Sample.PrivateDispose.Dispose")]
+    [InlineData("M:Sample.ProtectedDispose.Dispose")]
+    [InlineData("M:Sample.InternalDispose.Dispose")]
+    [InlineData("M:Sample.ProtectedInternalDispose.Dispose")]
+    [InlineData("M:Sample.PrivateProtectedDispose.Dispose")]
     public async Task AnImplicitUseIsAReferenceAtTheSyntaxThatCausesIt(string method, params string[] expected)
     {
         // Arrange
@@ -193,6 +203,21 @@ public sealed class McpFindReferencesTests(McpFindReferencesFixture fixture) : I
         var rows = Rows(responses[0]);
         Assert.Equal(new[] { "Library/ImplicitUses.cs", "Library/OnlyAwaitUsing.cs" }, rows.Select(row => row["path"]!.GetValue<string>()).Distinct());
         Assert.Equal("var counted = new Resource();", TextAt(rows.Single(row => row["path"]!.GetValue<string>() == "Library/OnlyAwaitUsing.cs")));
+    }
+
+    // Task #05: QA attempt 1. Both Dispose methods implement IDisposable.Dispose, so they carry the rows of every type.
+    // A type parameter constrained to the interface or to Parent would show up here, and DisposeRule.cs has none.
+    [Fact]
+    public async Task ATypeParameterHasNoDisposeRowWhateverItsConstraint()
+    {
+        // Arrange
+        var lines = new[] { Query(1, Library + "::M:Sample.Resource.Dispose"), Query(2, Library + "::M:Sample.Parent.Dispose") };
+
+        // Act
+        var responses = await Talk(Solution, lines);
+
+        // Assert
+        Assert.DoesNotContain(Rows(responses[0]).Concat(Rows(responses[1])), row => row["path"]!.GetValue<string>() == "Library/DisposeRule.cs");
     }
 
     [Fact]
@@ -1173,6 +1198,62 @@ public sealed class McpFindReferencesFixture : IAsyncLifetime
         }
         """;
 
+    // Only a public Dispose() has rows, whatever the use could call, and a type parameter has none. None of these
+    // types implements IDisposable, so their rows stay out of the rows of the other Dispose methods.
+    private const string DisposeRule = """
+        namespace Sample;
+        public class OpenDispose { public void Dispose() { } }
+        internal sealed class InternalTypeDispose { public void Dispose() { } }
+        public sealed class StaticDispose { public static void Dispose() { } }
+        public sealed class GenericDispose { public void Dispose<TValue>() { } }
+        public sealed class PrivateDispose
+        {
+            private void Dispose() { }
+            public static void Own() { var own = new PrivateDispose(); _ = own; }
+        }
+        public class ProtectedDispose { protected void Dispose() { } }
+        public sealed class ProtectedChild : ProtectedDispose
+        {
+            public static void Own() { var own = new ProtectedChild(); _ = own; }
+        }
+        public sealed class InternalDispose { internal void Dispose() { } }
+        public class ProtectedInternalDispose { protected internal void Dispose() { } }
+        public class PrivateProtectedDispose { private protected void Dispose() { } }
+        public sealed class PrivateProtectedChild : PrivateProtectedDispose
+        {
+            public static void Own() { var own = new PrivateProtectedChild(); _ = own; }
+        }
+        public static class DisposeRule
+        {
+            private sealed class Nested { public void Dispose() { } }
+            public static void Open() { var open = new OpenDispose(); _ = open; }
+            public static void InternalType() { var internalType = new InternalTypeDispose(); _ = internalType; }
+            public static void NestedType() { var nested = new Nested(); _ = nested; }
+            public static void Static() { var shared = new StaticDispose(); _ = shared; }
+            public static void Generic() { var generic = new GenericDispose(); _ = generic; }
+            public static void Internal() { var hidden = new InternalDispose(); _ = hidden; }
+            public static void ProtectedInternal() { var hidden = new ProtectedInternalDispose(); _ = hidden; }
+            public static void ToInterface<TResource>(TResource resource) where TResource : IDisposable, new()
+            {
+                using (resource) { }
+                using var declared = new TResource();
+                TResource typed = new TResource();
+                var copied = resource;
+                _ = typed;
+                _ = copied;
+            }
+            public static void ToClass<TResource>(TResource resource) where TResource : Parent, new()
+            {
+                using (resource) { }
+                using var declared = new TResource();
+                TResource typed = new TResource();
+                var copied = resource;
+                _ = typed;
+                _ = copied;
+            }
+        }
+        """;
+
     private const string Chain = """
         namespace Sample;
         public sealed class Chain
@@ -1245,6 +1326,7 @@ public sealed class McpFindReferencesFixture : IAsyncLifetime
         await File.WriteAllTextAsync(Path.Combine(Root, "Library", "ImplicitUses.cs"), ImplicitUses);
         await File.WriteAllTextAsync(Path.Combine(Root, "Library", "NoUsing.cs"), NoUsing);
         await File.WriteAllTextAsync(Path.Combine(Root, "Library", "OnlyAwaitUsing.cs"), OnlyAwaitUsing);
+        await File.WriteAllTextAsync(Path.Combine(Root, "Library", "DisposeRule.cs"), DisposeRule);
         await File.WriteAllTextAsync(Path.Combine(Root, "Library", "Columns.cs"), Columns);
         await File.WriteAllTextAsync(Path.Combine(Root, "Library", "Chain.cs"), Chain);
         await IndexStore.SaveAsync(await SolutionAnalysis.CreateIndexAsync(Solution));
