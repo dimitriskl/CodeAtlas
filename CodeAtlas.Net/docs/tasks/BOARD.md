@@ -2,7 +2,7 @@
 
 Source: [PRD 0001](../prd/0001-net-release.md). Each task is a vertical slice for one coding session. Domnus reviews each PR technically, then QA reviews it against CODING_STANDARDS.md.
 
-01, 02, 03 and 12 are merged. 04 is in review. 05, 14, 15 and 16 can start. 10, 11 and 13 stay deferred until after the release: macOS runs only for `v*` tags and manual runs, so macOS regressions surface only at the release.
+01, 02, 03 and 12 are merged. 04 is in review. 05, 14, 15 and 16 can start, and 17 after 04. 10, 11 and 13 stay deferred until after the release: macOS runs only for `v*` tags and manual runs, so macOS regressions surface only at the release.
 
 | # | Task | Blocked by | Status |
 |---|---|---|---|
@@ -22,3 +22,4 @@ Source: [PRD 0001](../prd/0001-net-release.md). Each task is a vertical slice fo
 | 14 | [Child-process diagnostics in tests](14-child-process-diagnostics.md) | 12 | ready |
 | 15 | [CRAP exception burn-down](15-crap-exception-burn-down.md) | 02 | ready |
 | 16 | [Source path cache outlives a link change](16-source-path-cache.md) | 03 | ready |
+| 17 | [MCP server survives an unpaired surrogate outside tool arguments](17-mcp-protocol-surrogates.md) | 04 | ready |

@@ -27,7 +27,7 @@ Status: review (https://github.com/dimitriskl/CodeAtlas/pull/15)
 ## Acceptance criteria
 
 - [x] The `search_symbols` contract section exists, with an input table, an output row table, an error table and one example.
-- [ ] MCP seam test: a query for a word in a method's documentation ranks that method first on the fixture.
+- [x] MCP seam test: a query of two or more words from a method's documentation ranks that method first on the fixture. One word found only in documentation is withheld by the evidence gate, in the CLI too.
 - [x] MCP seam test: the rows match the CLI `search-symbols` rows for the same fixture and arguments.
 - [x] MCP seam test: `kind` and `project` filters, paging with `snapshotId`, `snapshot_mismatch` and `stale_index`.
 - [x] MCP seam test: each invalid argument returns `invalid_arguments` with its documented message.
@@ -118,3 +118,7 @@ Probes and mutations ran in a scratch copy of HEAD. No production code changed.
 - Item 3: `OneServerRefusesAPageFromTheOtherModeOrAChangedDescription` runs on one `McpHost` through `HandleLineAsync`. A names id in assisted mode, an assisted id in names mode and a description changed between pages each return `snapshot_mismatch`, and each mode's own current id continues. Mutation applied, built and restored: names mode accepting any view of the generation in `PurposeSnapshotQueries.SearchAsync` fails this test only, and the other 62 `McpSearch` tests pass.
 - Left as they are: the one-word documentation criterion, the evidence gate and the group announcement, which are the maintainer's. No version bump: 0.00.63. `build/crap-exceptions.json` is unchanged. `StringOrNull` has complexity 3 and both outcomes are tested.
 - Local (Windows), Debug: build 0 warnings, .NET 700/700, Python 145 OK. The CRAP gate was not run locally.
+
+### 2026-11-01 (owner decision)
+
+Criterion reworded by the task owner: two or more words, because the evidence gate withholds one word found only in documentation, in the CLI too. The reviewer found that correct, not a defect. `WordsInAMethodsDocumentationRankThatMethodFirst` and `ASingleDocumentationWordIsWithheldNotGuessed` cover both. The surrogate failures outside tool arguments are filed as [task 17](17-mcp-protocol-surrogates.md).
