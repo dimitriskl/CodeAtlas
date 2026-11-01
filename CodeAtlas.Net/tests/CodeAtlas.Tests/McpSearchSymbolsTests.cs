@@ -13,6 +13,8 @@ public sealed class McpSearchSymbolsTests(DocumentationCliContractFixture fixtur
     private const string Describe = "Library/Library.csproj::M:Docs.Methods.Describe(System.Int32)";
     private const string DocumentedWords = "author written description";
     private const string PagedWords = "authored property field";
+    private const string UnpairedHigh = "\"\\ud800\"";
+    private const string UnpairedLow = "\"words \\udc00 words\"";
 
     private string Solution => Path.Combine(fixture.Root, "Sample.slnx");
     private string Calculator => Path.Combine(fixture.Root, "Library", "Calculator.cs");
@@ -291,18 +293,26 @@ public sealed class McpSearchSymbolsTests(DocumentationCliContractFixture fixtur
     [InlineData("workspace", "7", "workspace is required.")]
     [InlineData("workspace", "\"\"", "workspace must not be empty.")]
     [InlineData("workspace", "\"elsewhere\"", "workspace must be the solution directory.")]
+    [InlineData("workspace", UnpairedHigh, "workspace is required.")]
     [InlineData("query", null, "query is required.")]
     [InlineData("query", "7", "query is required.")]
     [InlineData("query", "\"\"", "query must not be empty.")]
     [InlineData("query", "\"   \"", "query must have 1-4096 characters and at least one searchable token.")]
     [InlineData("query", "\"the\"", "query must have 1-4096 characters and at least one searchable token.")]
+    [InlineData("query", UnpairedHigh, "query is required.")]
+    [InlineData("query", UnpairedLow, "query is required.")]
+    [InlineData("query", "\"\\ud83d\\ude00\"", "query must have 1-4096 characters and at least one searchable token.")]
     [InlineData("mode", "\"\"", "mode must not be empty.")]
     [InlineData("mode", "7", "mode must not be empty.")]
     [InlineData("mode", "\"fuzzy\"", "mode must be names or assisted.")]
+    [InlineData("mode", UnpairedHigh, "mode must not be empty.")]
     [InlineData("kind", "\"\"", "kind must not be empty.")]
     [InlineData("kind", "\"component\"", "Unknown symbol kind.")]
+    [InlineData("kind", UnpairedHigh, "kind must not be empty.")]
     [InlineData("project", "\"\"", "project must not be empty.")]
+    [InlineData("project", UnpairedHigh, "project must not be empty.")]
     [InlineData("snapshotId", "\"\"", "snapshotId must not be empty.")]
+    [InlineData("snapshotId", UnpairedHigh, "snapshotId must not be empty.")]
     [InlineData("offset", "-1", "offset must be a nonnegative integer.")]
     [InlineData("offset", "1.5", "offset must be a nonnegative integer.")]
     [InlineData("offset", "\"1\"", "offset must be a nonnegative integer.")]
@@ -314,8 +324,8 @@ public sealed class McpSearchSymbolsTests(DocumentationCliContractFixture fixtur
         // Arrange
         var arguments = new JsonObject { ["workspace"] = fixture.Root, ["query"] = DocumentedWords };
         arguments.Remove(field);
-        if (value is not null) arguments[field] = JsonNode.Parse(value);
-        var lines = new[] { Tool(1, "search_symbols", arguments), Request(2, "tools/list") };
+        var line = value is null ? Tool(1, "search_symbols", arguments) : RawTool(1, "search_symbols", arguments, field, value);
+        var lines = new[] { line, Request(2, "tools/list") };
 
         // Act
         var responses = await Talk(Solution, lines);

@@ -513,8 +513,7 @@ internal sealed class McpHost
 
     private static string Text(JsonObject arguments, string name, string missing, string empty)
     {
-        if (arguments[name] is not JsonValue value || !value.TryGetValue<string>(out var text))
-            throw new QueryException("invalid_arguments", missing);
+        var text = StringOrNull(arguments[name]) ?? throw new QueryException("invalid_arguments", missing);
         if (text.Length == 0) throw new QueryException("invalid_arguments", empty);
         return text;
     }
@@ -522,9 +521,18 @@ internal sealed class McpHost
     private static string? OptionalText(JsonObject arguments, string name, string empty)
     {
         if (!arguments.ContainsKey(name) || arguments[name] is null) return null;
-        if (arguments[name] is not JsonValue value || !value.TryGetValue<string>(out var text) || text.Length == 0)
+        if (StringOrNull(arguments[name]) is not { Length: > 0 } text)
             throw new QueryException("invalid_arguments", empty);
         return text;
+    }
+
+    // Task #04: for a JSON string with an unpaired surrogate TryGetValue throws instead of returning
+    // false. The contract counts that value as not a string, so it gets the argument's own message.
+    private static string? StringOrNull(JsonNode? node)
+    {
+        if (node is not JsonValue value) return null;
+        try { return value.TryGetValue<string>(out var text) ? text : null; }
+        catch (InvalidOperationException) { return null; }
     }
 
     private static int OptionalInt(JsonObject arguments, string name, int fallback, string message, int minimum, int maximum)

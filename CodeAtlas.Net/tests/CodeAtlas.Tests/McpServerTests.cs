@@ -256,6 +256,33 @@ public sealed class McpServerTests(IndexedSolution fixture) : IClassFixture<Inde
         var found = Envelope(responses[0], isError: false);
         Assert.Empty(found["result"]!["symbols"]!.AsArray());
     }
+
+    // Task #04: the tools read strings through the same code, so an unpaired surrogate is refused alike.
+    [Theory]
+    [InlineData("find_symbol", "workspace", "workspace is required.")]
+    [InlineData("find_symbol", "name", "name must not be empty.")]
+    [InlineData("find_symbol", "kind", "kind must not be empty.")]
+    [InlineData("find_symbol", "project", "project must not be empty.")]
+    [InlineData("find_symbol", "snapshotId", "snapshotId must not be empty.")]
+    [InlineData("index_status", "workspace", "workspace is required.")]
+    [InlineData("coverage", "workspace", "workspace must not be empty.")]
+    [InlineData("index", "workspace", "workspace must not be empty.")]
+    public async Task AnUnpairedSurrogateInAStringArgumentKeepsTheEnvelope(string tool, string field, string message)
+    {
+        // Arrange
+        var solution = Path.Combine(fixture.Root, "Sample.slnx");
+        var line = RawTool(1, tool, Arguments(fixture.Root, "Calculate"), field, "\"\\ud800\"");
+
+        // Act
+        var responses = await Talk(solution, [line, Request(2, "tools/list")]);
+
+        // Assert
+        var invalid = Envelope(responses[0], isError: true);
+        Assert.Equal(tool, invalid["command"]!.GetValue<string>());
+        Assert.Equal("invalid_arguments", invalid["error"]!["code"]!.GetValue<string>());
+        Assert.Equal(message, invalid["error"]!["message"]!.GetValue<string>());
+        Assert.NotNull(responses[1]["result"]);
+    }
 }
 
 public sealed class McpIndexFailureTests
@@ -688,6 +715,14 @@ static class McpLines
         var parameters = new JsonObject { ["name"] = name };
         if (arguments is not null) parameters["arguments"] = arguments;
         return Request(id, "tools/call", parameters);
+    }
+
+    // JsonNode refuses to write an unpaired surrogate, so the raw JSON goes into the finished line.
+    internal static string RawTool(int id, string name, JsonObject arguments, string field, string rawJson)
+    {
+        const string slot = "raw-json-slot";
+        arguments[field] = slot;
+        return Tool(id, name, arguments).Replace($"\"{slot}\"", rawJson, StringComparison.Ordinal);
     }
 
     internal static string Call(int id, string workspace, string name, string? kind = null, string? project = null,
