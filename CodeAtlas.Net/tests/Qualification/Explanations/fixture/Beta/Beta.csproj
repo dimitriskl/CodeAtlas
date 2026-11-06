@@ -1,0 +1,5 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <ItemGroup>
+    <Compile Include="../Shared/Identity.cs" Link="Identity.cs" />
+  </ItemGroup>
+</Project>

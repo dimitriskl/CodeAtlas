@@ -1,0 +1,14 @@
+{
+  "protocol": "m09-quality-public-v1",
+  "referenceLimit": 0,
+  "cases": [
+    { "caseId": "C1", "symbolId": "Alpha/Alpha.csproj::M:ExplanationQuality.Calculator.Process(System.Int32)", "local": "adjusted" },
+    { "caseId": "C2", "symbolId": "Alpha/Alpha.csproj::M:ExplanationQuality.Calculator.Process(System.String)" },
+    { "caseId": "C3", "symbolId": "Alpha/Alpha.csproj::M:ExplanationQuality.Ledger.Commit(System.Int32)" },
+    { "caseId": "C4", "symbolId": "Alpha/Alpha.csproj::M:ExplanationQuality.Dispatcher.Send(System.String)" },
+    { "caseId": "C5", "symbolId": "Alpha/Alpha.csproj::M:ExplanationQuality.NoOp.Ping" },
+    { "caseId": "C6", "symbolId": "Alpha/Alpha.csproj::M:ExplanationQuality.Pipeline.GetCallback" },
+    { "caseId": "C7", "symbolId": "Alpha/Alpha.csproj::M:ExplanationQuality.Mirror.Identity.Process(System.Int32)" },
+    { "caseId": "C8", "symbolId": "Beta/Beta.csproj::M:ExplanationQuality.Mirror.Identity.Process(System.Int32)" }
+  ]
+}

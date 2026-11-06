@@ -1,0 +1,65 @@
+# Lint, type-check, test, and pack codeatlas-ng.
+# Scoped to this edition so it does not run the .NET qualification workflow.
+name: CodeAtlas Angular
+
+on:
+  push:
+    branches: [angular/main]
+    paths:
+      - "CodeAtlas.Angular/**"
+      - ".github/workflows/codeatlas-angular.yml"
+  pull_request:
+    branches: [angular/main]
+    paths:
+      - "CodeAtlas.Angular/**"
+      - ".github/workflows/codeatlas-angular.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    name: lint, type-check, test, pack (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-2025, ubuntu-24.04]
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        working-directory: CodeAtlas.Angular
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: CodeAtlas.Angular/package-lock.json
+      - name: Install from the lockfile
+        run: npm ci
+      - name: Lint
+        run: npm run lint
+      - name: Type-check
+        run: npm run typecheck
+      - name: Test
+        run: npm test
+      - name: Reproducible npm pack
+        shell: bash
+        run: node scripts/pack-contents.mjs > pack-manifest.txt
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: pack-manifest-${{ matrix.os }}
+          path: CodeAtlas.Angular/pack-manifest.txt
+          retention-days: 14
+
+  pack-contents-match:
+    name: pack contents match on Windows and Ubuntu
+    needs: verify
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          pattern: pack-manifest-*
+          path: manifests
+      - name: Diff packed file hashes
+        run: diff -u manifests/pack-manifest-windows-2025/pack-manifest.txt manifests/pack-manifest-ubuntu-24.04/pack-manifest.txt

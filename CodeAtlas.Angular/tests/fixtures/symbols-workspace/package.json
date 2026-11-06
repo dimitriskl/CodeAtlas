@@ -1,0 +1,7 @@
+{
+  "name": "shop",
+  "private": true,
+  "dependencies": {
+    "@angular/core": "19.2.0"
+  }
+}

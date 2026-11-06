@@ -1,0 +1,6 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <ItemGroup>
+    <ProjectReference Include="../Library/Library.csproj" />
+    <Compile Include="../SharedCalls.cs" Link="SharedCalls.cs" />
+  </ItemGroup>
+</Project>

@@ -1,0 +1,848 @@
+{
+  "protocol": "m10-public-v2-fresh",
+  "labeler": "qualification-author; independent review pending",
+  "methodCount": 16,
+  "pairCount": 120,
+  "pairs": [
+    {
+      "left": "SquaresA",
+      "right": "SquaresB",
+      "structural": "exact",
+      "usefulness": "review",
+      "rationale": "Identical arithmetic loop with nontrivial body."
+    },
+    {
+      "left": "SquaresA",
+      "right": "JoinA",
+      "structural": "different",
+      "usefulness": "no",
+      "rationale": "Different source operations or signature; same comments alone are insufficient."
+    },
+    {
+      "left": "SquaresA",
+      "right": "JoinB",
+      "structural": "different",
+      "usefulness": "no",
+      "rationale": "Different source operations or signature; same comments alone are insufficient."
+    },
+    {
+      "left": "SquaresA",
+      "right": "PathA",
+      "structural": "different",
+      "usefulness": "no",
+      "rationale": "Different source operations or signature; same comments alone are insufficient."
+    },
+    {
+      "left": "SquaresA",
+      "right": "PathB",
+      "structural": "different",
+      "usefulness": "no",
+      "rationale": "Different source operations or signature; same comments alone are insufficient."
+    },
+    {
+      "left": "SquaresA",
+      "right": "WriteA",
+      "structural": "different",
+      "usefulness": "no",
+      "rationale": "Different source operations or signature; same comments alone are insufficient."
+    },
+    {
+      "left": "SquaresA",
+      "right": "WriteB",
+      "structural": "different",
+      "usefulness": "no",
+      "rationale": "Different source operations or signature; same comments alone are insufficient."
+    },
+    {
+      "left": "SquaresA",
+      "right": "FeeA",
+      "structural": "different",
+      "usefulness": "no",
+      "rationale": "Different source operations or signature; same comments alone are insufficient."
+    },
+    {
+      "left": "SquaresA",
+      "right": "FeeB",
+      "structural": "different",
+      "usefulness": "no",
+      "rationale": "Different source operations or signature; same comments alone are insufficient."
+    },
+    {
+      "left": "SquaresA",
+      "right": "CheckedA",
+      "structural": "different",
+      "usefulness": "no",
+      "rationale": "Different source operations or signature; same comments alone are insufficient."
+    },
+    {
+      "left": "SquaresA",
+      "right": "CheckedB",
+      "structural": "different",
+      "usefulness": "no",
+      "rationale": "Different source operations or signature; same comments alone are insufficient."
+    },
+    {
+      "left": "SquaresA",
+      "right": "ReleaseA",
+      "structural": "different",
+      "usefulness": "no",
+      "rationale": "Different source operations or signature; same comments alone are insufficient."
+    },
+    {
+      "left": "SquaresA",
+      "right": "ReleaseB",
+      "structural": "different",
+      "usefulness": "no",
+      "rationale": "Different source operations or signature; same comments alone are insufficient."
+    },
+    {
+      "left": "SquaresA",
+      "right": "ForwardA",
+      "structural": "different",
+      "usefulness": "no",
+      "rationale": "Different source operations or signature; same comments alone are insufficient."
+    },
+    {
+      "left": "SquaresA",
+      "right": "ForwardB",
+      "structural": "different",
+      "usefulness": "no",
+      "rationale": "Different source operations or signature; same comments alone are insufficient."
+    },
+    {
+      "left": "SquaresB",
+      "right": "JoinA",
+      "structural": "different",
+      "usefulness": "no",
+      "rationale": "Different source operations or signature; same comments alone are insufficient."
+    },
+    {
+      "left": "SquaresB",
+      "right": "JoinB",
+      "structural": "different",
+      "usefulness": "no",
+      "rationale": "Different source operations or signature; same comments alone are insufficient."
+    },
+    {
+      "left": "SquaresB",
+      "right": "PathA",
+      "structural": "different",
+      "usefulness": "no",
+      "rationale": "Different source operations or signature; same comments alone are insufficient."
+    },
+    {
+      "left": "SquaresB",
+      "right": "PathB",
+      "structural": "different",
+      "usefulness": "no",
+      "rationale": "Different source operations or signature; same comments alone are insufficient."
+    },
+    {
+      "left": "SquaresB",
+      "right": "WriteA",
+      "structural": "different",
+      "usefulness": "no",
+      "rationale": "Different source operations or signature; same comments alone are insufficient."
+    },
+    {
+      "left": "SquaresB",
+      "right": "WriteB",
+      "structural": "different",
+      "usefulness": "no",
+      "rationale": "Different source operations or signature; same comments alone are insufficient."
+    },
+    {
+      "left": "SquaresB",
+      "right": "FeeA",
+      "structural": "different",
+      "usefulness": "no",
+      "rationale": "Different source operations or signature; same comments alone are insufficient."
+    },
+    {
+      "left": "SquaresB",
+      "right": "FeeB",
+      "structural": "different",
+      "usefulness": "no",
+      "rationale": "Different source operations or signature; same comments alone are insufficient."
+    },
+    {
+      "left": "SquaresB",
+      "right": "CheckedA",
+      "structural": "different",
+      "usefulness": "no",
+      "rationale": "Different source operations or signature; same comments alone are insufficient."
+    },
+    {
+      "left": "SquaresB",
+      "right": "CheckedB",
+      "structural": "different",
+      "usefulness": "no",
+      "rationale": "Different source operations or signature; same comments alone are insufficient."
+    },
+    {
+      "left": "SquaresB",
+      "right": "ReleaseA",
+      "structural": "different",
+      "usefulness": "no",
+      "rationale": "Different source operations or signature; same comments alone are insufficient."
+    },
+    {
+      "left": "SquaresB",
+      "right": "ReleaseB",
+      "structural": "different",
+      "usefulness": "no",
+      "rationale": "Different source operations or signature; same comments alone are insufficient."
+    },
+    {
+      "left": "SquaresB",
+      "right": "ForwardA",
+      "structural": "different",
+      "usefulness": "no",
+      "rationale": "Different source operations or signature; same comments alone are insufficient."
+    },
+    {
+      "left": "SquaresB",
+      "right": "ForwardB",
+      "structural": "different",
+      "usefulness": "no",
+      "rationale": "Different source operations or signature; same comments alone are insufficient."
+    },
+    {
+      "left": "JoinA",
+      "right": "JoinB",
+      "structural": "renamed-near",
+      "usefulness": "review",
+      "rationale": "Same bound string operations with renamed parameter and locals."
+    },
+    {
+      "left": "JoinA",
+      "right": "PathA",
+      "structural": "different",
+      "usefulness": "no",
+      "rationale": "Different source operations or signature; same comments alone are insufficient."
+    },
+    {
+      "left": "JoinA",
+      "right": "PathB",
+      "structural": "different",
+      "usefulness": "no",
+      "rationale": "Different source operations or signature; same comments alone are insufficient."
+    },
+    {
+      "left": "JoinA",
+      "right": "WriteA",
+      "structural": "different",
+      "usefulness": "no",
+      "rationale": "Different source operations or signature; same comments alone are insufficient."
+    },
+    {
+      "left": "JoinA",
+      "right": "WriteB",
+      "structural": "different",
+      "usefulness": "no",
+      "rationale": "Different source operations or signature; same comments alone are insufficient."
+    },
+    {
+      "left": "JoinA",
+      "right": "FeeA",
+      "structural": "different",
+      "usefulness": "no",
+      "rationale": "Different source operations or signature; same comments alone are insufficient."
+    },
+    {
+      "left": "JoinA",
+      "right": "FeeB",
+      "structural": "different",
+      "usefulness": "no",
+      "rationale": "Different source operations or signature; same comments alone are insufficient."
+    },
+    {
+      "left": "JoinA",
+      "right": "CheckedA",
+      "structural": "different",
+      "usefulness": "no",
+      "rationale": "Different source operations or signature; same comments alone are insufficient."
+    },
+    {
+      "left": "JoinA",
+      "right": "CheckedB",
+      "structural": "different",
+      "usefulness": "no",
+      "rationale": "Different source operations or signature; same comments alone are insufficient."
+    },
+    {
+      "left": "JoinA",
+      "right": "ReleaseA",
+      "structural": "different",
+      "usefulness": "no",
+      "rationale": "Different source operations or signature; same comments alone are insufficient."
+    },
+    {
+      "left": "JoinA",
+      "right": "ReleaseB",
+      "structural": "different",
+      "usefulness": "no",
+      "rationale": "Different source operations or signature; same comments alone are insufficient."
+    },
+    {
+      "left": "JoinA",
+      "right": "ForwardA",
+      "structural": "different",
+      "usefulness": "no",
+      "rationale": "Different source operations or signature; same comments alone are insufficient."
+    },
+    {
+      "left": "JoinA",
+      "right": "ForwardB",
+      "structural": "different",
+      "usefulness": "no",
+      "rationale": "Different source operations or signature; same comments alone are insufficient."
+    },
+    {
+      "left": "JoinB",
+      "right": "PathA",
+      "structural": "different",
+      "usefulness": "no",
+      "rationale": "Different source operations or signature; same comments alone are insufficient."
+    },
+    {
+      "left": "JoinB",
+      "right": "PathB",
+      "structural": "different",
+      "usefulness": "no",
+      "rationale": "Different source operations or signature; same comments alone are insufficient."
+    },
+    {
+      "left": "JoinB",
+      "right": "WriteA",
+      "structural": "different",
+      "usefulness": "no",
+      "rationale": "Different source operations or signature; same comments alone are insufficient."
+    },
+    {
+      "left": "JoinB",
+      "right": "WriteB",
+      "structural": "different",
+      "usefulness": "no",
+      "rationale": "Different source operations or signature; same comments alone are insufficient."
+    },
+    {
+      "left": "JoinB",
+      "right": "FeeA",
+      "structural": "different",
+      "usefulness": "no",
+      "rationale": "Different source operations or signature; same comments alone are insufficient."
+    },
+    {
+      "left": "JoinB",
+      "right": "FeeB",
+      "structural": "different",
+      "usefulness": "no",
+      "rationale": "Different source operations or signature; same comments alone are insufficient."
+    },
+    {
+      "left": "JoinB",
+      "right": "CheckedA",
+      "structural": "different",
+      "usefulness": "no",
+      "rationale": "Different source operations or signature; same comments alone are insufficient."
+    },
+    {
+      "left": "JoinB",
+      "right": "CheckedB",
+      "structural": "different",
+      "usefulness": "no",
+      "rationale": "Different source operations or signature; same comments alone are insufficient."
+    },
+    {
+      "left": "JoinB",
+      "right": "ReleaseA",
+      "structural": "different",
+      "usefulness": "no",
+      "rationale": "Different source operations or signature; same comments alone are insufficient."
+    },
+    {
+      "left": "JoinB",
+      "right": "ReleaseB",
+      "structural": "different",
+      "usefulness": "no",
+      "rationale": "Different source operations or signature; same comments alone are insufficient."
+    },
+    {
+      "left": "JoinB",
+      "right": "ForwardA",
+      "structural": "different",
+      "usefulness": "no",
+      "rationale": "Different source operations or signature; same comments alone are insufficient."
+    },
+    {
+      "left": "JoinB",
+      "right": "ForwardB",
+      "structural": "different",
+      "usefulness": "no",
+      "rationale": "Different source operations or signature; same comments alone are insufficient."
+    },
+    {
+      "left": "PathA",
+      "right": "PathB",
+      "structural": "near-with-rule-differences",
+      "usefulness": "domain-review",
+      "rationale": "Different path literal semantics, backslashes must remain significant."
+    },
+    {
+      "left": "PathA",
+      "right": "WriteA",
+      "structural": "different",
+      "usefulness": "no",
+      "rationale": "Different source operations or signature; same comments alone are insufficient."
+    },
+    {
+      "left": "PathA",
+      "right": "WriteB",
+      "structural": "different",
+      "usefulness": "no",
+      "rationale": "Different source operations or signature; same comments alone are insufficient."
+    },
+    {
+      "left": "PathA",
+      "right": "FeeA",
+      "structural": "different",
+      "usefulness": "no",
+      "rationale": "Different source operations or signature; same comments alone are insufficient."
+    },
+    {
+      "left": "PathA",
+      "right": "FeeB",
+      "structural": "different",
+      "usefulness": "no",
+      "rationale": "Different source operations or signature; same comments alone are insufficient."
+    },
+    {
+      "left": "PathA",
+      "right": "CheckedA",
+      "structural": "different",
+      "usefulness": "no",
+      "rationale": "Different source operations or signature; same comments alone are insufficient."
+    },
+    {
+      "left": "PathA",
+      "right": "CheckedB",
+      "structural": "different",
+      "usefulness": "no",
+      "rationale": "Different source operations or signature; same comments alone are insufficient."
+    },
+    {
+      "left": "PathA",
+      "right": "ReleaseA",
+      "structural": "different",
+      "usefulness": "no",
+      "rationale": "Different source operations or signature; same comments alone are insufficient."
+    },
+    {
+      "left": "PathA",
+      "right": "ReleaseB",
+      "structural": "different",
+      "usefulness": "no",
+      "rationale": "Different source operations or signature; same comments alone are insufficient."
+    },
+    {
+      "left": "PathA",
+      "right": "ForwardA",
+      "structural": "different",
+      "usefulness": "no",
+      "rationale": "Different source operations or signature; same comments alone are insufficient."
+    },
+    {
+      "left": "PathA",
+      "right": "ForwardB",
+      "structural": "different",
+      "usefulness": "no",
+      "rationale": "Different source operations or signature; same comments alone are insufficient."
+    },
+    {
+      "left": "PathB",
+      "right": "WriteA",
+      "structural": "different",
+      "usefulness": "no",
+      "rationale": "Different source operations or signature; same comments alone are insufficient."
+    },
+    {
+      "left": "PathB",
+      "right": "WriteB",
+      "structural": "different",
+      "usefulness": "no",
+      "rationale": "Different source operations or signature; same comments alone are insufficient."
+    },
+    {
+      "left": "PathB",
+      "right": "FeeA",
+      "structural": "different",
+      "usefulness": "no",
+      "rationale": "Different source operations or signature; same comments alone are insufficient."
+    },
+    {
+      "left": "PathB",
+      "right": "FeeB",
+      "structural": "different",
+      "usefulness": "no",
+      "rationale": "Different source operations or signature; same comments alone are insufficient."
+    },
+    {
+      "left": "PathB",
+      "right": "CheckedA",
+      "structural": "different",
+      "usefulness": "no",
+      "rationale": "Different source operations or signature; same comments alone are insufficient."
+    },
+    {
+      "left": "PathB",
+      "right": "CheckedB",
+      "structural": "different",
+      "usefulness": "no",
+      "rationale": "Different source operations or signature; same comments alone are insufficient."
+    },
+    {
+      "left": "PathB",
+      "right": "ReleaseA",
+      "structural": "different",
+      "usefulness": "no",
+      "rationale": "Different source operations or signature; same comments alone are insufficient."
+    },
+    {
+      "left": "PathB",
+      "right": "ReleaseB",
+      "structural": "different",
+      "usefulness": "no",
+      "rationale": "Different source operations or signature; same comments alone are insufficient."
+    },
+    {
+      "left": "PathB",
+      "right": "ForwardA",
+      "structural": "different",
+      "usefulness": "no",
+      "rationale": "Different source operations or signature; same comments alone are insufficient."
+    },
+    {
+      "left": "PathB",
+      "right": "ForwardB",
+      "structural": "different",
+      "usefulness": "no",
+      "rationale": "Different source operations or signature; same comments alone are insufficient."
+    },
+    {
+      "left": "WriteA",
+      "right": "WriteB",
+      "structural": "near-with-rule-differences",
+      "usefulness": "domain-review",
+      "rationale": "Different Console member bindings: Write versus WriteLine."
+    },
+    {
+      "left": "WriteA",
+      "right": "FeeA",
+      "structural": "different",
+      "usefulness": "no",
+      "rationale": "Different source operations or signature; same comments alone are insufficient."
+    },
+    {
+      "left": "WriteA",
+      "right": "FeeB",
+      "structural": "different",
+      "usefulness": "no",
+      "rationale": "Different source operations or signature; same comments alone are insufficient."
+    },
+    {
+      "left": "WriteA",
+      "right": "CheckedA",
+      "structural": "different",
+      "usefulness": "no",
+      "rationale": "Different source operations or signature; same comments alone are insufficient."
+    },
+    {
+      "left": "WriteA",
+      "right": "CheckedB",
+      "structural": "different",
+      "usefulness": "no",
+      "rationale": "Different source operations or signature; same comments alone are insufficient."
+    },
+    {
+      "left": "WriteA",
+      "right": "ReleaseA",
+      "structural": "different",
+      "usefulness": "no",
+      "rationale": "Different source operations or signature; same comments alone are insufficient."
+    },
+    {
+      "left": "WriteA",
+      "right": "ReleaseB",
+      "structural": "different",
+      "usefulness": "no",
+      "rationale": "Different source operations or signature; same comments alone are insufficient."
+    },
+    {
+      "left": "WriteA",
+      "right": "ForwardA",
+      "structural": "different",
+      "usefulness": "no",
+      "rationale": "Different source operations or signature; same comments alone are insufficient."
+    },
+    {
+      "left": "WriteA",
+      "right": "ForwardB",
+      "structural": "different",
+      "usefulness": "no",
+      "rationale": "Different source operations or signature; same comments alone are insufficient."
+    },
+    {
+      "left": "WriteB",
+      "right": "FeeA",
+      "structural": "different",
+      "usefulness": "no",
+      "rationale": "Different source operations or signature; same comments alone are insufficient."
+    },
+    {
+      "left": "WriteB",
+      "right": "FeeB",
+      "structural": "different",
+      "usefulness": "no",
+      "rationale": "Different source operations or signature; same comments alone are insufficient."
+    },
+    {
+      "left": "WriteB",
+      "right": "CheckedA",
+      "structural": "different",
+      "usefulness": "no",
+      "rationale": "Different source operations or signature; same comments alone are insufficient."
+    },
+    {
+      "left": "WriteB",
+      "right": "CheckedB",
+      "structural": "different",
+      "usefulness": "no",
+      "rationale": "Different source operations or signature; same comments alone are insufficient."
+    },
+    {
+      "left": "WriteB",
+      "right": "ReleaseA",
+      "structural": "different",
+      "usefulness": "no",
+      "rationale": "Different source operations or signature; same comments alone are insufficient."
+    },
+    {
+      "left": "WriteB",
+      "right": "ReleaseB",
+      "structural": "different",
+      "usefulness": "no",
+      "rationale": "Different source operations or signature; same comments alone are insufficient."
+    },
+    {
+      "left": "WriteB",
+      "right": "ForwardA",
+      "structural": "different",
+      "usefulness": "no",
+      "rationale": "Different source operations or signature; same comments alone are insufficient."
+    },
+    {
+      "left": "WriteB",
+      "right": "ForwardB",
+      "structural": "different",
+      "usefulness": "no",
+      "rationale": "Different source operations or signature; same comments alone are insufficient."
+    },
+    {
+      "left": "FeeA",
+      "right": "FeeB",
+      "structural": "near-with-rule-differences",
+      "usefulness": "domain-review",
+      "rationale": "Different fee multiplier and threshold are business-rule changes."
+    },
+    {
+      "left": "FeeA",
+      "right": "CheckedA",
+      "structural": "different",
+      "usefulness": "no",
+      "rationale": "Different source operations or signature; same comments alone are insufficient."
+    },
+    {
+      "left": "FeeA",
+      "right": "CheckedB",
+      "structural": "different",
+      "usefulness": "no",
+      "rationale": "Different source operations or signature; same comments alone are insufficient."
+    },
+    {
+      "left": "FeeA",
+      "right": "ReleaseA",
+      "structural": "different",
+      "usefulness": "no",
+      "rationale": "Different source operations or signature; same comments alone are insufficient."
+    },
+    {
+      "left": "FeeA",
+      "right": "ReleaseB",
+      "structural": "different",
+      "usefulness": "no",
+      "rationale": "Different source operations or signature; same comments alone are insufficient."
+    },
+    {
+      "left": "FeeA",
+      "right": "ForwardA",
+      "structural": "different",
+      "usefulness": "no",
+      "rationale": "Different source operations or signature; same comments alone are insufficient."
+    },
+    {
+      "left": "FeeA",
+      "right": "ForwardB",
+      "structural": "different",
+      "usefulness": "no",
+      "rationale": "Different source operations or signature; same comments alone are insufficient."
+    },
+    {
+      "left": "FeeB",
+      "right": "CheckedA",
+      "structural": "different",
+      "usefulness": "no",
+      "rationale": "Different source operations or signature; same comments alone are insufficient."
+    },
+    {
+      "left": "FeeB",
+      "right": "CheckedB",
+      "structural": "different",
+      "usefulness": "no",
+      "rationale": "Different source operations or signature; same comments alone are insufficient."
+    },
+    {
+      "left": "FeeB",
+      "right": "ReleaseA",
+      "structural": "different",
+      "usefulness": "no",
+      "rationale": "Different source operations or signature; same comments alone are insufficient."
+    },
+    {
+      "left": "FeeB",
+      "right": "ReleaseB",
+      "structural": "different",
+      "usefulness": "no",
+      "rationale": "Different source operations or signature; same comments alone are insufficient."
+    },
+    {
+      "left": "FeeB",
+      "right": "ForwardA",
+      "structural": "different",
+      "usefulness": "no",
+      "rationale": "Different source operations or signature; same comments alone are insufficient."
+    },
+    {
+      "left": "FeeB",
+      "right": "ForwardB",
+      "structural": "different",
+      "usefulness": "no",
+      "rationale": "Different source operations or signature; same comments alone are insufficient."
+    },
+    {
+      "left": "CheckedA",
+      "right": "CheckedB",
+      "structural": "near-with-rule-differences",
+      "usefulness": "domain-review",
+      "rationale": "Overflow behavior differs between checked and unchecked contexts."
+    },
+    {
+      "left": "CheckedA",
+      "right": "ReleaseA",
+      "structural": "different",
+      "usefulness": "no",
+      "rationale": "Different source operations or signature; same comments alone are insufficient."
+    },
+    {
+      "left": "CheckedA",
+      "right": "ReleaseB",
+      "structural": "different",
+      "usefulness": "no",
+      "rationale": "Different source operations or signature; same comments alone are insufficient."
+    },
+    {
+      "left": "CheckedA",
+      "right": "ForwardA",
+      "structural": "different",
+      "usefulness": "no",
+      "rationale": "Different source operations or signature; same comments alone are insufficient."
+    },
+    {
+      "left": "CheckedA",
+      "right": "ForwardB",
+      "structural": "different",
+      "usefulness": "no",
+      "rationale": "Different source operations or signature; same comments alone are insufficient."
+    },
+    {
+      "left": "CheckedB",
+      "right": "ReleaseA",
+      "structural": "different",
+      "usefulness": "no",
+      "rationale": "Different source operations or signature; same comments alone are insufficient."
+    },
+    {
+      "left": "CheckedB",
+      "right": "ReleaseB",
+      "structural": "different",
+      "usefulness": "no",
+      "rationale": "Different source operations or signature; same comments alone are insufficient."
+    },
+    {
+      "left": "CheckedB",
+      "right": "ForwardA",
+      "structural": "different",
+      "usefulness": "no",
+      "rationale": "Different source operations or signature; same comments alone are insufficient."
+    },
+    {
+      "left": "CheckedB",
+      "right": "ForwardB",
+      "structural": "different",
+      "usefulness": "no",
+      "rationale": "Different source operations or signature; same comments alone are insufficient."
+    },
+    {
+      "left": "ReleaseA",
+      "right": "ReleaseB",
+      "structural": "different",
+      "usefulness": "no",
+      "rationale": "Different source operations or signature; same comments alone are insufficient."
+    },
+    {
+      "left": "ReleaseA",
+      "right": "ForwardA",
+      "structural": "different",
+      "usefulness": "no",
+      "rationale": "Different source operations or signature; same comments alone are insufficient."
+    },
+    {
+      "left": "ReleaseA",
+      "right": "ForwardB",
+      "structural": "different",
+      "usefulness": "no",
+      "rationale": "Different source operations or signature; same comments alone are insufficient."
+    },
+    {
+      "left": "ReleaseB",
+      "right": "ForwardA",
+      "structural": "different",
+      "usefulness": "no",
+      "rationale": "Different source operations or signature; same comments alone are insufficient."
+    },
+    {
+      "left": "ReleaseB",
+      "right": "ForwardB",
+      "structural": "different",
+      "usefulness": "no",
+      "rationale": "Different source operations or signature; same comments alone are insufficient."
+    },
+    {
+      "left": "ForwardA",
+      "right": "ForwardB",
+      "structural": "boilerplate",
+      "usefulness": "no",
+      "rationale": "Identical one-expression forwarders are intentionally short-body filtered."
+    }
+  ]
+}

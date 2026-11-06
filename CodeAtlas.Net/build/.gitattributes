@@ -1,0 +1,2 @@
+# Upstream notice payloads are verified byte-for-byte against NuGet archives.
+notices/** -text -whitespace

@@ -1,0 +1,42 @@
+{
+  "accepted": false,
+  "acceptedBy": null,
+  "acceptedAtUtc": null,
+  "protocol": "m10-public-v1",
+  "detectorVersion": "aligned-semantic-v1",
+  "detectorRevision": null,
+  "executableSha256": null,
+  "harnessSha256": null,
+  "metrics": [
+    "All 66 pairs with eligibility, generation, comparison, emission and important differences",
+    "Exact/renamed structural precision and recall with every FP/FN listed",
+    "Usefulness review precision and recall; domain-review pairs separately excluded from either success count",
+    "Boilerplate filtering, unsupported omissions and work caps reported explicitly",
+    "No general accuracy claim; fresh independent source review remains required"
+  ],
+  "performanceProposal": {
+    "status": "proposed-not-measured-or-accepted",
+    "additionalFullExtractionAndScanSeconds": 60,
+    "additionalProcessPeakWorkingSetMiB": 384,
+    "addedSerializedCatalogAndScanMiB": 80,
+    "ordinaryQueryMedianRegressionFraction": 0.20,
+    "ordinaryQueryAbsoluteMaximum": "Retain existing agreed M3/M4 gate; an existing failure cannot be waived here",
+    "largeSolutionReference": "about 17000 supported ordinary methods; measure at least 3 comparable runs"
+  },
+  "limits": {
+    "maximumMethods": 100000,
+    "maximumTokensPerBody": 4096,
+    "maximumTotalTokens": 2000000,
+    "maximumCatalogBytes": 67108864,
+    "minimumTokens": 24,
+    "maximumPosting": 64,
+    "maximumPairVisits": 500000,
+    "maximumComparisons": 100000,
+    "maximumFindings": 10000,
+    "maximumShinglesPerBody": 64,
+    "maximumPostingKeys": 250000,
+    "maximumPostingEntries": 500000,
+    "maximumScanBytes": 16777216,
+    "minimumNearScore": 0.9
+  }
+}

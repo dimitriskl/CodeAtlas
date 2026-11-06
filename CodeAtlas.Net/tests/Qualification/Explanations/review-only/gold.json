@@ -1,0 +1,80 @@
+{
+  "protocol": "m09-quality-gold-public-v1",
+  "sourceReviewer": "/root/finish_explanation_tests; fixture/gold author; independent of future response generator",
+  "qualityCases": [
+    {
+      "caseId": "C1",
+      "source": "Alpha/Examples.cs",
+      "supported": ["The selected overload accepts and returns int.", "The local adjusted is initialized to value + 7 and returned.", "No authored XML documentation is present."],
+      "required": ["Explain value + 7 and the selected local adjusted.", "Do not describe the string overload."],
+      "unsupported": ["This calculates an invoice, payment, tax, fee, security decision or persisted balance.", "Arithmetic is safe from overflow for all integer inputs."],
+      "limits": ["The indexed project compiler settings determine implicit arithmetic overflow behavior; do not promise overflow safety from this excerpt."]
+    },
+    {
+      "caseId": "C2",
+      "source": "Alpha/Examples.cs",
+      "supported": ["The selected overload accepts and returns string.", "It calls Trim then ToUpperInvariant and returns the transformed string.", "The authored XML agrees with these operations."],
+      "required": ["Explain both transformation calls in order.", "Do not describe the integer overload."],
+      "unsupported": ["The method sanitizes untrusted data for HTML, SQL or security.", "The input is null-safe.", "The method uses the user's current culture."],
+      "limits": ["No explicit null guard is shown; a broad input-safety guarantee is unsupported."]
+    },
+    {
+      "caseId": "C3",
+      "source": "Alpha/Examples.cs",
+      "supported": ["The implementation initializes marker to amount + 1 and returns marker.", "The authored summary claims durable payment persistence in an atomic database transaction.", "The supplied implementation contains no database/transaction operation and does not establish the authored summary's guarantee."],
+      "required": ["Clearly distinguish the authored XML claim from the observed arithmetic body.", "Do not repeat the payment/transaction claim as established behavior."],
+      "unsupported": ["This durably commits a payment.", "The code opens or commits a database transaction.", "The code provides atomicity, payment validation or persistence guarantees."],
+      "limits": ["The method name and authored XML do not establish business guarantees; there are no such operations in its body."]
+    },
+    {
+      "caseId": "C4",
+      "source": "Alpha/Examples.cs",
+      "supported": ["The method calls Transport.Deliver(payload) and returns its result.", "The request's resolved target identity may establish a static binding, but does not include the callee implementation."],
+      "required": ["Describe delegation and returning the result.", "Acknowledge the unseen callee implementation limits claims about its effects."],
+      "unsupported": ["Send transmits over the network or guarantees delivery.", "Deliver persists data, performs authentication or acknowledges a remote receipt.", "The returned value is the payload length, unless that behavior is actually included in exported evidence."],
+      "limits": ["Transport.cs exists in the full fixture, but generation is request-only with referenceLimit 0; the generator must not open it."]
+    },
+    {
+      "caseId": "C5",
+      "source": "Alpha/Examples.cs",
+      "supported": ["The selected method has a void return type and an empty body.", "No body statements are executed by the shown method."],
+      "required": ["Identify the empty body.", "Do not invent effects from the name Ping."],
+      "unsupported": ["It sends a heartbeat, pings a host, logs, validates health or updates liveness state."],
+      "limits": ["Avoid claiming no possible effects anywhere in runtime invocation machinery; characterize the shown body."]
+    },
+    {
+      "caseId": "C6",
+      "source": "Alpha/Examples.cs",
+      "supported": ["It returns an Action delegate targeting NoOp.Ping via a method-group conversion.", "The shown body does not invoke Ping."],
+      "required": ["Distinguish returning a method group/delegate from invoking the target."],
+      "unsupported": ["GetCallback calls Ping immediately.", "GetCallback schedules or executes background work.", "The returned callback sends a heartbeat."],
+      "limits": ["NoOp.Ping's implementation may not be in the exported context; do not infer target behavior from its name."]
+    },
+    {
+      "caseId": "C7",
+      "source": "Shared/Identity.cs",
+      "supported": ["The selected Alpha/Alpha.csproj symbol returns value + 100.", "The source file is linked into multiple projects, whose symbol IDs remain project-qualified."],
+      "required": ["Preserve Alpha project identity and describe adding 100."],
+      "unsupported": ["The selected ID belongs to Beta.", "This performs an identity/authentication lookup or security authorization."],
+      "limits": ["The excerpt alone need not disclose the other project's compilation; do not require the generator to discover other projects."]
+    },
+    {
+      "caseId": "C8",
+      "source": "Shared/Identity.cs",
+      "supported": ["The selected Beta/Beta.csproj symbol returns value + 100.", "The source file is linked into multiple projects, whose symbol IDs remain project-qualified."],
+      "required": ["Preserve Beta project identity and describe adding 100."],
+      "unsupported": ["The selected ID belongs to Alpha.", "This performs an identity/authentication lookup or security authorization."],
+      "limits": ["The excerpt alone need not disclose the other project's compilation; do not require the generator to discover other projects."]
+    }
+  ],
+  "selectionGold": [
+    { "taskId": "S1", "expectedCaseId": "C1", "reason": "Only this body uses the local adjusted and adds seven." },
+    { "taskId": "S2", "expectedCaseId": "C2", "reason": "Only this string overload calls Trim then ToUpperInvariant." },
+    { "taskId": "S3", "expectedCaseId": null, "reason": "Commit's authored summary is contradicted by its arithmetic body; no candidate establishes persistence or transactions." },
+    { "taskId": "S4", "expectedCaseId": "C6", "reason": "Returns NoOp.Ping as an Action rather than invoking it." },
+    { "taskId": "S5", "expectedCaseId": null, "reason": "A call named Deliver does not establish network transmission or acknowledgement; no such evidence is supplied." },
+    { "taskId": "S6", "expectedCaseId": "C8", "reason": "Beta project-qualified shared-file symbol." },
+    { "taskId": "S7", "expectedCaseId": "C5", "reason": "Only the selected Ping method has no statements." },
+    { "taskId": "S8", "expectedCaseId": "C7", "reason": "Alpha project-qualified shared-file symbol." }
+  ]
+}
